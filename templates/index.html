@@ -353,9 +353,11 @@
         });
         cam.srcObject = stream;
         await new Promise(r => { cam.onloadeddata = r; });
+        await cam.play();
+        await new Promise(r => setTimeout(r, 200));
         const vw = cam.videoWidth, vh = cam.videoHeight;
         document.getElementById("hRes").textContent = vw + "\u00D7" + vh;
-        setDiag("dCamera", "ok", vw + "x" + vh + " — stream active");
+        setDiag("dCamera", "ok", vw + "x" + vh + " — playing, currentTime=" + cam.currentTime.toFixed(2));
     } catch (e) {
         setDiag("dCamera", "fail", e.message || String(e));
         throw e;
@@ -370,7 +372,7 @@
     ctx.font = "bold 24px Inter";
     ctx.fillStyle = "#00ff00";
     ctx.textAlign = "center";
-    ctx.fillText("CANVAS ACTIVE — TESTING DETECTION...", cvs.width / 2, cvs.height / 2);
+    ctx.fillText("CANVAS OK — WAITING FOR FACE...", cvs.width / 2, cvs.height / 2);
     setDiag("dCanvas", "ok", cvs.width + "x" + cvs.height + " — drawing test passed");
 
     const FACE_COLORS = [
@@ -394,7 +396,8 @@
     let cW = cvs.width, cH = cvs.height;
     let fpsCnt = 0, fpsT = 0, fps = 0, total = 0;
     const startTime = performance.now();
-    let lastTs = -1, lastHud = 0;
+    let lastHud = 0;
+    let lastVideoTime = -1;
     let latMs = 0, nFaces = 0, yaw = 0, pitch = 0;
 
     let trackedFaces = [];
@@ -457,10 +460,13 @@
         return matched;
     }
 
-    function draw(raf) {
+    function draw() {
         requestAnimationFrame(draw);
 
         if (cam.paused || cam.ended || !cam.videoWidth || !fl) return;
+
+        if (cam.currentTime === lastVideoTime) return;
+        lastVideoTime = cam.currentTime;
 
         const vw = cam.videoWidth, vh = cam.videoHeight;
         if (cW !== vw || cH !== vh) {
@@ -470,13 +476,12 @@
             du = new DrawingUtils(ctx);
         }
 
-        const ts = Math.round(Math.max(raf, lastTs + 1));
-        lastTs = ts;
+        const nowMs = Date.now();
 
         const before = performance.now();
         let res;
         try {
-            res = fl.detectForVideo(cam, ts);
+            res = fl.detectForVideo(cam, nowMs);
             totalDetectCalls++;
         } catch (e) {
             detectErrors++;
