@@ -563,7 +563,7 @@
                 }
 
                 if (L.mesh && FaceLandmarker.FACE_LANDMARKS_TESSELATION)
-                    drawConns(FaceLandmarker.FACE_LANDMARKS_TESSELATION, clr.mesh, 1.2);
+                    drawConns(FaceLandmarker.FACE_LANDMARKS_TESSELATION, clr.mesh, 2);
                 if (L.outline && FaceLandmarker.FACE_LANDMARKS_FACE_OVAL) {
                     var cx = 0, cy = 0, oc = 0;
                     var ovalConns = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL;
@@ -577,7 +577,7 @@
                     if (oc > 0) { cx /= oc; cy /= oc; }
                     var SCALE = 1.15;
                     ctx.strokeStyle = clr.edge;
-                    ctx.lineWidth = 4;
+                    ctx.lineWidth = 5;
                     ctx.beginPath();
                     for (var oi2 = 0; oi2 < ovalConns.length; oi2++) {
                         var c2 = ovalConns[oi2];
@@ -593,18 +593,18 @@
                     ctx.stroke();
                 }
                 if (L.eyes) {
-                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, clr.feat, 3);
-                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, clr.feat, 3);
+                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, clr.feat, 4);
+                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, clr.feat, 4);
                 }
                 if (L.brows) {
-                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, clr.feat, 3);
-                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW, clr.feat, 3);
+                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, clr.feat, 4);
+                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW, clr.feat, 4);
                 }
                 if (L.lips && FaceLandmarker.FACE_LANDMARKS_LIPS)
-                    drawConns(FaceLandmarker.FACE_LANDMARKS_LIPS, clr.feat, 3);
+                    drawConns(FaceLandmarker.FACE_LANDMARKS_LIPS, clr.feat, 4);
                 if (L.iris) {
-                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, clr.iris, 3.5);
-                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS, clr.iris, 3.5);
+                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, clr.iris, 4.5);
+                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS, clr.iris, 4.5);
                 }
 
                 if (L.dots) {
@@ -612,7 +612,7 @@
                     for (let j = 0; j < lm.length; j++) {
                         if (!lm[j]) continue;
                         ctx.beginPath();
-                        ctx.arc(lm[j].x * vw, lm[j].y * vh, 2.5, 0, 6.283);
+                        ctx.arc(lm[j].x * vw, lm[j].y * vh, 3, 0, 6.283);
                         ctx.fill();
                     }
                 }
@@ -641,8 +641,10 @@
 
                 if (L.emojis) {
                 let smileScore = 0, angerScore = 0, surpriseScore = 0, browUpScore = 0;
+                let winkScore = 0, puckerScore = 0, squintScore = 0, mouthFrown = 0;
                 if (res.faceBlendshapes && res.faceBlendshapes[i]) {
                     const bs = res.faceBlendshapes[i].categories;
+                    let eyeBlinkL = 0, eyeBlinkR = 0;
                     for (const b of bs) {
                         switch (b.categoryName) {
                             case "mouthSmileLeft": case "mouthSmileRight":
@@ -653,9 +655,18 @@
                                 surpriseScore = Math.max(surpriseScore, b.score); break;
                             case "browOuterUpLeft": case "browOuterUpRight":
                                 browUpScore = Math.max(browUpScore, b.score); break;
+                            case "eyeBlinkLeft": eyeBlinkL = b.score; break;
+                            case "eyeBlinkRight": eyeBlinkR = b.score; break;
+                            case "mouthPucker":
+                                puckerScore = Math.max(puckerScore, b.score); break;
+                            case "eyeSquintLeft": case "eyeSquintRight":
+                                squintScore = Math.max(squintScore, b.score); break;
+                            case "mouthFrownLeft": case "mouthFrownRight":
+                                mouthFrown = Math.max(mouthFrown, b.score); break;
                         }
                     }
                     surpriseScore = Math.min(1, surpriseScore * 0.7 + browUpScore * 0.5);
+                    winkScore = Math.abs(eyeBlinkL - eyeBlinkR) > 0.4 ? Math.max(eyeBlinkL, eyeBlinkR) : 0;
                 }
 
                 const emojis = [
@@ -663,19 +674,24 @@
                     { ch: "\uD83D\uDE20", on: angerScore > 0.45, glow: "rgba(255,60,60,0.9)" },
                     { ch: "\uD83E\uDEE8", on: surpriseScore > 0.5, glow: "rgba(140,120,255,0.9)" },
                     { ch: "\uD83E\uDEE1", on: browUpScore > 0.35, glow: "rgba(80,200,120,0.9)" },
+                    { ch: "\uD83D\uDE09", on: winkScore > 0.5, glow: "rgba(255,180,220,0.9)" },
+                    { ch: "\uD83D\uDE19", on: puckerScore > 0.4, glow: "rgba(255,130,170,0.9)" },
+                    { ch: "\uD83D\uDE12", on: squintScore > 0.55 && smileScore < 0.2, glow: "rgba(180,180,180,0.9)" },
+                    { ch: "\u2639\uFE0F", on: mouthFrown > 0.4, glow: "rgba(100,150,255,0.9)" },
                 ];
                 const chin = lm[152];
                 if (chin) {
                     const baseX = (t ? t.x * vw : chin.x * vw);
                     const baseY = chin.y * vh + 35;
-                    const totalW = emojis.length * 36;
-                    const startX = baseX - totalW / 2 + 18;
+                    const spacing = 32;
+                    const totalW = emojis.length * spacing;
+                    const startX = baseX - totalW / 2 + spacing / 2;
                     for (let ei = 0; ei < emojis.length; ei++) {
                         const em = emojis[ei];
                         ctx.save();
-                        ctx.translate(startX + ei * 36, baseY);
+                        ctx.translate(startX + ei * spacing, baseY);
                         ctx.scale(-1, 1);
-                        ctx.font = "28px sans-serif";
+                        ctx.font = "22px sans-serif";
                         ctx.textAlign = "center";
                         ctx.textBaseline = "middle";
                         if (em.on) {
