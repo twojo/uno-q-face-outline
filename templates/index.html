@@ -5,18 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
     <title>AI Mirror Booth</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;500;700&family=Outfit:wght@300;500;700;900&display=swap');
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --accent: #00ffcc;
-            --accent-dim: rgba(0,255,204,0.15);
-            --bg: #0a0a0f;
-            --card: #111118;
-            --border: #222230;
-            --text: #e8e8f0;
-            --muted: #666680;
+            --green: #00ff88;
+            --green-dim: rgba(0,255,136,0.12);
+            --green-glow: rgba(0,255,136,0.4);
+            --bg: #050508;
+            --card: #0a0a10;
+            --border: #1a1a25;
+            --text: #d0d0e0;
+            --muted: #555570;
         }
 
         body {
@@ -32,42 +33,46 @@
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
-            padding: 20px;
-            position: relative;
+            padding: 16px;
         }
 
         .header {
             text-align: center;
-            margin-bottom: 16px;
-            z-index: 2;
+            margin-bottom: 12px;
         }
 
         .header h1 {
-            font-size: 28px;
-            font-weight: 900;
-            letter-spacing: -0.5px;
-            background: linear-gradient(135deg, #fff, var(--accent));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--green);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            text-shadow: 0 0 20px var(--green-glow);
         }
 
         .header p {
-            font-size: 13px;
+            font-size: 11px;
             color: var(--muted);
+            font-family: 'JetBrains Mono', monospace;
             margin-top: 4px;
-            font-weight: 300;
         }
 
-        .mirror-frame {
+        .mirror-container {
             position: relative;
             width: 100%;
             max-width: 480px;
             aspect-ratio: 1;
-            border-radius: 24px;
+        }
+
+        .mirror-frame {
+            width: 100%;
+            height: 100%;
+            border-radius: 16px;
             overflow: hidden;
-            border: 2px solid var(--border);
+            border: 1px solid var(--border);
             background: #000;
-            box-shadow: 0 0 60px rgba(0,255,204,0.05);
+            position: relative;
         }
 
         .mirror-frame video {
@@ -78,46 +83,82 @@
             display: block;
         }
 
-        .countdown-overlay {
+        .face-overlay {
             position: absolute;
             inset: 0;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0,0,0,0.6);
-            z-index: 10;
+            pointer-events: none;
+            transform: scaleX(-1);
         }
 
-        .countdown-num {
-            font-size: 140px;
-            font-weight: 900;
-            color: var(--accent);
-            text-shadow: 0 0 80px var(--accent), 0 0 40px var(--accent);
-            animation: countPop 0.6s ease-out;
+        .scan-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, var(--green), transparent);
+            box-shadow: 0 0 20px var(--green), 0 0 60px var(--green-glow);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 5;
         }
 
-        @keyframes countPop {
-            0% { transform: scale(2); opacity: 0; }
-            50% { transform: scale(0.9); opacity: 1; }
-            100% { transform: scale(1); opacity: 1; }
+        .scan-line.active {
+            animation: scanDown 1.2s ease-in-out forwards;
+        }
+
+        @keyframes scanDown {
+            0% { top: 0; opacity: 1; }
+            90% { top: 97%; opacity: 1; }
+            100% { top: 100%; opacity: 0; }
         }
 
         .flash-overlay {
             position: absolute;
             inset: 0;
-            background: #fff;
+            background: var(--green);
             opacity: 0;
             pointer-events: none;
-            z-index: 11;
+            z-index: 6;
         }
 
         .flash-overlay.fire {
-            animation: flash 0.3s ease-out;
+            animation: flashGreen 0.25s ease-out;
         }
 
-        @keyframes flash {
-            0% { opacity: 0.9; }
+        @keyframes flashGreen {
+            0% { opacity: 0.5; }
             100% { opacity: 0; }
+        }
+
+        .hud-topleft, .hud-topright, .hud-bottomleft {
+            position: absolute;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--green);
+            z-index: 4;
+            text-shadow: 0 0 8px var(--green-glow);
+            pointer-events: none;
+        }
+
+        .hud-topleft {
+            top: 12px;
+            left: 12px;
+        }
+
+        .hud-topright {
+            top: 12px;
+            right: 12px;
+            text-align: right;
+        }
+
+        .hud-bottomleft {
+            bottom: 12px;
+            left: 12px;
+        }
+
+        .confidence-val {
+            font-size: 18px;
+            font-weight: 700;
         }
 
         .results-panel {
@@ -127,17 +168,15 @@
         }
 
         .comparison {
-            position: relative;
-            width: 100%;
             display: flex;
             gap: 8px;
         }
 
         .comp-card {
             flex: 1;
-            border-radius: 16px;
+            border-radius: 12px;
             overflow: hidden;
-            border: 2px solid var(--border);
+            border: 1px solid var(--border);
             position: relative;
         }
 
@@ -149,236 +188,218 @@
         }
 
         .comp-card.ai-card {
-            border-color: var(--accent);
-            box-shadow: 0 0 30px rgba(0,255,204,0.15);
+            border-color: var(--green);
+            box-shadow: 0 0 25px rgba(0,255,136,0.1);
+            animation: revealPop 0.5s cubic-bezier(0.16,1,0.3,1) both;
+        }
+
+        @keyframes revealPop {
+            0% { transform: scale(0.9) translateX(30px); opacity: 0; }
+            100% { transform: scale(1) translateX(0); opacity: 1; }
         }
 
         .comp-label {
             position: absolute;
-            bottom: 8px;
-            left: 8px;
-            font-size: 11px;
+            bottom: 6px;
+            left: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.1em;
-            background: rgba(0,0,0,0.7);
-            padding: 4px 10px;
-            border-radius: 20px;
-            backdrop-filter: blur(8px);
-        }
-
-        .comp-label.ai { color: var(--accent); }
-
-        .theme-badge {
-            text-align: center;
-            margin-top: 12px;
-            font-size: 14px;
-            font-weight: 700;
-            color: var(--accent);
-            letter-spacing: 0.05em;
-        }
-
-        .prompt-text {
-            text-align: center;
-            margin-top: 6px;
-            font-size: 12px;
+            background: rgba(0,0,0,0.75);
+            padding: 3px 8px;
+            border-radius: 4px;
             color: var(--muted);
-            font-weight: 300;
-            line-height: 1.4;
-            padding: 0 10px;
         }
 
-        .reveal-anim .comp-card.ai-card {
-            animation: revealSlide 0.6s cubic-bezier(0.16,1,0.3,1) both;
+        .comp-label.ai { color: var(--green); }
+
+        .result-meta {
+            margin-top: 12px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
         }
 
-        @keyframes revealSlide {
-            0% { transform: translateX(40px) scale(0.9); opacity: 0; }
-            100% { transform: translateX(0) scale(1); opacity: 1; }
+        .meta-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .meta-row:last-child { margin-bottom: 0; }
+
+        .meta-label {
+            color: var(--muted);
+            min-width: 55px;
+            flex-shrink: 0;
+        }
+
+        .meta-val {
+            color: var(--green);
+            word-break: break-word;
         }
 
         .controls {
-            margin-top: 20px;
+            margin-top: 16px;
+            width: 100%;
+            max-width: 480px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
+        }
+
+        .dice-btn {
             width: 100%;
-            max-width: 480px;
-        }
-
-        .theme-selector {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            justify-content: center;
-        }
-
-        .theme-pill {
-            padding: 6px 14px;
-            border-radius: 20px;
-            border: 1px solid var(--border);
-            background: var(--card);
-            color: var(--muted);
-            font-size: 12px;
-            font-weight: 500;
+            padding: 22px;
+            border: 2px solid var(--green);
+            border-radius: 14px;
+            background: transparent;
+            color: var(--green);
+            font-family: 'Outfit', sans-serif;
+            font-size: 20px;
+            font-weight: 900;
             cursor: pointer;
-            transition: all 0.2s;
-            font-family: 'Outfit', sans-serif;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s;
+            text-shadow: 0 0 15px var(--green-glow);
+            -webkit-tap-highlight-color: transparent;
         }
 
-        .theme-pill:hover { border-color: var(--accent); color: var(--text); }
-
-        .theme-pill.active {
-            background: var(--accent-dim);
-            border-color: var(--accent);
-            color: var(--accent);
+        .dice-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, var(--green-dim), transparent, var(--green-dim));
+            background-size: 300% 300%;
+            animation: shimmerBg 3s ease-in-out infinite;
         }
 
-        .main-btn {
+        @keyframes shimmerBg {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .dice-btn span { position: relative; z-index: 1; }
+
+        .dice-btn:hover {
+            background: var(--green-dim);
+            box-shadow: 0 0 40px var(--green-glow);
+        }
+
+        .dice-btn:active { transform: scale(0.97); }
+
+        .dice-btn:disabled {
+            border-color: var(--border) !important;
+            color: var(--muted) !important;
+            text-shadow: none !important;
+            cursor: not-allowed;
+        }
+
+        .dice-btn:disabled::before { animation: none; background: transparent; }
+
+        .back-btn {
             width: 100%;
-            padding: 18px;
-            border: none;
-            border-radius: 16px;
-            font-size: 18px;
-            font-weight: 700;
+            padding: 14px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--card);
+            color: var(--text);
             font-family: 'Outfit', sans-serif;
+            font-size: 15px;
+            font-weight: 500;
             cursor: pointer;
             transition: all 0.2s;
             -webkit-tap-highlight-color: transparent;
         }
 
-        .main-btn.capture {
-            background: linear-gradient(135deg, var(--accent), #00cc99);
-            color: #000;
-            box-shadow: 0 4px 25px rgba(0,255,204,0.3);
-        }
+        .back-btn:hover { border-color: var(--green); }
 
-        .main-btn.capture:hover { box-shadow: 0 4px 35px rgba(0,255,204,0.5); transform: translateY(-1px); }
-        .main-btn.capture:active { transform: scale(0.97); }
-
-        .main-btn.again {
-            background: var(--card);
-            color: var(--text);
-            border: 1px solid var(--border);
-        }
-
-        .main-btn.again:hover { border-color: var(--accent); }
-
-        .main-btn:disabled {
-            background: var(--card) !important;
-            color: var(--muted) !important;
-            box-shadow: none !important;
-            cursor: not-allowed;
-            border: 1px solid var(--border) !important;
-        }
-
-        .loading-bar {
+        .loading-strip {
             width: 100%;
-            height: 3px;
+            height: 2px;
             background: var(--card);
-            border-radius: 2px;
+            border-radius: 1px;
             overflow: hidden;
             display: none;
         }
 
-        .loading-bar-inner {
+        .loading-strip-inner {
             height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, var(--accent), #7c3aed, var(--accent));
-            background-size: 200% 100%;
-            border-radius: 2px;
-            animation: shimmer 1.5s ease-in-out infinite;
+            width: 30%;
+            background: var(--green);
+            border-radius: 1px;
+            animation: loadSlide 1s ease-in-out infinite;
         }
 
-        @keyframes shimmer {
-            0%, 100% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
+        @keyframes loadSlide {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(400%); }
         }
 
-        .loading-text {
-            font-size: 14px;
+        .status-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
             color: var(--muted);
-            font-weight: 300;
-            min-height: 20px;
+            min-height: 16px;
             text-align: center;
         }
 
         .error-text {
-            color: #ff5555;
-            font-size: 13px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: #ff4444;
             text-align: center;
             display: none;
         }
 
         .gallery {
             width: 100%;
-            max-width: 600px;
-            margin-top: 28px;
-            padding-top: 20px;
+            max-width: 520px;
+            margin-top: 20px;
+            padding-top: 14px;
             border-top: 1px solid var(--border);
+            display: none;
         }
 
         .gallery-title {
-            font-size: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
             color: var(--muted);
             text-transform: uppercase;
-            letter-spacing: 0.1em;
-            font-weight: 500;
-            margin-bottom: 10px;
+            letter-spacing: 0.15em;
+            margin-bottom: 8px;
             text-align: center;
         }
 
         .gallery-strip {
             display: flex;
-            gap: 8px;
+            gap: 6px;
             overflow-x: auto;
-            padding-bottom: 8px;
+            padding-bottom: 6px;
             scrollbar-width: thin;
             scrollbar-color: var(--border) transparent;
         }
 
-        .gallery-strip::-webkit-scrollbar { height: 4px; }
-        .gallery-strip::-webkit-scrollbar-track { background: transparent; }
-        .gallery-strip::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
         .gallery-thumb {
             flex-shrink: 0;
-            width: 80px;
-            height: 80px;
-            border-radius: 10px;
+            width: 64px;
+            height: 64px;
+            border-radius: 6px;
             overflow: hidden;
             border: 1px solid var(--border);
             cursor: pointer;
             transition: all 0.2s;
-            position: relative;
         }
 
-        .gallery-thumb:hover {
-            border-color: var(--accent);
-            transform: scale(1.05);
-        }
-
-        .gallery-thumb img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .gallery-thumb .g-label {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            font-size: 8px;
-            font-weight: 700;
-            text-transform: uppercase;
-            background: rgba(0,0,0,0.8);
-            color: var(--accent);
-            text-align: center;
-            padding: 2px;
-            letter-spacing: 0.05em;
-        }
+        .gallery-thumb:hover { border-color: var(--green); transform: scale(1.08); }
+        .gallery-thumb img { width: 100%; height: 100%; object-fit: cover; }
 
         .fullscreen-view {
             display: none;
@@ -394,17 +415,15 @@
         .fullscreen-view img {
             max-width: 90%;
             max-height: 90%;
-            border-radius: 16px;
-            border: 2px solid var(--accent);
+            border-radius: 12px;
+            border: 1px solid var(--green);
         }
 
-        canvas { display: none; }
+        canvas#captureCanvas { display: none; }
 
         @media (max-width: 500px) {
-            .header h1 { font-size: 22px; }
-            .mirror-frame { max-width: 100%; border-radius: 16px; }
-            .comp-card { border-radius: 12px; }
-            .countdown-num { font-size: 100px; }
+            .mirror-container { max-width: 100%; }
+            .dice-btn { font-size: 17px; padding: 18px; }
         }
     </style>
 </head>
@@ -412,46 +431,66 @@
     <div class="booth">
         <div class="header">
             <h1>AI Mirror Booth</h1>
-            <p>Step up. Strike a pose. See yourself transformed.</p>
+            <p>identity scan active</p>
         </div>
 
-        <div class="mirror-frame" id="mirrorFrame">
-            <video id="video" autoplay playsinline muted></video>
-            <div class="countdown-overlay" id="countdownOverlay">
-                <div class="countdown-num" id="countdownNum">3</div>
+        <div class="mirror-container" id="mirrorContainer">
+            <div class="mirror-frame" id="mirrorFrame">
+                <video id="video" autoplay playsinline muted></video>
+                <canvas class="face-overlay" id="faceOverlay"></canvas>
+                <div class="scan-line" id="scanLine"></div>
+                <div class="flash-overlay" id="flashOverlay"></div>
+
+                <div class="hud-topleft">
+                    <div>FACE LOCK</div>
+                    <div class="confidence-val" id="confidenceVal">--</div>
+                </div>
+                <div class="hud-topright">
+                    <div id="hudStatus">STANDBY</div>
+                    <div id="hudFps">-- fps</div>
+                </div>
+                <div class="hud-bottomleft" id="hudCoords">--</div>
             </div>
-            <div class="flash-overlay" id="flashOverlay"></div>
         </div>
 
         <div class="results-panel" id="resultsPanel">
-            <div class="comparison" id="comparison">
+            <div class="comparison">
                 <div class="comp-card">
-                    <img id="capturedImg" alt="Your photo" />
-                    <span class="comp-label">You</span>
+                    <img id="capturedImg" alt="Capture" />
+                    <span class="comp-label">INPUT</span>
                 </div>
                 <div class="comp-card ai-card">
-                    <img id="resultImg" alt="AI result" />
-                    <span class="comp-label ai">AI</span>
+                    <img id="resultImg" alt="AI Output" />
+                    <span class="comp-label ai">OUTPUT</span>
                 </div>
             </div>
-            <div class="theme-badge" id="themeBadge"></div>
-            <div class="prompt-text" id="promptText"></div>
+            <div class="result-meta" id="resultMeta">
+                <div class="meta-row">
+                    <span class="meta-label">SEED</span>
+                    <span class="meta-val" id="metaSeed">--</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">PROMPT</span>
+                    <span class="meta-val" id="metaPrompt">--</span>
+                </div>
+            </div>
         </div>
 
-        <canvas id="canvas"></canvas>
+        <canvas id="captureCanvas"></canvas>
 
         <div class="controls">
-            <div class="theme-selector" id="themeSelector"></div>
-            <button class="main-btn capture" id="actionBtn">Snap & Transform</button>
-            <div class="loading-bar" id="loadingBar">
-                <div class="loading-bar-inner" id="loadingBarInner"></div>
+            <button class="dice-btn" id="diceBtn" disabled>
+                <span>Roll the AI Selfie Dice</span>
+            </button>
+            <div class="loading-strip" id="loadingStrip">
+                <div class="loading-strip-inner"></div>
             </div>
-            <div class="loading-text" id="loadingText"></div>
+            <div class="status-text" id="statusText"></div>
             <div class="error-text" id="errorText"></div>
         </div>
 
-        <div class="gallery" id="gallery" style="display:none;">
-            <div class="gallery-title">Your Transformations</div>
+        <div class="gallery" id="gallery">
+            <div class="gallery-title">Previous Rolls</div>
             <div class="gallery-strip" id="galleryStrip"></div>
         </div>
     </div>
@@ -460,157 +499,192 @@
         <img id="fullscreenImg" alt="Full view" />
     </div>
 
-    <script>
+    <script type="module">
+        import { FaceLandmarker, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/+esm';
+
         const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const actionBtn = document.getElementById('actionBtn');
+        const faceOverlay = document.getElementById('faceOverlay');
+        const scanLine = document.getElementById('scanLine');
+        const flashOverlay = document.getElementById('flashOverlay');
+        const diceBtn = document.getElementById('diceBtn');
         const capturedImg = document.getElementById('capturedImg');
         const resultImg = document.getElementById('resultImg');
-        const mirrorFrame = document.getElementById('mirrorFrame');
+        const mirrorContainer = document.getElementById('mirrorContainer');
         const resultsPanel = document.getElementById('resultsPanel');
-        const countdownOverlay = document.getElementById('countdownOverlay');
-        const countdownNum = document.getElementById('countdownNum');
-        const flashOverlay = document.getElementById('flashOverlay');
-        const loadingBar = document.getElementById('loadingBar');
-        const loadingBarInner = document.getElementById('loadingBarInner');
-        const loadingText = document.getElementById('loadingText');
+        const loadingStrip = document.getElementById('loadingStrip');
+        const statusText = document.getElementById('statusText');
         const errorText = document.getElementById('errorText');
-        const themeBadge = document.getElementById('themeBadge');
-        const promptText = document.getElementById('promptText');
-        const themeSelector = document.getElementById('themeSelector');
+        const metaSeed = document.getElementById('metaSeed');
+        const metaPrompt = document.getElementById('metaPrompt');
+        const confidenceVal = document.getElementById('confidenceVal');
+        const hudStatus = document.getElementById('hudStatus');
+        const hudFps = document.getElementById('hudFps');
+        const hudCoords = document.getElementById('hudCoords');
         const gallery = document.getElementById('gallery');
         const galleryStrip = document.getElementById('galleryStrip');
         const fullscreenView = document.getElementById('fullscreenView');
         const fullscreenImg = document.getElementById('fullscreenImg');
-        const comparison = document.getElementById('comparison');
+        const captureCanvas = document.getElementById('captureCanvas');
 
-        let selectedTheme = null;
+        let faceLandmarker = null;
+        let animFrameId = null;
         let isProcessing = false;
         let isShowingResult = false;
-        let loadingInterval = null;
-        let loadingMsgs = [
-            "Warming up the flux capacitor...",
-            "Consulting the style oracle...",
-            "Mixing the magic pixels...",
-            "Summoning your alter ego...",
-            "Raiding the costume department...",
-            "Calibrating the cool factor...",
-            "Rewriting your origin story...",
-        ];
+        let lastFps = 0;
+        let frameCount = 0;
+        let lastFpsTime = performance.now();
         let history = [];
 
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 720 } }, audio: false })
-            .then(stream => { video.srcObject = stream; })
-            .catch(() => {
-                errorText.innerText = "Camera access required. Allow camera and reload.";
+        const FACE_MESH_CONNECTIONS = [
+            [10,338],[338,297],[297,332],[332,284],[284,251],[251,389],[389,356],[356,454],
+            [454,323],[323,361],[361,288],[288,397],[397,365],[365,379],[379,378],[378,400],
+            [400,377],[377,152],[152,148],[148,176],[176,149],[149,150],[150,136],[136,172],
+            [172,58],[58,132],[132,93],[93,234],[234,127],[127,162],[162,21],[21,54],
+            [54,103],[103,67],[67,109],[109,10],
+            [33,7],[7,163],[163,144],[144,145],[145,153],[153,154],[154,155],[155,133],
+            [33,246],[246,161],[161,160],[160,159],[159,158],[158,157],[157,173],[173,133],
+            [263,249],[249,390],[390,373],[373,374],[374,380],[380,381],[381,382],[382,362],
+            [263,466],[466,388],[388,387],[387,386],[386,385],[385,384],[384,398],[398,362],
+            [78,95],[95,88],[88,178],[178,87],[87,14],[14,317],[317,402],[402,318],[318,324],[324,308],
+            [78,191],[191,80],[80,81],[81,82],[82,13],[13,312],[312,311],[311,310],[310,415],[415,308],
+        ];
+
+        async function initFaceLandmarker() {
+            hudStatus.textContent = 'LOADING MODEL...';
+            const filesetResolver = await FilesetResolver.forVisionTasks(
+                'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm'
+            );
+            faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+                baseOptions: {
+                    modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.tlite',
+                    delegate: 'GPU',
+                },
+                runningMode: 'VIDEO',
+                numFaces: 1,
+                outputFaceBlendshapes: false,
+                outputFacialTransformationMatrixes: false,
+            });
+            hudStatus.textContent = 'SCANNING';
+            diceBtn.disabled = false;
+        }
+
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } },
+                    audio: false,
+                });
+                video.srcObject = stream;
+                await new Promise(r => video.onloadeddata = r);
+                faceOverlay.width = video.videoWidth;
+                faceOverlay.height = video.videoHeight;
+                startDetectionLoop();
+                initFaceLandmarker();
+            } catch (e) {
+                errorText.textContent = 'Camera access required.';
                 errorText.style.display = 'block';
-                actionBtn.disabled = true;
-            });
-
-        function buildThemeUI(themes) {
-            themeSelector.innerHTML = '';
-            const randomPill = document.createElement('button');
-            randomPill.className = 'theme-pill active';
-            randomPill.textContent = 'Surprise Me';
-            randomPill.onclick = () => selectTheme(null, randomPill);
-            themeSelector.appendChild(randomPill);
-
-            themes.forEach(t => {
-                const pill = document.createElement('button');
-                pill.className = 'theme-pill';
-                pill.textContent = t;
-                pill.onclick = () => selectTheme(t, pill);
-                themeSelector.appendChild(pill);
-            });
+            }
         }
 
-        buildThemeUI(['Time Traveler','Action Hero','Fantasy Realm','Explorer','Pop Culture','Wild Card']);
+        function startDetectionLoop() {
+            const ctx = faceOverlay.getContext('2d');
 
-        fetch('/themes').then(r => r.json()).then(data => {
-            if (data.themes && data.themes.length) buildThemeUI(data.themes);
-        }).catch(() => {});
+            function detect() {
+                if (isProcessing || isShowingResult) {
+                    animFrameId = requestAnimationFrame(detect);
+                    return;
+                }
 
-        function selectTheme(theme, pill) {
-            selectedTheme = theme;
-            document.querySelectorAll('.theme-pill').forEach(p => p.classList.remove('active'));
-            pill.classList.add('active');
-        }
+                frameCount++;
+                const now = performance.now();
+                if (now - lastFpsTime >= 1000) {
+                    lastFps = frameCount;
+                    frameCount = 0;
+                    lastFpsTime = now;
+                    hudFps.textContent = lastFps + ' fps';
+                }
 
-        function countdown() {
-            return new Promise(resolve => {
-                countdownOverlay.style.display = 'flex';
-                let count = 3;
-                countdownNum.textContent = count;
+                ctx.clearRect(0, 0, faceOverlay.width, faceOverlay.height);
 
-                const tick = setInterval(() => {
-                    count--;
-                    if (count > 0) {
-                        countdownNum.textContent = count;
-                        countdownNum.style.animation = 'none';
-                        void countdownNum.offsetWidth;
-                        countdownNum.style.animation = 'countPop 0.6s ease-out';
+                if (faceLandmarker && video.readyState >= 2) {
+                    const result = faceLandmarker.detectForVideo(video, now);
+
+                    if (result.faceLandmarks && result.faceLandmarks.length > 0) {
+                        const lm = result.faceLandmarks[0];
+                        const w = faceOverlay.width;
+                        const h = faceOverlay.height;
+
+                        ctx.strokeStyle = 'rgba(0, 255, 136, 0.25)';
+                        ctx.lineWidth = 0.5;
+                        for (const [a, b] of FACE_MESH_CONNECTIONS) {
+                            if (a < lm.length && b < lm.length) {
+                                ctx.beginPath();
+                                ctx.moveTo(lm[a].x * w, lm[a].y * h);
+                                ctx.lineTo(lm[b].x * w, lm[b].y * h);
+                                ctx.stroke();
+                            }
+                        }
+
+                        ctx.fillStyle = 'rgba(0, 255, 136, 0.6)';
+                        for (let i = 0; i < lm.length; i += 3) {
+                            ctx.beginPath();
+                            ctx.arc(lm[i].x * w, lm[i].y * h, 1, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+
+                        const score = (94 + Math.random() * 5).toFixed(1);
+                        confidenceVal.textContent = score + '%';
+
+                        const nose = lm[1];
+                        hudCoords.textContent = `x:${(nose.x * 100).toFixed(0)} y:${(nose.y * 100).toFixed(0)} z:${(nose.z * 100).toFixed(1)}`;
                     } else {
-                        clearInterval(tick);
-                        countdownOverlay.style.display = 'none';
-                        flashOverlay.classList.remove('fire');
-                        void flashOverlay.offsetWidth;
-                        flashOverlay.classList.add('fire');
-                        resolve();
+                        confidenceVal.textContent = '--';
+                        hudCoords.textContent = 'NO FACE';
                     }
-                }, 1000);
-            });
+                }
+
+                animFrameId = requestAnimationFrame(detect);
+            }
+
+            detect();
         }
 
         function captureFrame() {
-            const ctx = canvas.getContext('2d');
-            canvas.width = video.videoWidth || 640;
-            canvas.height = video.videoHeight || 480;
-            ctx.translate(canvas.width, 0);
+            const ctx = captureCanvas.getContext('2d');
+            captureCanvas.width = video.videoWidth || 640;
+            captureCanvas.height = video.videoHeight || 480;
+            ctx.translate(captureCanvas.width, 0);
             ctx.scale(-1, 1);
             ctx.drawImage(video, 0, 0);
-            return canvas.toDataURL('image/jpeg', 0.85);
+            return captureCanvas.toDataURL('image/jpeg', 0.85);
         }
 
-        function startLoading() {
-            loadingBar.style.display = 'block';
-            loadingBarInner.style.width = '100%';
-            loadingBarInner.style.transition = 'width 45s linear';
-
-            let elapsed = 0;
-            let msgIdx = Math.floor(Math.random() * loadingMsgs.length);
-            loadingText.textContent = loadingMsgs[msgIdx];
-
-            loadingInterval = setInterval(() => {
-                elapsed++;
-                if (elapsed % 5 === 0) {
-                    msgIdx = (msgIdx + 1) % loadingMsgs.length;
-                    loadingText.textContent = loadingMsgs[msgIdx] + ` (${elapsed}s)`;
-                } else {
-                    loadingText.textContent = loadingMsgs[msgIdx] + ` (${elapsed}s)`;
-                }
-            }, 1000);
+        function runScanAnimation() {
+            return new Promise(resolve => {
+                scanLine.classList.remove('active');
+                void scanLine.offsetWidth;
+                scanLine.classList.add('active');
+                setTimeout(() => {
+                    scanLine.classList.remove('active');
+                    flashOverlay.classList.remove('fire');
+                    void flashOverlay.offsetWidth;
+                    flashOverlay.classList.add('fire');
+                    resolve();
+                }, 1200);
+            });
         }
 
-        function stopLoading() {
-            clearInterval(loadingInterval);
-            loadingBar.style.display = 'none';
-            loadingBarInner.style.transition = 'none';
-            loadingBarInner.style.width = '0%';
-            loadingText.textContent = '';
-        }
-
-        function addToGallery(originalSrc, aiSrc, theme) {
-            history.unshift({ original: originalSrc, ai: aiSrc, theme });
+        function addToGallery(aiSrc) {
+            history.unshift(aiSrc);
             if (history.length > 20) history.pop();
-
             gallery.style.display = 'block';
             galleryStrip.innerHTML = '';
-            history.forEach((item, i) => {
+            history.forEach(src => {
                 const thumb = document.createElement('div');
                 thumb.className = 'gallery-thumb';
-                thumb.innerHTML = `<img src="${item.ai}" alt="Transform ${i+1}" /><div class="g-label">${item.theme}</div>`;
+                thumb.innerHTML = `<img src="${src}" />`;
                 thumb.onclick = () => {
-                    fullscreenImg.src = item.ai;
+                    fullscreenImg.src = src;
                     fullscreenView.style.display = 'flex';
                 };
                 galleryStrip.appendChild(thumb);
@@ -619,75 +693,99 @@
 
         fullscreenView.onclick = () => { fullscreenView.style.display = 'none'; };
 
-        actionBtn.addEventListener('click', async () => {
+        let loadingMessages = [
+            'Analyzing facial geometry...',
+            'Generating identity matrix...',
+            'Rendering parallel universe...',
+            'Constructing alternate reality...',
+            'Mapping neural pathways...',
+            'Synthesizing transformation...',
+            'Decoding visual DNA...',
+        ];
+
+        diceBtn.addEventListener('click', async () => {
             if (isShowingResult) {
                 resultsPanel.style.display = 'none';
-                mirrorFrame.style.display = 'block';
-                actionBtn.textContent = 'Snap & Transform';
-                actionBtn.className = 'main-btn capture';
+                mirrorContainer.style.display = 'block';
+                diceBtn.innerHTML = '<span>Roll the AI Selfie Dice</span>';
+                diceBtn.className = 'dice-btn';
                 errorText.style.display = 'none';
+                statusText.textContent = '';
                 isShowingResult = false;
+                hudStatus.textContent = 'SCANNING';
                 return;
             }
 
             if (isProcessing) return;
             isProcessing = true;
-            actionBtn.disabled = true;
+            diceBtn.disabled = true;
             errorText.style.display = 'none';
+            hudStatus.textContent = 'CAPTURING';
 
-            await countdown();
+            await runScanAnimation();
             const imageData = captureFrame();
             capturedImg.src = imageData;
 
-            mirrorFrame.style.display = 'none';
+            mirrorContainer.style.display = 'none';
             resultsPanel.style.display = 'block';
             resultImg.src = '';
-            comparison.classList.remove('reveal-anim');
 
-            startLoading();
+            loadingStrip.style.display = 'block';
+            let elapsed = 0;
+            let msgIdx = Math.floor(Math.random() * loadingMessages.length);
+            statusText.textContent = loadingMessages[msgIdx];
+            const ticker = setInterval(() => {
+                elapsed++;
+                if (elapsed % 4 === 0) msgIdx = (msgIdx + 1) % loadingMessages.length;
+                statusText.textContent = loadingMessages[msgIdx] + ` [${elapsed}s]`;
+            }, 1000);
 
             try {
                 const controller = new AbortController();
                 const timeout = setTimeout(() => controller.abort(), 120000);
 
-                const body = { image: imageData };
-                if (selectedTheme) body.theme = selectedTheme;
-
                 const response = await fetch('/transform', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body),
+                    body: JSON.stringify({ image: imageData }),
                     signal: controller.signal,
                 });
                 clearTimeout(timeout);
                 const data = await response.json();
 
+                clearInterval(ticker);
+                loadingStrip.style.display = 'none';
+
                 if (data.success) {
-                    stopLoading();
                     resultImg.src = data.image;
-                    comparison.classList.add('reveal-anim');
-                    themeBadge.textContent = data.theme || 'Surprise';
-                    promptText.textContent = data.prompt;
-                    actionBtn.textContent = 'Try Another';
-                    actionBtn.className = 'main-btn again';
+                    metaSeed.textContent = data.seed;
+                    metaPrompt.textContent = data.prompt;
+                    diceBtn.innerHTML = '<span>Roll Again</span>';
+                    diceBtn.className = 'dice-btn back-btn';
+                    statusText.textContent = '';
                     isShowingResult = true;
-                    addToGallery(imageData, data.image, data.theme || 'Surprise');
+                    addToGallery(data.image);
                 } else {
                     throw new Error(data.error || 'Generation failed.');
                 }
             } catch (err) {
-                stopLoading();
+                clearInterval(ticker);
+                loadingStrip.style.display = 'none';
                 resultsPanel.style.display = 'none';
-                mirrorFrame.style.display = 'block';
+                mirrorContainer.style.display = 'block';
+                hudStatus.textContent = 'SCANNING';
                 errorText.textContent = err.name === 'AbortError'
                     ? 'Timed out. Try again.'
                     : err.message;
                 errorText.style.display = 'block';
+                statusText.textContent = '';
             } finally {
                 isProcessing = false;
-                actionBtn.disabled = false;
+                diceBtn.disabled = false;
             }
         });
+
+        initCamera();
     </script>
 </body>
 </html>

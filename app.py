@@ -2,6 +2,7 @@
 AI Mirror Booth — fal.ai InstantID Backend
 Designed for Arduino Uno Q (QRB2210) deployment.
 Single-step identity-preserving face transformation via InstantID.
+Black Box / Mystery mode — random prompt, no user theme selection.
 """
 
 import os
@@ -9,10 +10,9 @@ import sys
 import base64
 import random
 import time
+import io
 import logging
 from logging.handlers import RotatingFileHandler
-
-import io
 
 import requests
 import fal_client
@@ -39,7 +39,7 @@ logger.addHandler(console_handler)
 # ── App Setup ────────────────────────────────────────────────────────────────
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
-app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5 MB
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
 FAL_MODEL = "fal-ai/instantid"
 MAX_B64_SIZE = 2 * 1024 * 1024
@@ -52,46 +52,31 @@ SHARPNESS_FACTOR = 1.2
 
 
 def preprocess_face(b64_data: str) -> str:
-    """Auto-adjust brightness, contrast, and sharpness of a webcam capture.
-
-    Analyses perceived brightness and nudges it toward a target midpoint so
-    the InstantID model can read facial features clearly regardless of webcam
-    lighting conditions.  Returns a new base64-encoded JPEG string.
-    """
     raw = base64.b64decode(b64_data)
     img = Image.open(io.BytesIO(raw)).convert("RGB")
 
     stat = ImageStat.Stat(img)
     perceived_brightness = sum(stat.mean[:3]) / 3.0
-    logger.debug(
-        "Pre-process: size=%dx%d, perceived_brightness=%.1f",
-        img.width, img.height, perceived_brightness,
-    )
+    logger.debug("Pre-process: size=%dx%d, brightness=%.1f", img.width, img.height, perceived_brightness)
 
     if perceived_brightness < 90:
-        brightness_factor = min(TARGET_BRIGHTNESS / max(perceived_brightness, 1), 1.6)
-        img = ImageEnhance.Brightness(img).enhance(brightness_factor)
-        logger.debug("Brightness boosted x%.2f (was dark)", brightness_factor)
+        factor = min(TARGET_BRIGHTNESS / max(perceived_brightness, 1), 1.6)
+        img = ImageEnhance.Brightness(img).enhance(factor)
+        logger.debug("Brightness boosted x%.2f", factor)
     elif perceived_brightness > 180:
-        brightness_factor = max(TARGET_BRIGHTNESS / perceived_brightness, 0.7)
-        img = ImageEnhance.Brightness(img).enhance(brightness_factor)
-        logger.debug("Brightness reduced x%.2f (was blown out)", brightness_factor)
+        factor = max(TARGET_BRIGHTNESS / perceived_brightness, 0.7)
+        img = ImageEnhance.Brightness(img).enhance(factor)
+        logger.debug("Brightness reduced x%.2f", factor)
 
     img = ImageEnhance.Contrast(img).enhance(TARGET_CONTRAST_FACTOR)
     img = ImageEnhance.Sharpness(img).enhance(SHARPNESS_FACTOR)
 
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=90)
-    result_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-    logger.debug(
-        "Pre-process done: output size=%d bytes",
-        len(result_b64),
-    )
-    return result_b64
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
 
-# ── Identity-First Prompts ───────────────────────────────────────────────────
-# Every prompt starts with an identity anchor to force the model to preserve
-# the reference face. Artistic direction comes second.
+
+# ── Prompt Pool ──────────────────────────────────────────────────────────────
 
 IDENTITY_PREFIX = (
     "High-fidelity portrait of the exact person in the reference image, "
@@ -104,44 +89,32 @@ NEGATIVE_PROMPT = (
     "disfigured, bad anatomy, extra limbs, mutated hands"
 )
 
-THEMES = {
-    "Time Traveler": [
-        IDENTITY_PREFIX + "dressed as an ancient Egyptian pharaoh with golden nemes headdress, inside a torch-lit pyramid chamber, cinematic lighting, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as a 1920s flapper at a speakeasy, sequined headband, art deco background, warm amber lighting, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as a Roman centurion in polished bronze armour with red-plumed helmet, Colosseum behind, golden hour, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as a cyberpunk hacker with neon-lit face, holographic HUD, rain-soaked neon city, cinematic lighting, shot on 35mm, photorealistic",
-    ],
-    "Action Hero": [
-        IDENTITY_PREFIX + "as a Viking warrior with war paint and fur-trimmed armour on a misty battlefield, dramatic sky, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as a samurai warrior in ornate black and gold armour, cherry blossom petals floating, soft morning light, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as a space marine in heavy battle armour on an alien planet with two moons, cinematic lighting, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as a medieval knight in gleaming silver plate armour holding a flaming sword, epic storm clouds, shot on 35mm, photorealistic",
-    ],
-    "Fantasy Realm": [
-        IDENTITY_PREFIX + "as a wizard with glowing blue eyes wearing arcane-runed robes in an ancient candlelit library, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as an elf ranger with pointed ears and leaf-pattern cloak in a bioluminescent enchanted forest, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as a dragon rider wearing scaled armour with a massive dragon in flight behind, sunset sky, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as a vampire lord in a gothic castle, pale skin, crimson eyes, velvet cape, candlelight atmosphere, shot on 35mm, photorealistic",
-    ],
-    "Explorer": [
-        IDENTITY_PREFIX + "as a NASA astronaut inside the International Space Station with Earth visible through the cupola window, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as a deep-sea diver in a vintage brass diving helmet, underwater with bioluminescent jellyfish, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as an arctic explorer in a fur-lined parka on frozen tundra with northern lights above, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as a jungle explorer with a weathered hat and binoculars in dense tropical rainforest, dappled sunlight, shot on 35mm, photorealistic",
-    ],
-    "Pop Culture": [
-        IDENTITY_PREFIX + "as a retro disco dancer with a shiny jumpsuit and mirrored sunglasses on a light-up dance floor, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as a punk rocker with a tall mohawk and leather jacket covered in pins on a concert stage, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as a classic film noir detective in trench coat and fedora, rainy alley with neon signs, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as a superhero in a gleaming suit with flowing cape on a rooftop at sunset overlooking a city, shot on 35mm, photorealistic",
-    ],
-    "Wild Card": [
-        IDENTITY_PREFIX + "as a mad scientist with wild hair and oversized goggles in a lab of bubbling beakers and tesla coils, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as a pirate captain with tricorn hat and golden tooth on the deck of a ghost ship in fog, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as a steampunk airship pilot wearing brass goggles and leather aviator cap, clouds below, shot on 35mm, photorealistic",
-        IDENTITY_PREFIX + "as a Western outlaw with bandana and dusty hat in a saloon doorway at high noon, shot on 35mm, photorealistic",
-    ],
-}
+PROMPTS = [
+    IDENTITY_PREFIX + "dressed as an ancient Egyptian pharaoh with golden nemes headdress, inside a torch-lit pyramid chamber, cinematic lighting, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a 1920s flapper at a speakeasy, sequined headband, art deco background, warm amber lighting, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a Roman centurion in polished bronze armour with red-plumed helmet, Colosseum behind, golden hour, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a cyberpunk hacker with neon-lit face, holographic HUD, rain-soaked neon city, cinematic lighting, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a Viking warrior with war paint and fur-trimmed armour on a misty battlefield, dramatic sky, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a samurai warrior in ornate black and gold armour, cherry blossom petals floating, soft morning light, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a space marine in heavy battle armour on an alien planet with two moons, cinematic lighting, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a medieval knight in gleaming silver plate armour holding a flaming sword, epic storm clouds, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a wizard with glowing blue eyes wearing arcane-runed robes in an ancient candlelit library, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as an elf ranger with pointed ears and leaf-pattern cloak in a bioluminescent enchanted forest, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a dragon rider wearing scaled armour with a massive dragon in flight behind, sunset sky, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a vampire lord in a gothic castle, pale skin, crimson eyes, velvet cape, candlelight atmosphere, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a NASA astronaut inside the International Space Station with Earth visible through the cupola window, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a deep-sea diver in a vintage brass diving helmet, underwater with bioluminescent jellyfish, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as an arctic explorer in a fur-lined parka on frozen tundra with northern lights above, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a jungle explorer with a weathered hat and binoculars in dense tropical rainforest, dappled sunlight, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a retro disco dancer with a shiny jumpsuit and mirrored sunglasses on a light-up dance floor, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a punk rocker with a tall mohawk and leather jacket covered in pins on a concert stage, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a classic film noir detective in trench coat and fedora, rainy alley with neon signs, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a superhero in a gleaming suit with flowing cape on a rooftop at sunset overlooking a city, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a mad scientist with wild hair and oversized goggles in a lab of bubbling beakers and tesla coils, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a pirate captain with tricorn hat and golden tooth on the deck of a ghost ship in fog, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a steampunk airship pilot wearing brass goggles and leather aviator cap, clouds below, shot on 35mm, photorealistic",
+    IDENTITY_PREFIX + "as a Western outlaw with bandana and dusty hat in a saloon doorway at high noon, shot on 35mm, photorealistic",
+]
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 
@@ -149,11 +122,6 @@ THEMES = {
 def index():
     logger.info("Serving index page")
     return render_template("index.html")
-
-
-@app.route("/themes", methods=["GET"])
-def get_themes():
-    return jsonify({"themes": list(THEMES.keys())})
 
 
 @app.route("/transform", methods=["POST"])
@@ -169,38 +137,31 @@ def transform():
 
     data = request.get_json(silent=True)
     if not data or not isinstance(data, dict):
-        logger.error("Invalid JSON payload from %s", ip)
         return jsonify({"success": False, "error": "Invalid request."}), 400
 
     raw_image = data.get("image", "")
     if not isinstance(raw_image, str) or not raw_image:
-        logger.error("Missing image field from %s", ip)
         return jsonify({"success": False, "error": "No image provided."}), 400
 
     image_b64 = raw_image.split(",")[-1]
     if len(image_b64) > MAX_B64_SIZE:
-        logger.error("Image too large (%d bytes) from %s", len(image_b64), ip)
         return jsonify({"success": False, "error": "Image too large."}), 400
 
     try:
         image_b64 = preprocess_face(image_b64)
     except Exception as pp_err:
-        logger.warning("Pre-processing failed, using raw image: %s", pp_err)
+        logger.warning("Pre-processing failed, using raw: %s", pp_err)
 
-    theme_name = data.get("theme")
-    if theme_name and theme_name in THEMES:
-        prompt = random.choice(THEMES[theme_name])
-    else:
-        theme_name = random.choice(list(THEMES.keys()))
-        prompt = random.choice(THEMES[theme_name])
-
+    prompt = random.choice(PROMPTS)
+    seed = random.randint(0, 999999)
     face_data_uri = f"data:image/jpeg;base64,{image_b64}"
-    logger.info("Transform request: theme=%s, ip=%s", theme_name, ip)
+
+    logger.info("Transform: seed=%d, ip=%s", seed, ip)
     logger.debug("Prompt: %s", prompt[:120])
 
     try:
         t0 = time.time()
-        logger.info("Calling InstantID model...")
+        logger.info("Calling InstantID (seed=%d)...", seed)
 
         result = fal_client.subscribe(
             FAL_MODEL,
@@ -212,13 +173,12 @@ def transform():
                 "controlnet_conditioning_scale": 0.80,
                 "num_inference_steps": 30,
                 "guidance_scale": 5.0,
-                "seed": random.randint(0, 999999),
+                "seed": seed,
             },
         )
 
         elapsed = time.time() - t0
         logger.info("InstantID completed in %.1fs", elapsed)
-        logger.debug("Result keys: %s", list(result.keys()) if isinstance(result, dict) else type(result))
 
         images = result.get("images") or []
         if isinstance(images, dict):
@@ -227,36 +187,30 @@ def transform():
         image_url = ""
         if images and isinstance(images[0], dict):
             image_url = images[0].get("url", "")
-
         if not image_url:
-            image_obj = result.get("image")
-            if isinstance(image_obj, dict):
-                image_url = image_obj.get("url", "")
-
+            obj = result.get("image")
+            if isinstance(obj, dict):
+                image_url = obj.get("url", "")
         if not image_url:
             logger.error("No image URL in response: %s", list(result.keys()))
             return jsonify({"success": False, "error": "Model returned no image."}), 500
 
-        logger.info("Downloading result from %s...", image_url[:80])
+        logger.info("Downloading result...")
         img_resp = requests.get(image_url, timeout=30)
         result_b64 = base64.b64encode(img_resp.content).decode("utf-8")
 
-        content_type = img_resp.headers.get("Content-Type", "image/jpeg")
-        if "png" in content_type:
-            mime = "image/png"
-        elif "webp" in content_type:
-            mime = "image/webp"
-        else:
-            mime = "image/jpeg"
+        ct = img_resp.headers.get("Content-Type", "image/jpeg")
+        mime = "image/png" if "png" in ct else ("image/webp" if "webp" in ct else "image/jpeg")
 
-        logger.info("Transform complete: theme=%s, elapsed=%.1fs, mime=%s", theme_name, time.time() - t0, mime)
+        short_prompt = prompt.replace(IDENTITY_PREFIX, "").strip()
+
+        logger.info("Done: seed=%d, elapsed=%.1fs", seed, time.time() - t0)
 
         return jsonify({
             "success": True,
             "image": f"data:{mime};base64,{result_b64}",
-            "prompt": prompt,
-            "theme": theme_name,
-            "mode": "instant-id",
+            "prompt": short_prompt,
+            "seed": seed,
         })
 
     except Exception as e:
@@ -269,12 +223,12 @@ def transform():
 if __name__ == "__main__":
     fal_key = os.environ.get("FAL_KEY")
     if not fal_key:
-        logger.critical("FAL_KEY not set — cannot start. Export FAL_KEY and retry.")
+        logger.critical("FAL_KEY not set. Export FAL_KEY and retry.")
         sys.exit(1)
 
     logger.info("FAL_KEY loaded (length=%d)", len(fal_key))
     logger.info("Model: %s", FAL_MODEL)
-    logger.info("Identity settings: ip_adapter_scale=0.85, controlnet=0.80, steps=30, guidance=5.0")
+    logger.info("Settings: ip_adapter=0.85, controlnet=0.80, steps=30, guidance=5.0")
 
     port = int(os.environ.get("PORT", 8000))
     logger.info("Starting AI Mirror Booth on port %d", port)
