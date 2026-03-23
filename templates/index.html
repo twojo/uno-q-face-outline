@@ -574,8 +574,32 @@
                     ctx.stroke();
                 }
 
-                if (L.mesh && FaceLandmarker.FACE_LANDMARKS_TESSELATION)
-                    drawConns(FaceLandmarker.FACE_LANDMARKS_TESSELATION, clr.mesh, 3.5);
+                if (L.mesh && FaceLandmarker.FACE_LANDMARKS_TESSELATION) {
+                    var ovalSet = new Set();
+                    if (L.outline && FaceLandmarker.FACE_LANDMARKS_FACE_OVAL) {
+                        for (var oi0 = 0; oi0 < FaceLandmarker.FACE_LANDMARKS_FACE_OVAL.length; oi0++) {
+                            var c0 = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL[oi0];
+                            var s0 = Array.isArray(c0) ? c0[0] : c0.start;
+                            var e0 = Array.isArray(c0) ? c0[1] : c0.end;
+                            ovalSet.add(s0 + "," + e0);
+                            ovalSet.add(e0 + "," + s0);
+                        }
+                    }
+                    ctx.strokeStyle = clr.mesh;
+                    ctx.lineWidth = 3.5;
+                    ctx.beginPath();
+                    for (var ti = 0; ti < FaceLandmarker.FACE_LANDMARKS_TESSELATION.length; ti++) {
+                        var tc = FaceLandmarker.FACE_LANDMARKS_TESSELATION[ti];
+                        var tsi = Array.isArray(tc) ? tc[0] : tc.start;
+                        var tei = Array.isArray(tc) ? tc[1] : tc.end;
+                        if (ovalSet.has(tsi + "," + tei)) continue;
+                        var ta = lm[tsi], tb = lm[tei];
+                        if (!ta || !tb) continue;
+                        ctx.moveTo(ta.x * vw, ta.y * vh);
+                        ctx.lineTo(tb.x * vw, tb.y * vh);
+                    }
+                    ctx.stroke();
+                }
                 if (L.outline && FaceLandmarker.FACE_LANDMARKS_FACE_OVAL) {
                     var cx = 0, cy = 0, oc = 0;
                     var ovalConns = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL;
