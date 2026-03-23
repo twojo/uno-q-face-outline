@@ -7,7 +7,8 @@ import base64
 
 app = Flask(__name__)
 
-hf_api = HfApi()
+hf_token = os.environ.get("HF_TOKEN")
+hf_api = HfApi(token=hf_token)
 
 
 @app.route("/")
