@@ -337,6 +337,12 @@
 
     document.getElementById("hDel").textContent = usedDelegate;
 
+    const tess = FaceLandmarker.FACE_LANDMARKS_TESSELATION;
+    const oval = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL;
+    const tessType = tess ? (Array.isArray(tess[0]) ? "array-tuples" : (tess[0] && tess[0].start !== undefined ? "start-end-objects" : "unknown:" + JSON.stringify(tess[0]))) : "null";
+    console.log("[DIAG] TESSELATION type:", tessType, "length:", tess ? tess.length : 0, "OVAL length:", oval ? oval.length : 0);
+    console.log("[DIAG] Sample connection:", tess ? JSON.stringify(tess[0]) : "none");
+
     const cam = document.getElementById("cam");
     const cvs = document.getElementById("overlay");
     const ctx = cvs.getContext("2d");
@@ -404,6 +410,7 @@
     let nextFaceId = 1;
     const TRACK_TTL = 800;
     let detectErrors = 0;
+    let renderErrors = 0;
     let totalDetectCalls = 0;
     let maxFacesEverSeen = 0;
 
@@ -476,7 +483,7 @@
             du = new DrawingUtils(ctx);
         }
 
-        const nowMs = Date.now();
+        const nowMs = performance.now();
 
         const before = performance.now();
         let res;
@@ -502,74 +509,112 @@
 
         if (nFaces > maxFacesEverSeen) maxFacesEverSeen = nFaces;
 
-        if (totalDetectCalls % 30 === 0 || (totalDetectCalls <= 5)) {
+        if (nFaces > 0 || totalDetectCalls % 30 === 0 || totalDetectCalls <= 5) {
             if (nFaces > 0) {
-                setDiag("dDetect", "ok", nFaces + " face(s) detected — " + faces[0].length + " landmarks each — call #" + totalDetectCalls);
+                const lmSample = faces[0][0];
+                const lmInfo = lmSample ? ("lm0={x:" + lmSample.x.toFixed(3) + ",y:" + lmSample.y.toFixed(3) + "}") : "lm0=null";
+                setDiag("dDetect", "ok", nFaces + " face(s) — " + faces[0].length + " pts — " + lmInfo + " — call #" + totalDetectCalls);
             } else {
                 const status = maxFacesEverSeen > 0 ? "warn" : (totalDetectCalls > 60 ? "warn" : "wait");
                 setDiag("dDetect", status, "0 faces (calls: " + totalDetectCalls + ", errors: " + detectErrors + ", max seen: " + maxFacesEverSeen + ")");
             }
         }
 
-        const tracked = matchFaces(faces, now);
+        let renderErr = null;
+        try {
+            const tracked = matchFaces(faces, now);
 
-        for (let i = 0; i < faces.length; i++) {
-            const lm = faces[i];
-            const clr = FACE_COLORS[tracked[i].colorIdx];
+            for (let i = 0; i < faces.length; i++) {
+                const lm = faces[i];
+                if (!lm || lm.length < 468) continue;
+                const clr = FACE_COLORS[(tracked[i] ? tracked[i].colorIdx : 0) % FACE_COLORS.length];
 
-            if (L.mesh)    du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_TESSELATION,    { color: clr.mesh, lineWidth: 0.5 });
-            if (L.outline) du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,      { color: clr.edge, lineWidth: 2.5 });
-            if (L.eyes) {
-                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, { color: clr.feat, lineWidth: 1.5 });
-                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,  { color: clr.feat, lineWidth: 1.5 });
-            }
-            if (L.brows) {
-                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, { color: clr.feat, lineWidth: 1.5 });
-                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW,  { color: clr.feat, lineWidth: 1.5 });
-            }
-            if (L.lips) du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LIPS, { color: clr.feat, lineWidth: 1.5 });
-            if (L.iris) {
-                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, { color: clr.iris, lineWidth: 2 });
-                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS,  { color: clr.iris, lineWidth: 2 });
-            }
-            if (L.dots) {
-                ctx.fillStyle = clr.dot;
-                for (let j = 0; j < lm.length; j++) {
+                function drawConns(conns, color, lw) {
+                    if (!conns || !conns.length) return;
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = lw;
                     ctx.beginPath();
-                    ctx.arc(lm[j].x * vw, lm[j].y * vh, 1.2, 0, 6.283);
+                    for (const c of conns) {
+                        let si, ei;
+                        if (Array.isArray(c)) { si = c[0]; ei = c[1]; }
+                        else if (c.start !== undefined) { si = c.start; ei = c.end; }
+                        else continue;
+                        const a = lm[si], b = lm[ei];
+                        if (!a || !b) continue;
+                        ctx.moveTo(a.x * vw, a.y * vh);
+                        ctx.lineTo(b.x * vw, b.y * vh);
+                    }
+                    ctx.stroke();
+                }
+
+                if (L.mesh && FaceLandmarker.FACE_LANDMARKS_TESSELATION)
+                    drawConns(FaceLandmarker.FACE_LANDMARKS_TESSELATION, clr.mesh, 0.5);
+                if (L.outline && FaceLandmarker.FACE_LANDMARKS_FACE_OVAL)
+                    drawConns(FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, clr.edge, 2.5);
+                if (L.eyes) {
+                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, clr.feat, 1.5);
+                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, clr.feat, 1.5);
+                }
+                if (L.brows) {
+                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, clr.feat, 1.5);
+                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW, clr.feat, 1.5);
+                }
+                if (L.lips && FaceLandmarker.FACE_LANDMARKS_LIPS)
+                    drawConns(FaceLandmarker.FACE_LANDMARKS_LIPS, clr.feat, 1.5);
+                if (L.iris) {
+                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, clr.iris, 2);
+                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS, clr.iris, 2);
+                }
+
+                if (L.dots) {
+                    ctx.fillStyle = clr.dot;
+                    for (let j = 0; j < lm.length; j++) {
+                        if (!lm[j]) continue;
+                        ctx.beginPath();
+                        ctx.arc(lm[j].x * vw, lm[j].y * vh, 1.2, 0, 6.283);
+                        ctx.fill();
+                    }
+                }
+
+                const t = tracked[i];
+                if (t && lm[10]) {
+                    const tagX = t.x * vw;
+                    const tagY = (lm[10].y * vh) - 14;
+                    const dur = fmtTime(now - t.since);
+                    const label = "Face " + t.id + "  \u00B7  " + dur;
+                    ctx.save();
+                    ctx.font = "600 12px 'Inter', sans-serif";
+                    const tw = ctx.measureText(label).width;
+                    ctx.fillStyle = "rgba(0,0,0,0.6)";
+                    ctx.beginPath();
+                    ctx.roundRect(tagX - tw / 2 - 7, tagY - 11, tw + 14, 20, 5);
                     ctx.fill();
+                    ctx.fillStyle = clr.tag;
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(label, tagX, tagY - 1);
+                    ctx.restore();
                 }
             }
 
-            const t = tracked[i];
-            const tagX = t.x * vw;
-            const tagY = (lm[10].y * vh) - 14;
-            const dur = fmtTime(now - t.since);
-            const label = "Face " + t.id + "  \u00B7  " + dur;
-            ctx.save();
-            ctx.font = "600 12px 'Inter', sans-serif";
-            const tw = ctx.measureText(label).width;
-            ctx.fillStyle = "rgba(0,0,0,0.6)";
-            ctx.beginPath();
-            ctx.roundRect(tagX - tw / 2 - 7, tagY - 11, tw + 14, 20, 5);
-            ctx.fill();
-            ctx.fillStyle = clr.tag;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(label, tagX, tagY - 1);
-            ctx.restore();
-        }
-
-        if (faces.length > 0) {
-            const p = faces[0];
-            const n = p[1], lc = p[234], rc = p[454], fh = p[10], ch = p[152];
-            const fw = Math.abs(rc.x - lc.x) || 0.01;
-            const fht = Math.abs(ch.y - fh.y) || 0.01;
-            yaw = Math.round(((n.x - (lc.x + rc.x) / 2) / fw) * 90);
-            pitch = Math.round(((n.y - (fh.y + ch.y) / 2) / fht) * 90);
-            hudBL.classList.add("on");
-        } else {
-            hudBL.classList.remove("on");
+            if (faces.length > 0 && faces[0].length >= 455) {
+                const p = faces[0];
+                const n = p[1], lc = p[234], rc = p[454], fh = p[10], ch = p[152];
+                if (n && lc && rc && fh && ch) {
+                    const fw = Math.abs(rc.x - lc.x) || 0.01;
+                    const fht = Math.abs(ch.y - fh.y) || 0.01;
+                    yaw = Math.round(((n.x - (lc.x + rc.x) / 2) / fw) * 90);
+                    pitch = Math.round(((n.y - (fh.y + ch.y) / 2) / fht) * 90);
+                }
+                hudBL.classList.add("on");
+            } else {
+                hudBL.classList.remove("on");
+            }
+        } catch (e) {
+            renderErr = e;
+            renderErrors++;
+            if (renderErrors <= 5) console.error("Render error #" + renderErrors + ":", e);
+            setDiag("dCanvas", "fail", "RENDER ERROR #" + renderErrors + ": " + (e.message || e).slice(0, 100));
         }
 
         if (now - lastHud >= 2000) {
@@ -582,7 +627,7 @@
             document.getElementById("hFrames").textContent = total.toLocaleString();
 
             let listHtml = "";
-            for (const t of tracked) {
+            for (const t of trackedFaces) {
                 const dur = fmtTime(now - t.since);
                 const clr = FACE_COLORS[t.colorIdx];
                 listHtml += '<div class="face-entry"><span class="face-id" style="color:' + clr.tag + '">Face ' + t.id + '</span><span class="face-time">' + dur + '</span></div>';
@@ -595,6 +640,10 @@
             } else {
                 document.getElementById("hYaw").textContent = "--";
                 document.getElementById("hPitch").textContent = "--";
+            }
+
+            if (!renderErr) {
+                setDiag("dCanvas", "ok", cW + "x" + cH + " — rendering" + (nFaces > 0 ? " " + nFaces + " face(s)" : ""));
             }
         }
     }
