@@ -20,6 +20,14 @@ logger.addHandler(console_handler)
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
 
+@app.after_request
+def add_no_cache(response):
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
