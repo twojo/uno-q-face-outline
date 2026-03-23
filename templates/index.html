@@ -308,30 +308,36 @@
 
     let fl = null;
     let usedDelegate = "none";
-    const cfg = {
-        baseOptions: {
-            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-            delegate: "GPU"
-        },
-        outputFaceBlendshapes: false,
-        runningMode: "VIDEO",
-        numFaces: 4
-    };
+
+    async function tryDelegate(delegate) {
+        const cfg = {
+            baseOptions: {
+                modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+                delegate: delegate
+            },
+            outputFaceBlendshapes: false,
+            runningMode: "VIDEO",
+            numFaces: 4,
+            minFaceDetectionConfidence: 0.3,
+            minFacePresenceConfidence: 0.3,
+            minTrackingConfidence: 0.3
+        };
+        return await FaceLandmarker.createFromOptions(wasm, cfg);
+    }
 
     try {
-        fl = await FaceLandmarker.createFromOptions(wasm, cfg);
-        usedDelegate = "GPU";
-        setDiag("dModel", "ok", "Loaded with GPU delegate");
-    } catch (gpuErr) {
-        setDiag("dModel", "warn", "GPU failed: " + gpuErr.message.slice(0, 60) + "... trying CPU");
+        fl = await tryDelegate("CPU");
+        usedDelegate = "CPU";
+        setDiag("dModel", "ok", "Loaded with CPU delegate (reliable)");
+    } catch (cpuErr) {
+        setDiag("dModel", "warn", "CPU failed: " + cpuErr.message.slice(0, 60) + "... trying GPU");
         try {
-            cfg.baseOptions.delegate = "CPU";
-            fl = await FaceLandmarker.createFromOptions(wasm, cfg);
-            usedDelegate = "CPU";
-            setDiag("dModel", "ok", "Loaded with CPU delegate (GPU unavailable)");
-        } catch (cpuErr) {
-            setDiag("dModel", "fail", "Both GPU and CPU failed: " + cpuErr.message.slice(0, 80));
-            throw cpuErr;
+            fl = await tryDelegate("GPU");
+            usedDelegate = "GPU";
+            setDiag("dModel", "ok", "Loaded with GPU delegate (CPU unavailable)");
+        } catch (gpuErr) {
+            setDiag("dModel", "fail", "Both CPU and GPU failed: " + gpuErr.message.slice(0, 80));
+            throw gpuErr;
         }
     }
 
@@ -413,6 +419,7 @@
     let renderErrors = 0;
     let totalDetectCalls = 0;
     let maxFacesEverSeen = 0;
+    let firstFaceLogged = false;
 
     function fmtTime(ms) {
         const s = Math.floor(ms / 1000);
@@ -508,6 +515,14 @@
         nFaces = faces.length;
 
         if (nFaces > maxFacesEverSeen) maxFacesEverSeen = nFaces;
+
+        if (nFaces > 0 && !firstFaceLogged) {
+            firstFaceLogged = true;
+            console.log("[FACE-DETECTED] First detection! Result keys:", Object.keys(res));
+            console.log("[FACE-DETECTED] faceLandmarks type:", typeof res.faceLandmarks, "length:", res.faceLandmarks.length);
+            console.log("[FACE-DETECTED] Face 0 length:", faces[0].length, "Sample lm[0]:", JSON.stringify(faces[0][0]));
+            console.log("[FACE-DETECTED] Sample lm[1]:", JSON.stringify(faces[0][1]), "lm[10]:", JSON.stringify(faces[0][10]));
+        }
 
         if (nFaces > 0 || totalDetectCalls % 30 === 0 || totalDetectCalls <= 5) {
             if (nFaces > 0) {
