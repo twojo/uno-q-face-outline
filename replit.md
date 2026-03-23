@@ -73,6 +73,18 @@ Single-step identity-preserving transformation via **InstantID** (`fal-ai/instan
 - `guidance_scale`: 5.0 (lower = better blending with identity; raise for more prompt adherence)
 - `enhance_face_region`: True (keeps eyes/mouth sharp)
 
+### Rate Limiting
+
+Both `app.py` (per-IP) and `main.py` (per-SID) enforce a 5-second cooldown between transform requests. Returns 429 (HTTP) or an error event (WebSocket) on violation.
+
+### Face Detection Error Handling
+
+Both backends detect fal.ai "no face found" errors and return a user-friendly message: "No face detected in the photo. Make sure your face is clearly visible and try again."
+
+### Shim Compatibility
+
+The `arduino/app_bricks/web_ui.py` shim supports both decorator and direct-call patterns for `on_connect` and `on_message`, matching the real Bricks SDK API.
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces

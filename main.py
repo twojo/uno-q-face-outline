@@ -102,8 +102,22 @@ def on_connect(sid):
     ui.send_message("status", {"message": "Connected to AI Mirror Booth"})
 
 
+_rate_limit = {}
+RATE_LIMIT_SECONDS = 5
+
 @ui.on_message("transform")
 def on_transform(sid, data):
+    now = time.time()
+    last = _rate_limit.get(sid, 0)
+    if now - last < RATE_LIMIT_SECONDS:
+        ui.send_message("result", {"success": False, "error": "Please wait a few seconds between requests."})
+        return
+    _rate_limit[sid] = now
+
+    if len(_rate_limit) > 1000:
+        cutoff = now - 60
+        _rate_limit.clear()
+
     ui.send_message("status", {"message": "Extrapolating facial data..."})
 
     raw_image = data.get("image", "") if isinstance(data, dict) else ""
@@ -173,7 +187,12 @@ def on_transform(sid, data):
         })
 
     except Exception as e:
-        ui.send_message("result", {"success": False, "error": str(e)})
+        err_str = str(e).lower()
+        if "cannot find any face" in err_str or "no face" in err_str:
+            msg = "No face detected in the photo. Make sure your face is clearly visible and try again."
+        else:
+            msg = "Transformation failed. Please try again."
+        ui.send_message("result", {"success": False, "error": msg})
 
 
 # --- ENTRY POINT ---

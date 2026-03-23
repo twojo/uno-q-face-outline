@@ -261,7 +261,12 @@ def transform():
 
     except Exception as e:
         logger.exception("Transform failed: %s", e)
-        return jsonify({"success": False, "error": "Transformation failed. Please try again."}), 500
+        err_str = str(e).lower()
+        if "cannot find any face" in err_str or "no face" in err_str:
+            msg = "No face detected in the photo. Make sure your face is clearly visible and try again."
+        else:
+            msg = "Transformation failed. Please try again."
+        return jsonify({"success": False, "error": msg}), 500
 
 
 # ── Entry Point ──────────────────────────────────────────────────────────────

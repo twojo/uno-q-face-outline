@@ -75,18 +75,31 @@ class WebUI:
     def on_connect(self, callback):
         """Register a callback invoked whenever a browser connects.
 
+        Supports both direct call and decorator usage:
+            ui.on_connect(my_func)   # direct
+            @ui.on_connect           # decorator
         Signature: callback(sid: str) -> None
         """
         self._connect_cb = callback
+        return callback
 
-    def on_message(self, event: str, callback):
+    def on_message(self, event_or_callback, callback=None):
         """Register a callback for a named Socket.IO event from the frontend.
 
+        Supports both direct call and decorator usage:
+            ui.on_message("transform", my_func)  # direct
+            @ui.on_message("transform")           # decorator
         Signature: callback(sid: str, data: any) -> None
-
-        The handler runs in a background thread (threading async_mode) so
-        long-running work (e.g. AI inference) never blocks the event loop.
         """
+        if callback is not None:
+            self._register_message_handler(event_or_callback, callback)
+        else:
+            def decorator(fn):
+                self._register_message_handler(event_or_callback, fn)
+                return fn
+            return decorator
+
+    def _register_message_handler(self, event, callback):
         @self._sio.on(event)
         def _handler(data=None):
             sid = flask_request.sid
