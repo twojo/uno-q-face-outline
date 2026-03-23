@@ -1,0 +1,405 @@
+/*
+ * ═══════════════════════════════════════════════════════════════
+ *  Smart Mirror AI Booth — Stylesheet
+ *  File: static/style.css
+ *
+ *  To integrate as an Arduino Bricks Custom Widget:
+ *  1. Copy this file into your Bricks widget's assets folder.
+ *  2. Enqueue it via the widget's register_scripts() method or
+ *     link it in the widget template's <head>.
+ *  3. All selectors are scoped to .smart-mirror-app so they won't
+ *     conflict with other Bricks widgets on the same page.
+ * ═══════════════════════════════════════════════════════════════
+ */
+
+
+/* ── CSS custom properties (design tokens) ───────────────────── */
+/*
+ * Override any of these in your Bricks Global CSS to retheme the
+ * widget without touching this file:
+ *
+ *   .smart-mirror-app { --glow: #ff6b35; }
+ */
+:root {
+  --sm-bg:       #000000;      /* page / widget background         */
+  --sm-surface:  #0d0d0d;      /* card / overlay surface           */
+  --sm-border:   #1a1a2e;      /* subtle border colour             */
+  --sm-glow:     #00d4ff;      /* primary accent / neon glow       */
+  --sm-glow2:    #7c3aed;      /* secondary accent (gradient end)  */
+  --sm-text:     #e8f4fd;      /* body text                        */
+  --sm-muted:    #3a5068;      /* de-emphasised text / icons       */
+  --sm-danger:   #ff4545;      /* error states                     */
+  --sm-success:  #00e676;      /* live-camera dot                  */
+  --sm-radius:   16px;         /* corner radius used throughout    */
+}
+
+
+/* ── Reset ───────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--sm-bg);
+  color: var(--sm-text);
+  /* System font stack — no web font dependency for offline Uno Q use */
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  overflow: hidden;                     /* prevent scroll; full-screen mirror */
+  -webkit-tap-highlight-color: transparent; /* cleaner touch on Android       */
+}
+
+
+/* ── App shell ───────────────────────────────────────────────── */
+/*
+ * Bricks integration note:
+ * Wrap all widget markup in <div class="smart-mirror-app"> so these
+ * styles stay scoped and don't leak into the surrounding page.
+ */
+.smart-mirror-app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.1rem;
+  padding: 0.75rem 1rem;
+}
+
+
+/* ── Header ──────────────────────────────────────────────────── */
+.sm-header {
+  text-align: center;
+}
+
+.sm-header h1 {
+  font-size: clamp(0.95rem, 2.5vw, 1.3rem);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  /* Gradient text — gracefully degrades to solid colour in older browsers */
+  background: linear-gradient(90deg, var(--sm-glow) 0%, var(--sm-glow2) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.sm-header p {
+  font-size: 0.7rem;
+  color: var(--sm-muted);
+  letter-spacing: 0.06em;
+  margin-top: 0.2rem;
+}
+
+
+/* ── Mirror frame ────────────────────────────────────────────── */
+/*
+ * The frame is a 3:4 portrait rectangle — good for face captures.
+ * Adjust the aspect-ratio or width to suit your enclosure's cutout.
+ */
+.sm-mirror-frame {
+  position: relative;
+  width: min(360px, 88vw);     /* max 360 px, shrinks on small screens */
+  aspect-ratio: 3 / 4;
+  border-radius: var(--sm-radius);
+  overflow: hidden;
+  background: #000;
+  flex-shrink: 0;
+
+  /* Double-ring glow border effect */
+  box-shadow:
+    0 0 0 1px #ffffff08,
+    0 0 0 2px var(--sm-glow)30,
+    0 0 40px var(--sm-glow)14,
+    0 0 80px var(--sm-glow)08;
+}
+
+/* Gradient corner accent — pure CSS, no images required */
+.sm-mirror-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--sm-radius);
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(#000, #000) padding-box,
+    linear-gradient(
+      135deg,
+      var(--sm-glow)90 0%,
+      transparent 35%,
+      transparent 65%,
+      var(--sm-glow2)90 100%
+    ) border-box;
+  pointer-events: none;
+  z-index: 30;               /* sits above video and overlays */
+}
+
+
+/* ── Video / Result image ────────────────────────────────────── */
+#sm-video,
+#sm-result-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/*
+ * Mirror flip: scaleX(-1) makes the live feed feel like a true
+ * mirror. The canvas capture un-flips before sending to the backend
+ * so the AI model always receives a naturally-oriented image.
+ */
+#sm-video {
+  transform: scaleX(-1);
+}
+
+/* Hidden until an AI result arrives */
+#sm-result-img {
+  display: none;
+}
+
+
+/* ── Generic overlay ─────────────────────────────────────────── */
+/*
+ * Used for both the loading state and error state.
+ * Toggle visibility with the .hidden utility class (set in JS).
+ */
+.sm-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  z-index: 20;
+  border-radius: var(--sm-radius);
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.sm-overlay.hidden {
+  display: none;
+}
+
+
+/* ── Loading overlay — spinner + animated label ──────────────── */
+.sm-spinner {
+  width: 52px;
+  height: 52px;
+  border: 3px solid #ffffff14;
+  border-top-color: var(--sm-glow);
+  border-radius: 50%;
+  animation: sm-spin 0.75s linear infinite;
+}
+
+@keyframes sm-spin {
+  to { transform: rotate(360deg); }
+}
+
+.sm-loading-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--sm-glow);
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+/* Trailing animated ellipsis: "", ".", "..", "..." */
+.sm-dots::after {
+  content: "";
+  animation: sm-dots 1.4s steps(4, end) infinite;
+}
+
+@keyframes sm-dots {
+  0%  { content: ""; }
+  25% { content: "."; }
+  50% { content: ".."; }
+  75% { content: "..."; }
+}
+
+.sm-loading-sub {
+  font-size: 0.68rem;
+  color: var(--sm-muted);
+  text-align: center;
+  padding: 0 2rem;
+  line-height: 1.6;
+}
+
+
+/* ── Error overlay ───────────────────────────────────────────── */
+.sm-error-icon {
+  font-size: 2.4rem;
+}
+
+.sm-error-msg {
+  font-size: 0.8rem;
+  color: var(--sm-danger);
+  text-align: center;
+  padding: 0 1.5rem;
+  line-height: 1.65;
+  white-space: pre-line;   /* honour \n in JS error strings */
+}
+
+/* "Try Again" button inside the error overlay */
+.sm-btn-try-again {
+  border: 1.5px solid var(--sm-danger);
+  background: transparent;
+  color: var(--sm-danger);
+  border-radius: 50px;
+  padding: 0.6rem 1.6rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: background 0.2s, color 0.2s;
+}
+
+.sm-btn-try-again:hover  { background: var(--sm-danger); color: #000; }
+.sm-btn-try-again:active { transform: scale(0.96); }
+
+
+/* ── Prompt badge ────────────────────────────────────────────── */
+/*
+ * Displayed at the bottom of the mirror frame once a result arrives.
+ * Shows the randomly-chosen prompt so the user knows what the AI did.
+ */
+.sm-prompt-badge {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.92));
+  padding: 2rem 1rem 0.9rem;
+  font-size: 0.7rem;
+  color: #9ec4d8;
+  line-height: 1.6;
+  z-index: 25;
+  display: none;           /* shown by JS after result loads */
+}
+
+.sm-prompt-badge strong {
+  color: var(--sm-glow);
+}
+
+
+/* ── Controls ────────────────────────────────────────────────── */
+.sm-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+
+/* Large circular shutter button — touch-friendly minimum 44 px */
+#sm-btn-capture {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 3px solid var(--sm-glow);
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  transition: box-shadow 0.2s, transform 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Filled inner circle */
+#sm-btn-capture::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: var(--sm-glow);
+  transition: background 0.2s, opacity 0.2s;
+}
+
+#sm-btn-capture:hover:not(:disabled) {
+  box-shadow: 0 0 0 6px var(--sm-glow)28, 0 0 28px var(--sm-glow)44;
+}
+
+#sm-btn-capture:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+#sm-btn-capture:disabled {
+  border-color: var(--sm-muted);
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+#sm-btn-capture:disabled::before {
+  background: var(--sm-muted);
+}
+
+/* Text label beneath the shutter button */
+.sm-capture-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sm-muted);
+}
+
+/* Secondary action button (New Photo) */
+#sm-btn-reset {
+  border: 1px solid #2a3a4a;
+  background: transparent;
+  color: var(--sm-text);
+  border-radius: 50px;
+  padding: 0.55rem 1.5rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: none;           /* shown by JS after result loads */
+  letter-spacing: 0.04em;
+  transition: background 0.2s;
+}
+
+#sm-btn-reset:hover  { background: #1a2a3a; }
+#sm-btn-reset:active { transform: scale(0.96); }
+
+
+/* ── Status bar ──────────────────────────────────────────────── */
+.sm-status-bar {
+  font-size: 0.68rem;
+  color: var(--sm-muted);
+  letter-spacing: 0.06em;
+  text-align: center;
+  min-height: 0.9rem;
+}
+
+/* Pulsing live indicator dot */
+.sm-status-bar .sm-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sm-success);
+  margin-right: 5px;
+  vertical-align: middle;
+  animation: sm-pulse 2s ease-in-out infinite;
+}
+
+@keyframes sm-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.25; }
+}
+
+
+/* ── Utility ─────────────────────────────────────────────────── */
+
+/* Used by JS to hide elements without animating */
+.hidden { display: none !important; }
+
+/* Off-screen canvas — capture surface, never rendered */
+#sm-canvas { display: none; }

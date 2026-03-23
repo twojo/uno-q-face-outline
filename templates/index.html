@@ -1,548 +1,174 @@
 <!DOCTYPE html>
 <html lang="en">
+<!--
+  Smart Mirror AI Booth — Main Template
+  File: templates/index.html   (rendered by Flask's render_template())
+
+  Styles → static/style.css
+  Logic  → static/script.js
+
+  Arduino Bricks integration:
+  ───────────────────────────
+  To turn this into a Bricks Custom Widget, copy the contents of
+  <body> into your widget's render() output. Enqueue style.css and
+  script.js via register_scripts(). All IDs are prefixed "sm-" to
+  prevent conflicts with other widgets on the page.
+-->
 <head>
   <meta charset="UTF-8" />
+  <!--
+    viewport: width=device-width keeps it crisp on Android.
+    user-scalable=no prevents accidental pinch-zoom during interaction.
+  -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Smart Mirror AI Booth</title>
-  <style>
-    /* ── Reset ───────────────────────────────────────── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    :root {
-      --bg:       #000;
-      --surface:  #0d0d0d;
-      --border:   #1a1a2e;
-      --glow:     #00d4ff;
-      --glow2:    #7c3aed;
-      --text:     #e8f4fd;
-      --muted:    #3a5068;
-      --danger:   #ff4545;
-      --success:  #00e676;
-      --r:        16px;
-    }
-
-    html, body {
-      height: 100%;
-      background: var(--bg);
-      color: var(--text);
-      font-family: "Segoe UI", system-ui, sans-serif;
-      overflow: hidden;
-      -webkit-tap-highlight-color: transparent;
-    }
-
-    /* ── App shell ───────────────────────────────────── */
-    .app {
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 1.1rem;
-      padding: 0.75rem 1rem;
-    }
-
-    /* ── Header ──────────────────────────────────────── */
-    .header { text-align: center; }
-
-    .header h1 {
-      font-size: clamp(0.95rem, 2.5vw, 1.3rem);
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      background: linear-gradient(90deg, var(--glow) 0%, var(--glow2) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    .header p {
-      font-size: 0.7rem;
-      color: var(--muted);
-      letter-spacing: 0.06em;
-      margin-top: 0.2rem;
-    }
-
-    /* ── Mirror frame ────────────────────────────────── */
-    .mirror-frame {
-      position: relative;
-      width: min(360px, 88vw);
-      aspect-ratio: 3 / 4;
-      border-radius: var(--r);
-      overflow: hidden;
-      background: #000;
-      flex-shrink: 0;
-      /* Elegant double-ring glow border */
-      box-shadow:
-        0 0 0 1px #ffffff08,
-        0 0 0 2px var(--glow)30,
-        0 0 40px var(--glow)14,
-        0 0 80px var(--glow)08;
-    }
-
-    /* Corner accent overlay — pure CSS, no images */
-    .mirror-frame::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: var(--r);
-      border: 1.5px solid transparent;
-      background:
-        linear-gradient(#000, #000) padding-box,
-        linear-gradient(135deg,
-          var(--glow)90 0%,
-          transparent 35%,
-          transparent 65%,
-          var(--glow2)90 100%
-        ) border-box;
-      pointer-events: none;
-      z-index: 30;
-    }
-
-    /* ── Video / result image ────────────────────────── */
-    #video, #result-img {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-
-    /* Mirror effect: horizontal flip so it feels like a real mirror */
-    #video { transform: scaleX(-1); }
-
-    #result-img { display: none; }
-
-    /* ── Generic overlay ─────────────────────────────── */
-    .overlay {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 1rem;
-      z-index: 20;
-      border-radius: var(--r);
-      background: rgba(0, 0, 0, 0.82);
-      backdrop-filter: blur(6px);
-      -webkit-backdrop-filter: blur(6px);
-    }
-
-    .overlay.hidden { display: none; }
-
-    /* ── Loading overlay ─────────────────────────────── */
-    .spinner {
-      width: 52px; height: 52px;
-      border: 3px solid #ffffff14;
-      border-top-color: var(--glow);
-      border-radius: 50%;
-      animation: spin 0.75s linear infinite;
-    }
-
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    .loading-label {
-      font-size: 0.82rem;
-      font-weight: 600;
-      color: var(--glow);
-      letter-spacing: 0.08em;
-      text-align: center;
-    }
-
-    /* Animated ellipsis dots */
-    .dots::after {
-      content: "";
-      animation: dots 1.4s steps(4, end) infinite;
-    }
-    @keyframes dots {
-      0%   { content: ""; }
-      25%  { content: "."; }
-      50%  { content: ".."; }
-      75%  { content: "..."; }
-    }
-
-    .loading-sub {
-      font-size: 0.68rem;
-      color: var(--muted);
-      text-align: center;
-      padding: 0 2rem;
-      line-height: 1.6;
-    }
-
-    /* ── Error overlay ───────────────────────────────── */
-    .error-icon { font-size: 2.4rem; }
-
-    .error-msg {
-      font-size: 0.8rem;
-      color: var(--danger);
-      text-align: center;
-      padding: 0 1.5rem;
-      line-height: 1.65;
-    }
-
-    .btn-try-again {
-      border: 1.5px solid var(--danger);
-      background: transparent;
-      color: var(--danger);
-      border-radius: 50px;
-      padding: 0.6rem 1.6rem;
-      font-size: 0.82rem;
-      font-weight: 700;
-      cursor: pointer;
-      letter-spacing: 0.05em;
-      transition: background 0.2s, color 0.2s;
-    }
-    .btn-try-again:hover { background: var(--danger); color: #000; }
-    .btn-try-again:active { transform: scale(0.96); }
-
-    /* ── Prompt badge ────────────────────────────────── */
-    .prompt-badge {
-      position: absolute;
-      bottom: 0; left: 0; right: 0;
-      background: linear-gradient(transparent, rgba(0,0,0,0.92));
-      padding: 2rem 1rem 0.9rem;
-      font-size: 0.7rem;
-      color: #9ec4d8;
-      line-height: 1.6;
-      z-index: 25;
-      display: none;
-    }
-
-    .prompt-badge strong { color: var(--glow); }
-
-    /* ── Shutter / Capture button ────────────────────── */
-    .controls {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.7rem;
-    }
-
-    /* Large circular shutter button */
-    #btn-capture {
-      width: 72px;
-      height: 72px;
-      border-radius: 50%;
-      border: 3px solid var(--glow);
-      background: transparent;
-      cursor: pointer;
-      position: relative;
-      transition: box-shadow 0.2s, transform 0.15s;
-      flex-shrink: 0;
-      -webkit-tap-highlight-color: transparent;
-    }
-
-    /* Inner filled circle */
-    #btn-capture::before {
-      content: "";
-      position: absolute;
-      inset: 6px;
-      border-radius: 50%;
-      background: var(--glow);
-      transition: background 0.2s, opacity 0.2s;
-    }
-
-    #btn-capture:hover:not(:disabled) {
-      box-shadow: 0 0 0 6px var(--glow)28, 0 0 28px var(--glow)44;
-    }
-
-    #btn-capture:active:not(:disabled) { transform: scale(0.92); }
-
-    #btn-capture:disabled {
-      border-color: var(--muted);
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
-
-    #btn-capture:disabled::before { background: var(--muted); }
-
-    /* Label below shutter */
-    .capture-label {
-      font-size: 0.7rem;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
-
-    /* Reset / secondary button */
-    #btn-reset {
-      border: 1px solid #2a3a4a;
-      background: transparent;
-      color: var(--text);
-      border-radius: 50px;
-      padding: 0.55rem 1.5rem;
-      font-size: 0.82rem;
-      font-weight: 600;
-      cursor: pointer;
-      display: none;
-      letter-spacing: 0.04em;
-      transition: background 0.2s;
-    }
-    #btn-reset:hover { background: #1a2a3a; }
-    #btn-reset:active { transform: scale(0.96); }
-
-    /* ── Status bar ──────────────────────────────────── */
-    .status-bar {
-      font-size: 0.68rem;
-      color: var(--muted);
-      letter-spacing: 0.06em;
-      text-align: center;
-      min-height: 0.9rem;
-    }
-
-    .status-bar .dot {
-      display: inline-block;
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: var(--success);
-      margin-right: 5px;
-      vertical-align: middle;
-      animation: pulse 2s ease-in-out infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0.25; }
-    }
-
-    /* ── Hidden canvas ───────────────────────────────── */
-    canvas { display: none; }
-  </style>
+  <!--
+    Flask serves everything in ./static/ at the /static/ URL path.
+    url_for() generates the correct path whether the app is mounted
+    at / or a sub-path — important if you proxy it on the Uno Q.
+  -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
 <body>
-<div class="app">
 
-  <div class="header">
+<!--
+  .smart-mirror-app is the Bricks widget root scope.
+  All CSS selectors and JS queries are relative to this element.
+-->
+<div class="smart-mirror-app">
+
+  <!-- ── Header ───────────────────────────────────────────────── -->
+  <div class="sm-header">
     <h1>⬡ Smart Mirror</h1>
     <p>Arduino Uno Q · AI Photo Booth</p>
   </div>
 
-  <!-- ── Mirror frame ── -->
-  <div class="mirror-frame">
 
-    <!-- Live camera feed — mirrored via CSS scaleX(-1) -->
-    <video id="video" autoplay playsinline muted></video>
+  <!-- ── Mirror frame ─────────────────────────────────────────── -->
+  <!--
+    The frame contains:
+      • Live camera feed  (#sm-video)
+      • AI result image   (#sm-result-img)
+      • Loading overlay   (#sm-overlay-loading)
+      • Error overlay     (#sm-overlay-error)
+      • Prompt badge      (#sm-prompt-badge)
+  -->
+  <div class="sm-mirror-frame">
 
-    <!-- AI-generated result image -->
-    <img id="result-img" alt="AI-transformed photo" />
+    <!--
+      Live camera feed.
+      - autoplay: starts as soon as srcObject is assigned in JS.
+      - playsinline: required on iOS/Android to prevent fullscreen.
+      - muted: required by browsers to allow autoplay.
+      - The CSS mirror flip (scaleX -1) is in style.css.
+    -->
+    <video id="sm-video" autoplay playsinline muted></video>
 
-    <!-- Loading overlay -->
-    <div class="overlay hidden" id="overlay-loading">
-      <div class="spinner"></div>
-      <div class="loading-label">Processing AI<span class="dots"></span></div>
-      <div class="loading-sub" id="loading-sub">Sending frame to Hugging Face…</div>
+    <!--
+      AI result image — hidden until a transform succeeds.
+      Shown by script.js once the data-URL is loaded.
+    -->
+    <img id="sm-result-img" alt="AI-transformed photo" />
+
+
+    <!-- ── Loading overlay ──────────────────────────────────── -->
+    <!--
+      Shown while waiting for the /transform API response.
+      Hidden by default via .hidden in style.css.
+    -->
+    <div class="sm-overlay hidden" id="sm-overlay-loading">
+      <div class="sm-spinner"></div>
+
+      <!-- "Processing AI..." with animated trailing dots -->
+      <div class="sm-loading-label">
+        Processing AI<span class="sm-dots"></span>
+      </div>
+
+      <!-- Sub-text updated by JS to reflect the current stage -->
+      <div class="sm-loading-sub" id="sm-loading-sub">
+        Sending frame to Hugging Face…
+      </div>
     </div>
 
-    <!-- Error overlay (API failure / camera denied) -->
-    <div class="overlay hidden" id="overlay-error">
-      <div class="error-icon">⚠️</div>
-      <div class="error-msg" id="error-msg">Something went wrong.</div>
-      <button class="btn-try-again" id="btn-try-again">Try Again</button>
+
+    <!-- ── Error overlay ─────────────────────────────────────── -->
+    <!--
+      Shown on camera permission denial, API errors, or timeouts.
+      The error message and Try Again behaviour are set in script.js.
+    -->
+    <div class="sm-overlay hidden" id="sm-overlay-error">
+      <div class="sm-error-icon">⚠️</div>
+      <div class="sm-error-msg" id="sm-error-msg">Something went wrong.</div>
+      <!--
+        onclick is assigned dynamically in script.js so the button can
+        either reload the page (camera errors) or reset the UI (API errors).
+      -->
+      <button class="sm-btn-try-again" id="sm-btn-try-again">Try Again</button>
     </div>
 
-    <!-- Prompt badge shown on result -->
-    <div class="prompt-badge" id="prompt-badge">
-      <strong>Prompt:</strong> <span id="prompt-text"></span>
+
+    <!-- ── Prompt badge ──────────────────────────────────────── -->
+    <!--
+      Appears at the bottom of the frame after a successful transform.
+      Shows the randomly-chosen prompt so the user knows what the AI did.
+      Hidden by default; shown and populated by script.js.
+    -->
+    <div class="sm-prompt-badge" id="sm-prompt-badge">
+      <strong>Prompt:</strong> <span id="sm-prompt-text"></span>
     </div>
 
   </div>
+  <!-- /mirror-frame -->
 
-  <!-- ── Controls ── -->
-  <div class="controls">
-    <button id="btn-capture" disabled aria-label="Capture photo"></button>
-    <span class="capture-label" id="capture-label">Capture</span>
-    <button id="btn-reset">↺ New Photo</button>
+
+  <!-- ── Controls ─────────────────────────────────────────────── -->
+  <div class="sm-controls">
+
+    <!--
+      Large circular shutter button.
+      - Disabled on load; enabled once camera is ready.
+      - Styled as a camera shutter ring in style.css.
+      - aria-label provides accessibility context (no visible text).
+    -->
+    <button id="sm-btn-capture" disabled aria-label="Capture photo"></button>
+
+    <!-- Text label below the shutter button, updated by JS -->
+    <span class="sm-capture-label" id="sm-capture-label">Capture</span>
+
+    <!--
+      Secondary action — hidden until a result is shown.
+      Resets the UI back to the live mirror view.
+    -->
+    <button id="sm-btn-reset">↺ New Photo</button>
+
   </div>
 
-  <div class="status-bar" id="status-bar">Starting camera…</div>
+
+  <!-- ── Status bar ───────────────────────────────────────────── -->
+  <!--
+    One-line status shown below the controls.
+    Updated by setStatus() in script.js.
+    A pulsing dot is prepended when the camera is live.
+  -->
+  <div class="sm-status-bar" id="sm-status-bar">Starting camera…</div>
 
 </div>
+<!-- /smart-mirror-app -->
 
-<!-- Hidden canvas for frame extraction (not rendered) -->
-<canvas id="canvas"></canvas>
 
-<script>
-  "use strict";
+<!--
+  Hidden canvas — used by script.js to grab and un-flip video frames.
+  Never rendered; dimensions are set programmatically.
+-->
+<canvas id="sm-canvas"></canvas>
 
-  /* ── Constants ─────────────────────────────────────────── */
-  const FETCH_TIMEOUT_MS = 90_000; // 90 s — HF inference can be slow
+<!--
+  Load script.js last so all DOM elements are available.
+  In Bricks, enqueue this via wp_enqueue_script() with
+  $in_footer = true and the page as a dependency.
+-->
+<script src="{{ url_for('static', filename='script.js') }}"></script>
 
-  /* ── Element refs ─────────────────────────────────────── */
-  const video        = document.getElementById("video");
-  const resultImg    = document.getElementById("result-img");
-  const canvas       = document.getElementById("canvas");
-  const btnCapture   = document.getElementById("btn-capture");
-  const captureLabel = document.getElementById("capture-label");
-  const btnReset     = document.getElementById("btn-reset");
-  const btnTryAgain  = document.getElementById("btn-try-again");
-  const overlayLoad  = document.getElementById("overlay-loading");
-  const overlayErr   = document.getElementById("overlay-error");
-  const loadingSub   = document.getElementById("loading-sub");
-  const promptBadge  = document.getElementById("prompt-badge");
-  const promptText   = document.getElementById("prompt-text");
-  const statusBar    = document.getElementById("status-bar");
-  const errorMsg     = document.getElementById("error-msg");
-
-  /* ── Helpers ──────────────────────────────────────────── */
-  function setStatus(msg, live = true) {
-    statusBar.innerHTML = live
-      ? `<span class="dot"></span>${msg}`
-      : `<span style="color:#4a6478">${msg}</span>`;
-  }
-
-  function showOverlay(el) {
-    [overlayLoad, overlayErr].forEach(o => o.classList.add("hidden"));
-    if (el) el.classList.remove("hidden");
-  }
-
-  function resetToMirror() {
-    resultImg.style.display = "none";
-    resultImg.src           = "";
-    promptBadge.style.display = "none";
-    video.style.display     = "block";
-    showOverlay(null);
-    btnReset.style.display  = "none";
-    btnCapture.disabled     = false;
-    captureLabel.textContent = "Capture";
-    setStatus("Camera ready — tap Capture to transform");
-  }
-
-  function showError(msg, isCameraError = false) {
-    errorMsg.textContent = msg;
-    // For camera errors, "Try Again" reloads the page to re-request permission
-    btnTryAgain.onclick = isCameraError
-      ? () => location.reload()
-      : resetToMirror;
-    showOverlay(overlayErr);
-    btnCapture.disabled     = true;
-    captureLabel.textContent = "Capture";
-  }
-
-  /* ── Camera initialisation ────────────────────────────── */
-  async function startCamera() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      showError(
-        "Your browser does not support camera access.\n" +
-        "Use Chrome or Firefox over HTTPS.",
-        true
-      );
-      setStatus("Camera API unavailable", false);
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 853 } },
-        audio: false,
-      });
-
-      video.srcObject = stream;
-      video.onloadedmetadata = () => {
-        video.play();
-        btnCapture.disabled = false;
-        setStatus("Camera ready — tap Capture to transform");
-      };
-
-    } catch (err) {
-      showError(
-        `Camera denied: ${err.message}\n` +
-        "Allow camera access in your browser settings, then tap Try Again.",
-        true
-      );
-      setStatus("Camera unavailable", false);
-    }
-  }
-
-  /* ── Capture & transform ──────────────────────────────── */
-  btnCapture.addEventListener("click", async () => {
-    // ── 1. Grab frame from video ──────────────────────────
-    const w = video.videoWidth  || 512;
-    const h = video.videoHeight || 682;
-
-    canvas.width  = w;
-    canvas.height = h;
-
-    const ctx = canvas.getContext("2d");
-    // Un-flip the mirror so the AI receives a natural (non-mirrored) image
-    ctx.save();
-    ctx.translate(w, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(video, 0, 0, w, h);
-    ctx.restore();
-
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-
-    // ── 2. Enter loading state ────────────────────────────
-    btnCapture.disabled      = true;
-    captureLabel.textContent  = "Processing…";
-    btnReset.style.display   = "none";
-    promptBadge.style.display = "none";
-    showOverlay(overlayLoad);
-    loadingSub.textContent   = "Sending frame to Hugging Face…";
-    setStatus("Waiting for AI model…", false);
-
-    // ── 3. POST to /transform with timeout ────────────────
-    const controller = new AbortController();
-    const timeoutId  = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-    try {
-      const res = await fetch("/transform", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ image: dataUrl }),
-        signal:  controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      // Non-2xx HTTP → surface the status as an error
-      if (!res.ok) {
-        const text = await res.text().catch(() => `HTTP ${res.status}`);
-        throw new Error(`Server error ${res.status}: ${text}`);
-      }
-
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || "Unknown server error");
-
-      // ── 4. Display result ─────────────────────────────
-      resultImg.onload = () => {
-        video.style.display    = "none";
-        resultImg.style.display = "block";
-        promptText.textContent  = data.prompt;
-        promptBadge.style.display = "block";
-        showOverlay(null);
-        btnReset.style.display  = "inline-block";
-        captureLabel.textContent = "Capture";
-        setStatus("Transformation complete!", false);
-      };
-      resultImg.src = data.image;
-
-    } catch (err) {
-      clearTimeout(timeoutId);
-
-      let msg;
-      if (err.name === "AbortError") {
-        msg = `Request timed out after ${FETCH_TIMEOUT_MS / 1000}s.\n` +
-              "The AI model may be busy — please try again.";
-      } else if (!navigator.onLine) {
-        msg = "No internet connection. Check your network and try again.";
-      } else {
-        msg = err.message || "An unexpected error occurred.";
-      }
-
-      showError(msg, false);
-      setStatus("Error — see details above", false);
-    }
-  });
-
-  /* ── Reset / Try Again ────────────────────────────────── */
-  btnReset.addEventListener("click", resetToMirror);
-
-  // btnTryAgain.onclick is set dynamically in showError()
-
-  /* ── Boot ─────────────────────────────────────────────── */
-  startCamera();
-</script>
 </body>
 </html>
