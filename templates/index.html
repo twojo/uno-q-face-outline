@@ -88,10 +88,8 @@
             z-index: 4;
             font-family: 'JetBrains Mono', monospace;
             font-size: 9px;
-            background: var(--panel);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            padding: 6px 10px;
+            background: rgba(0,0,0,0.35);
+            padding: 4px 6px;
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.3s;
@@ -99,10 +97,10 @@
 
         .hud.on { opacity: 1; }
 
-        .hud-tl { top: 0; left: 0; border-radius: 0 0 8px 0; }
-        .hud-tr { top: 0; right: 0; border-radius: 0 0 0 8px; text-align: right; }
-        .hud-bl { bottom: 0; left: 0; border-radius: 0 8px 0 0; }
-        .hud-br { bottom: 0; right: 0; border-radius: 8px 0 0 0; text-align: right; }
+        .hud-tl { top: 0; left: 0; border-radius: 0 0 6px 0; }
+        .hud-tr { top: 0; right: 0; border-radius: 0 0 0 6px; text-align: right; }
+        .hud-bl { bottom: 0; left: 0; border-radius: 0 6px 0 0; }
+        .hud-br { bottom: 0; right: 0; border-radius: 6px 0 0 0; text-align: right; }
 
         .hud-row {
             display: flex;
@@ -388,10 +386,10 @@
     setDiag("dCanvas", "ok", cvs.width + "x" + cvs.height + " — drawing test passed");
 
     const FACE_COLORS = [
-        { mesh: "rgba(90,120,255,0.14)", edge: "rgba(90,120,255,0.8)",  feat: "rgba(90,120,255,0.9)", iris: "rgba(0,200,255,0.95)",  dot: "rgba(90,120,255,0.5)",  tag: "#7799ff" },
-        { mesh: "rgba(255,180,60,0.14)", edge: "rgba(255,180,60,0.8)", feat: "rgba(255,180,60,0.9)", iris: "rgba(255,210,80,0.95)",  dot: "rgba(255,180,60,0.5)", tag: "#ffbb44" },
-        { mesh: "rgba(80,230,150,0.14)", edge: "rgba(80,230,150,0.8)", feat: "rgba(80,230,150,0.9)", iris: "rgba(120,255,190,0.95)", dot: "rgba(80,230,150,0.5)", tag: "#66ee99" },
-        { mesh: "rgba(230,120,230,0.14)", edge: "rgba(230,120,230,0.8)", feat: "rgba(230,120,230,0.9)", iris: "rgba(255,150,255,0.95)", dot: "rgba(230,120,230,0.5)", tag: "#ee88ee" },
+        { mesh: "rgba(90,120,255,0.25)", edge: "rgba(90,160,255,0.95)",  feat: "rgba(100,180,255,1)", iris: "rgba(0,220,255,1)",  dot: "rgba(90,160,255,0.7)",  tag: "#7799ff" },
+        { mesh: "rgba(255,180,60,0.25)", edge: "rgba(255,190,70,0.95)", feat: "rgba(255,200,80,1)", iris: "rgba(255,220,90,1)",  dot: "rgba(255,190,70,0.7)", tag: "#ffbb44" },
+        { mesh: "rgba(80,230,150,0.25)", edge: "rgba(90,240,160,0.95)", feat: "rgba(100,250,180,1)", iris: "rgba(120,255,200,1)", dot: "rgba(90,240,160,0.7)", tag: "#66ee99" },
+        { mesh: "rgba(230,120,230,0.25)", edge: "rgba(240,140,240,0.95)", feat: "rgba(250,160,250,1)", iris: "rgba(255,170,255,1)", dot: "rgba(240,140,240,0.7)", tag: "#ee88ee" },
     ];
 
     const PRESETS = {
@@ -563,22 +561,22 @@
                 }
 
                 if (L.mesh && FaceLandmarker.FACE_LANDMARKS_TESSELATION)
-                    drawConns(FaceLandmarker.FACE_LANDMARKS_TESSELATION, clr.mesh, 0.5);
+                    drawConns(FaceLandmarker.FACE_LANDMARKS_TESSELATION, clr.mesh, 1.2);
                 if (L.outline && FaceLandmarker.FACE_LANDMARKS_FACE_OVAL)
-                    drawConns(FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, clr.edge, 2.5);
+                    drawConns(FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, clr.edge, 4);
                 if (L.eyes) {
-                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, clr.feat, 1.5);
-                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, clr.feat, 1.5);
+                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, clr.feat, 3);
+                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, clr.feat, 3);
                 }
                 if (L.brows) {
-                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, clr.feat, 1.5);
-                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW, clr.feat, 1.5);
+                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, clr.feat, 3);
+                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW, clr.feat, 3);
                 }
                 if (L.lips && FaceLandmarker.FACE_LANDMARKS_LIPS)
-                    drawConns(FaceLandmarker.FACE_LANDMARKS_LIPS, clr.feat, 1.5);
+                    drawConns(FaceLandmarker.FACE_LANDMARKS_LIPS, clr.feat, 3);
                 if (L.iris) {
-                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, clr.iris, 2);
-                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS, clr.iris, 2);
+                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, clr.iris, 3.5);
+                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS, clr.iris, 3.5);
                 }
 
                 if (L.dots) {
@@ -586,7 +584,7 @@
                     for (let j = 0; j < lm.length; j++) {
                         if (!lm[j]) continue;
                         ctx.beginPath();
-                        ctx.arc(lm[j].x * vw, lm[j].y * vh, 1.2, 0, 6.283);
+                        ctx.arc(lm[j].x * vw, lm[j].y * vh, 2.5, 0, 6.283);
                         ctx.fill();
                     }
                 }
@@ -594,20 +592,20 @@
                 const t = tracked[i];
                 if (t && lm[10]) {
                     const tagX = t.x * vw;
-                    const tagY = (lm[10].y * vh) - 14;
+                    const tagY = (lm[10].y * vh) - 20;
                     const dur = fmtTime(now - t.since);
                     const label = "Face " + t.id + "  \u00B7  " + dur;
                     ctx.save();
-                    ctx.font = "600 12px 'Inter', sans-serif";
+                    ctx.font = "600 15px 'Inter', sans-serif";
                     const tw = ctx.measureText(label).width;
-                    ctx.fillStyle = "rgba(0,0,0,0.6)";
+                    ctx.fillStyle = "rgba(0,0,0,0.65)";
                     ctx.beginPath();
-                    ctx.roundRect(tagX - tw / 2 - 7, tagY - 11, tw + 14, 20, 5);
+                    ctx.roundRect(tagX - tw / 2 - 9, tagY - 13, tw + 18, 26, 6);
                     ctx.fill();
                     ctx.fillStyle = clr.tag;
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
-                    ctx.fillText(label, tagX, tagY - 1);
+                    ctx.fillText(label, tagX, tagY);
                     ctx.restore();
                 }
             }
