@@ -3,23 +3,26 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <title>Qualcomm QRB2210 — Face Tracker</title>
+    <title>Arduino Uno Q — Face Tracker</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --dark: #0a0d14;
-            --border: #1a1f2e;
-            --text: #d8dbe4;
-            --muted: #555d6e;
-            --panel: rgba(10,13,20,0.82);
+            --bg: #111827;
+            --surface: #1f2937;
+            --border: #374151;
+            --text: #f9fafb;
+            --text-secondary: #d1d5db;
+            --muted: #9ca3af;
+            --panel: rgba(17,24,39,0.88);
             --blue: #3253dc;
+            --teal: #00979d;
         }
 
         body {
-            background: var(--dark);
+            background: var(--bg);
             color: var(--text);
             font-family: 'Inter', sans-serif;
             min-height: 100vh;
@@ -32,13 +35,32 @@
         .header {
             display: flex;
             align-items: center;
-            gap: 14px;
+            gap: 12px;
             margin-bottom: 12px;
         }
 
-        .header img { height: 24px; opacity: 0.9; }
-        .header-div { width: 1px; height: 24px; background: var(--border); }
-        .header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+        .header img { height: 22px; opacity: 0.9; }
+
+        .header-div { width: 1px; height: 22px; background: var(--border); }
+
+        .header-title {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header-title h1 {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+            letter-spacing: -0.01em;
+            line-height: 1.2;
+        }
+
+        .header-title .sub {
+            font-size: 10px;
+            color: var(--muted);
+            font-weight: 400;
+        }
 
         .viewport {
             position: relative;
@@ -93,13 +115,23 @@
             line-height: 1.55;
         }
 
-        .hud-k { color: #444c5c; text-transform: uppercase; letter-spacing: 0.06em; font-size: 8px; font-weight: 500; }
-        .hud-v { color: #7a8599; font-weight: 500; }
+        .hud-k {
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-size: 8px;
+            font-weight: 500;
+        }
+
+        .hud-v {
+            color: #f3f4f6;
+            font-weight: 500;
+        }
 
         .face-list {
             margin-top: 3px;
             padding-top: 3px;
-            border-top: 1px solid rgba(255,255,255,0.04);
+            border-top: 1px solid rgba(255,255,255,0.08);
         }
 
         .face-entry {
@@ -110,23 +142,28 @@
         }
 
         .face-id { font-size: 8px; font-weight: 500; }
-        .face-time { color: #7a8599; font-size: 9px; font-weight: 500; }
+        .face-time { color: #d1d5db; font-size: 9px; font-weight: 500; }
 
         .controls {
             margin-top: 10px;
             display: flex;
             align-items: center;
             gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
         }
 
-        .controls label { font-size: 11px; color: var(--muted); }
+        .controls label {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
 
         .controls select {
             appearance: none;
             padding: 5px 28px 5px 10px;
             border: 1px solid var(--border);
             border-radius: 6px;
-            background: #12161f url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23555'/%3E%3C/svg%3E") no-repeat right 8px center;
+            background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%239ca3af'/%3E%3C/svg%3E") no-repeat right 8px center;
             color: var(--text);
             font-family: inherit;
             font-size: 11px;
@@ -136,15 +173,31 @@
 
         .controls select:focus { border-color: var(--blue); }
 
-        #status { font-size: 11px; color: var(--muted); }
-        #error { font-size: 11px; color: #ef4444; display: none; }
+        #status {
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        #error {
+            font-size: 11px;
+            color: #f87171;
+            display: none;
+        }
+
+        @media (max-width: 600px) {
+            .viewport { border-radius: 8px; }
+            .header-title h1 { font-size: 13px; }
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <img src="/static/qualcomm-logo.png" alt="Qualcomm" />
         <div class="header-div"></div>
-        <h1>QRB2210 Face Tracker</h1>
+        <div class="header-title">
+            <h1>Arduino Uno Q &mdash; Face Tracker</h1>
+            <span class="sub">Qualcomm QRB2210 &bull; 478-Point Facial Landmark Detection</span>
+        </div>
     </div>
 
     <div class="viewport">
@@ -153,7 +206,7 @@
 
         <div class="hud hud-tl on" id="hudTL">
             <div class="hud-row"><span class="hud-k">Tracking</span><span class="hud-v" id="hFaces">0 faces</span></div>
-            <div class="hud-row"><span class="hud-k">Points/Face</span><span class="hud-v" id="hPts">478</span></div>
+            <div class="hud-row"><span class="hud-k">Points</span><span class="hud-v" id="hPts">--</span></div>
             <div id="faceList" class="face-list"></div>
         </div>
 
@@ -189,22 +242,39 @@
     </div>
 
 <script type="module">
-    import { FaceLandmarker, FilesetResolver, DrawingUtils } from "https://cdn.skypack.dev/@mediapipe/tasks-vision@0.10.3";
+    const statusEl = document.getElementById("status");
+    const errorEl = document.getElementById("error");
+
+    function showStatus(msg) { statusEl.textContent = msg; console.log("[status]", msg); }
+    function showError(msg) { errorEl.textContent = msg; errorEl.style.display = "inline"; statusEl.textContent = ""; console.error("[error]", msg); }
+
+    showStatus("Loading MediaPipe...");
+
+    let FaceLandmarker, FilesetResolver, DrawingUtils;
+    try {
+        const mp = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/+esm");
+        FaceLandmarker = mp.FaceLandmarker;
+        FilesetResolver = mp.FilesetResolver;
+        DrawingUtils = mp.DrawingUtils;
+        showStatus("MediaPipe loaded.");
+    } catch (e) {
+        console.error("Import failed:", e);
+        showError("Failed to load MediaPipe. Try refreshing.");
+        throw e;
+    }
 
     const cam = document.getElementById("cam");
     const cvs = document.getElementById("overlay");
     const ctx = cvs.getContext("2d");
     const presetEl = document.getElementById("preset");
-    const statusEl = document.getElementById("status");
-    const errorEl = document.getElementById("error");
     const hudBL = document.getElementById("hudBL");
     const faceListEl = document.getElementById("faceList");
 
     const FACE_COLORS = [
-        { mesh: "rgba(50,83,220,0.12)", edge: "rgba(50,83,220,0.7)",  feat: "rgba(50,83,220,0.85)", iris: "rgba(0,200,255,0.9)",  dot: "rgba(50,83,220,0.45)",  label: "#3253dc", tag: "#5577ff" },
-        { mesh: "rgba(220,130,50,0.12)", edge: "rgba(220,150,50,0.7)", feat: "rgba(220,150,50,0.85)", iris: "rgba(255,180,0,0.9)",  dot: "rgba(220,150,50,0.45)", label: "#dc9632", tag: "#ffaa33" },
-        { mesh: "rgba(50,200,120,0.12)", edge: "rgba(50,200,120,0.7)", feat: "rgba(50,200,120,0.85)", iris: "rgba(100,255,180,0.9)", dot: "rgba(50,200,120,0.45)", label: "#32c878", tag: "#44dd88" },
-        { mesh: "rgba(200,50,180,0.12)", edge: "rgba(200,50,180,0.7)", feat: "rgba(200,50,180,0.85)", iris: "rgba(255,100,220,0.9)", dot: "rgba(200,50,180,0.45)", label: "#c832b4", tag: "#ee55cc" },
+        { mesh: "rgba(50,83,220,0.14)", edge: "rgba(90,120,255,0.8)",  feat: "rgba(90,120,255,0.9)", iris: "rgba(0,200,255,0.95)",  dot: "rgba(90,120,255,0.5)",  tag: "#7799ff" },
+        { mesh: "rgba(220,150,50,0.14)", edge: "rgba(255,180,60,0.8)", feat: "rgba(255,180,60,0.9)", iris: "rgba(255,210,80,0.95)",  dot: "rgba(255,180,60,0.5)", tag: "#ffbb44" },
+        { mesh: "rgba(50,200,120,0.14)", edge: "rgba(80,230,150,0.8)", feat: "rgba(80,230,150,0.9)", iris: "rgba(120,255,190,0.95)", dot: "rgba(80,230,150,0.5)", tag: "#66ee99" },
+        { mesh: "rgba(200,80,200,0.14)", edge: "rgba(230,120,230,0.8)", feat: "rgba(230,120,230,0.9)", iris: "rgba(255,150,255,0.95)", dot: "rgba(230,120,230,0.5)", tag: "#ee88ee" },
     ];
 
     const PRESETS = {
@@ -281,15 +351,16 @@
 
         const survivors = trackedFaces.filter((t, j) => !usedTrack.has(j) && (now - t.lastSeen) < TRACK_TTL);
         trackedFaces = matched.concat(survivors);
-
         return matched;
     }
 
-    async function init() {
-        statusEl.textContent = "Loading model...";
+    showStatus("Loading face detection model...");
+    let initDelegate = "unknown";
+    try {
         const wasm = await FilesetResolver.forVisionTasks(
             "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
         );
+        showStatus("WASM loaded. Creating face landmarker...");
         const cfg = {
             baseOptions: {
                 modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
@@ -301,19 +372,27 @@
         };
         try {
             fl = await FaceLandmarker.createFromOptions(wasm, cfg);
-            delegate = "GPU";
-        } catch (_) {
-            console.log("GPU unavailable, trying CPU...");
+            initDelegate = "GPU";
+            showStatus("Model ready (GPU).");
+        } catch (gpuErr) {
+            console.warn("GPU delegate failed:", gpuErr.message);
+            showStatus("GPU unavailable, trying CPU...");
             cfg.baseOptions.delegate = "CPU";
             fl = await FaceLandmarker.createFromOptions(wasm, cfg);
-            delegate = "CPU";
+            initDelegate = "CPU";
+            showStatus("Model ready (CPU).");
         }
-        document.getElementById("hDel").textContent = delegate;
-        du = new DrawingUtils(ctx);
-        statusEl.textContent = "Starting camera...";
+        document.getElementById("hDel").textContent = initDelegate;
+    } catch (e) {
+        console.error("Model init failed:", e);
+        showError("Model failed: " + (e.message || e) + ". Open in a browser with WebGL.");
+        throw e;
     }
 
-    async function camera() {
+    du = new DrawingUtils(ctx);
+
+    showStatus("Starting camera...");
+    try {
         const stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
             audio: false
@@ -321,8 +400,14 @@
         cam.srcObject = stream;
         await new Promise(r => { cam.onloadeddata = r; });
         document.getElementById("hRes").textContent = cam.videoWidth + "\u00D7" + cam.videoHeight;
-        statusEl.textContent = "";
+        showStatus("Camera ready. Detecting...");
+    } catch (e) {
+        console.error("Camera error:", e);
+        showError("Camera not available. Allow camera access and refresh.");
+        throw e;
     }
+
+    let firstDetection = true;
 
     function draw(raf) {
         requestAnimationFrame(draw);
@@ -342,8 +427,20 @@
 
         const before = performance.now();
         let res;
-        try { res = fl.detectForVideo(cam, ts); } catch (e) { return; }
+        try {
+            res = fl.detectForVideo(cam, ts);
+        } catch (e) {
+            if (firstDetection) { console.error("detectForVideo threw:", e); showError("Detection error: " + e.message); }
+            return;
+        }
         latMs = performance.now() - before;
+
+        if (firstDetection) {
+            firstDetection = false;
+            const n = res && res.faceLandmarks ? res.faceLandmarks.length : 0;
+            showStatus(n > 0 ? "" : "Running — point camera at a face");
+            console.log("[first detect] faces:", n, "result keys:", res ? Object.keys(res) : "null");
+        }
 
         ctx.clearRect(0, 0, vw, vh);
         total++;
@@ -354,6 +451,8 @@
         const faces = res && res.faceLandmarks ? res.faceLandmarks : [];
         nFaces = faces.length;
 
+        if (nFaces > 0 && statusEl.textContent) statusEl.textContent = "";
+
         const tracked = matchFaces(faces, now);
 
         for (let i = 0; i < faces.length; i++) {
@@ -361,7 +460,7 @@
             const clr = FACE_COLORS[tracked[i].colorIdx];
 
             if (L.mesh)    du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_TESSELATION,    { color: clr.mesh, lineWidth: 0.5 });
-            if (L.outline) du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,      { color: clr.edge, lineWidth: 2 });
+            if (L.outline) du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,      { color: clr.edge, lineWidth: 2.5 });
             if (L.eyes) {
                 du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, { color: clr.feat, lineWidth: 1.5 });
                 du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,  { color: clr.feat, lineWidth: 1.5 });
@@ -379,22 +478,22 @@
                 ctx.fillStyle = clr.dot;
                 for (let j = 0; j < lm.length; j++) {
                     ctx.beginPath();
-                    ctx.arc(lm[j].x * vw, lm[j].y * vh, 1, 0, 6.283);
+                    ctx.arc(lm[j].x * vw, lm[j].y * vh, 1.2, 0, 6.283);
                     ctx.fill();
                 }
             }
 
             const t = tracked[i];
             const tagX = t.x * vw;
-            const tagY = (lm[10].y * vh) - 12;
+            const tagY = (lm[10].y * vh) - 14;
             const dur = fmtTime(now - t.since);
             const label = "Face " + t.id + "  \u00B7  " + dur;
             ctx.save();
-            ctx.font = "600 11px 'Inter', sans-serif";
+            ctx.font = "600 12px 'Inter', sans-serif";
             const tw = ctx.measureText(label).width;
-            ctx.fillStyle = "rgba(0,0,0,0.55)";
+            ctx.fillStyle = "rgba(0,0,0,0.6)";
             ctx.beginPath();
-            ctx.roundRect(tagX - tw / 2 - 6, tagY - 10, tw + 12, 18, 4);
+            ctx.roundRect(tagX - tw / 2 - 7, tagY - 11, tw + 14, 20, 5);
             ctx.fill();
             ctx.fillStyle = clr.tag;
             ctx.textAlign = "center";
@@ -418,7 +517,7 @@
         if (now - lastHud >= 2000) {
             lastHud = now;
             document.getElementById("hFaces").textContent = nFaces + (nFaces === 1 ? " face" : " faces");
-            document.getElementById("hPts").textContent = nFaces > 0 ? (478 * nFaces).toLocaleString() + " (" + 478 + "\u00D7" + nFaces + ")" : "478";
+            document.getElementById("hPts").textContent = nFaces > 0 ? (478 * nFaces).toLocaleString() : "--";
             document.getElementById("hFps").textContent = fps;
             document.getElementById("hLat").textContent = Math.round(latMs) + "ms";
             document.getElementById("hUp").textContent = fmtUptime(now - startTime);
@@ -442,16 +541,7 @@
         }
     }
 
-    try {
-        await init();
-        await camera();
-        requestAnimationFrame(draw);
-    } catch (e) {
-        console.error("Startup error:", e);
-        statusEl.textContent = "";
-        errorEl.textContent = "Failed to start. Use a browser with WebGL + camera access.";
-        errorEl.style.display = "inline";
-    }
+    requestAnimationFrame(draw);
 </script>
 </body>
 </html>
