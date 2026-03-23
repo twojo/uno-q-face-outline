@@ -2,7 +2,6 @@
 AI Mirror Booth — fal.ai InstantID Backend
 Designed for Arduino Uno Q (QRB2210) deployment.
 Single-step identity-preserving face transformation via InstantID.
-Black Box / Mystery mode — random prompt, no user theme selection.
 """
 
 import os
@@ -76,7 +75,7 @@ def preprocess_face(b64_data: str) -> str:
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
-# ── Prompt Pool ──────────────────────────────────────────────────────────────
+# ── Prompts ──────────────────────────────────────────────────────────────────
 
 IDENTITY_PREFIX = (
     "High-fidelity portrait of the exact person in the reference image, "
@@ -89,32 +88,44 @@ NEGATIVE_PROMPT = (
     "disfigured, bad anatomy, extra limbs, mutated hands"
 )
 
-PROMPTS = [
-    IDENTITY_PREFIX + "dressed as an ancient Egyptian pharaoh with golden nemes headdress, inside a torch-lit pyramid chamber, cinematic lighting, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a 1920s flapper at a speakeasy, sequined headband, art deco background, warm amber lighting, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a Roman centurion in polished bronze armour with red-plumed helmet, Colosseum behind, golden hour, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a cyberpunk hacker with neon-lit face, holographic HUD, rain-soaked neon city, cinematic lighting, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a Viking warrior with war paint and fur-trimmed armour on a misty battlefield, dramatic sky, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a samurai warrior in ornate black and gold armour, cherry blossom petals floating, soft morning light, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a space marine in heavy battle armour on an alien planet with two moons, cinematic lighting, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a medieval knight in gleaming silver plate armour holding a flaming sword, epic storm clouds, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a wizard with glowing blue eyes wearing arcane-runed robes in an ancient candlelit library, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as an elf ranger with pointed ears and leaf-pattern cloak in a bioluminescent enchanted forest, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a dragon rider wearing scaled armour with a massive dragon in flight behind, sunset sky, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a vampire lord in a gothic castle, pale skin, crimson eyes, velvet cape, candlelight atmosphere, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a NASA astronaut inside the International Space Station with Earth visible through the cupola window, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a deep-sea diver in a vintage brass diving helmet, underwater with bioluminescent jellyfish, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as an arctic explorer in a fur-lined parka on frozen tundra with northern lights above, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a jungle explorer with a weathered hat and binoculars in dense tropical rainforest, dappled sunlight, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a retro disco dancer with a shiny jumpsuit and mirrored sunglasses on a light-up dance floor, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a punk rocker with a tall mohawk and leather jacket covered in pins on a concert stage, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a classic film noir detective in trench coat and fedora, rainy alley with neon signs, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a superhero in a gleaming suit with flowing cape on a rooftop at sunset overlooking a city, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a mad scientist with wild hair and oversized goggles in a lab of bubbling beakers and tesla coils, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a pirate captain with tricorn hat and golden tooth on the deck of a ghost ship in fog, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a steampunk airship pilot wearing brass goggles and leather aviator cap, clouds below, shot on 35mm, photorealistic",
-    IDENTITY_PREFIX + "as a Western outlaw with bandana and dusty hat in a saloon doorway at high noon, shot on 35mm, photorealistic",
-]
+THEMES = {
+    "Time Traveler": [
+        IDENTITY_PREFIX + "dressed as an ancient Egyptian pharaoh with golden nemes headdress, inside a torch-lit pyramid chamber, cinematic lighting, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a 1920s flapper at a speakeasy, sequined headband, art deco background, warm amber lighting, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a Roman centurion in polished bronze armour with red-plumed helmet, Colosseum behind, golden hour, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a cyberpunk hacker with neon-lit face, holographic HUD, rain-soaked neon city, cinematic lighting, shot on 35mm, photorealistic",
+    ],
+    "Action Hero": [
+        IDENTITY_PREFIX + "as a Viking warrior with war paint and fur-trimmed armour on a misty battlefield, dramatic sky, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a samurai warrior in ornate black and gold armour, cherry blossom petals floating, soft morning light, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a space marine in heavy battle armour on an alien planet with two moons, cinematic lighting, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a medieval knight in gleaming silver plate armour holding a flaming sword, epic storm clouds, shot on 35mm, photorealistic",
+    ],
+    "Fantasy Realm": [
+        IDENTITY_PREFIX + "as a wizard with glowing blue eyes wearing arcane-runed robes in an ancient candlelit library, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as an elf ranger with pointed ears and leaf-pattern cloak in a bioluminescent enchanted forest, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a dragon rider wearing scaled armour with a massive dragon in flight behind, sunset sky, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a vampire lord in a gothic castle, pale skin, crimson eyes, velvet cape, candlelight atmosphere, shot on 35mm, photorealistic",
+    ],
+    "Explorer": [
+        IDENTITY_PREFIX + "as a NASA astronaut inside the International Space Station with Earth visible through the cupola window, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a deep-sea diver in a vintage brass diving helmet, underwater with bioluminescent jellyfish, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as an arctic explorer in a fur-lined parka on frozen tundra with northern lights above, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a jungle explorer with a weathered hat and binoculars in dense tropical rainforest, dappled sunlight, shot on 35mm, photorealistic",
+    ],
+    "Pop Culture": [
+        IDENTITY_PREFIX + "as a retro disco dancer with a shiny jumpsuit and mirrored sunglasses on a light-up dance floor, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a punk rocker with a tall mohawk and leather jacket covered in pins on a concert stage, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a classic film noir detective in trench coat and fedora, rainy alley with neon signs, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a superhero in a gleaming suit with flowing cape on a rooftop at sunset overlooking a city, shot on 35mm, photorealistic",
+    ],
+    "Wild Card": [
+        IDENTITY_PREFIX + "as a mad scientist with wild hair and oversized goggles in a lab of bubbling beakers and tesla coils, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a pirate captain with tricorn hat and golden tooth on the deck of a ghost ship in fog, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a steampunk airship pilot wearing brass goggles and leather aviator cap, clouds below, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a Western outlaw with bandana and dusty hat in a saloon doorway at high noon, shot on 35mm, photorealistic",
+    ],
+}
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 
@@ -122,6 +133,11 @@ PROMPTS = [
 def index():
     logger.info("Serving index page")
     return render_template("index.html")
+
+
+@app.route("/themes", methods=["GET"])
+def get_themes():
+    return jsonify({"themes": list(THEMES.keys())})
 
 
 @app.route("/transform", methods=["POST"])
@@ -152,11 +168,17 @@ def transform():
     except Exception as pp_err:
         logger.warning("Pre-processing failed, using raw: %s", pp_err)
 
-    prompt = random.choice(PROMPTS)
+    theme_name = data.get("theme")
+    if theme_name and theme_name in THEMES:
+        prompt = random.choice(THEMES[theme_name])
+    else:
+        theme_name = random.choice(list(THEMES.keys()))
+        prompt = random.choice(THEMES[theme_name])
+
     seed = random.randint(0, 999999)
     face_data_uri = f"data:image/jpeg;base64,{image_b64}"
 
-    logger.info("Transform: seed=%d, ip=%s", seed, ip)
+    logger.info("Transform: theme=%s, seed=%d, ip=%s", theme_name, seed, ip)
     logger.debug("Prompt: %s", prompt[:120])
 
     try:
@@ -203,13 +225,13 @@ def transform():
         mime = "image/png" if "png" in ct else ("image/webp" if "webp" in ct else "image/jpeg")
 
         short_prompt = prompt.replace(IDENTITY_PREFIX, "").strip()
-
-        logger.info("Done: seed=%d, elapsed=%.1fs", seed, time.time() - t0)
+        logger.info("Done: theme=%s, seed=%d, elapsed=%.1fs", theme_name, seed, time.time() - t0)
 
         return jsonify({
             "success": True,
             "image": f"data:{mime};base64,{result_b64}",
             "prompt": short_prompt,
+            "theme": theme_name,
             "seed": seed,
         })
 
