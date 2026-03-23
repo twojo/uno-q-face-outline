@@ -12,8 +12,11 @@ import time
 import logging
 from logging.handlers import RotatingFileHandler
 
+import io
+
 import requests
 import fal_client
+from PIL import Image, ImageEnhance, ImageStat
 from flask import Flask, render_template, request, jsonify
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -38,10 +41,53 @@ logger.addHandler(console_handler)
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5 MB
 
-FAL_MODEL = "fal-ai/instant-id"
+FAL_MODEL = "fal-ai/instantid"
 MAX_B64_SIZE = 2 * 1024 * 1024
 RATE_LIMIT_SECONDS = 5
 _last_request_by_ip = {}
+
+TARGET_BRIGHTNESS = 128
+TARGET_CONTRAST_FACTOR = 1.15
+SHARPNESS_FACTOR = 1.2
+
+
+def preprocess_face(b64_data: str) -> str:
+    """Auto-adjust brightness, contrast, and sharpness of a webcam capture.
+
+    Analyses perceived brightness and nudges it toward a target midpoint so
+    the InstantID model can read facial features clearly regardless of webcam
+    lighting conditions.  Returns a new base64-encoded JPEG string.
+    """
+    raw = base64.b64decode(b64_data)
+    img = Image.open(io.BytesIO(raw)).convert("RGB")
+
+    stat = ImageStat.Stat(img)
+    perceived_brightness = sum(stat.mean[:3]) / 3.0
+    logger.debug(
+        "Pre-process: size=%dx%d, perceived_brightness=%.1f",
+        img.width, img.height, perceived_brightness,
+    )
+
+    if perceived_brightness < 90:
+        brightness_factor = min(TARGET_BRIGHTNESS / max(perceived_brightness, 1), 1.6)
+        img = ImageEnhance.Brightness(img).enhance(brightness_factor)
+        logger.debug("Brightness boosted x%.2f (was dark)", brightness_factor)
+    elif perceived_brightness > 180:
+        brightness_factor = max(TARGET_BRIGHTNESS / perceived_brightness, 0.7)
+        img = ImageEnhance.Brightness(img).enhance(brightness_factor)
+        logger.debug("Brightness reduced x%.2f (was blown out)", brightness_factor)
+
+    img = ImageEnhance.Contrast(img).enhance(TARGET_CONTRAST_FACTOR)
+    img = ImageEnhance.Sharpness(img).enhance(SHARPNESS_FACTOR)
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=90)
+    result_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    logger.debug(
+        "Pre-process done: output size=%d bytes",
+        len(result_b64),
+    )
+    return result_b64
 
 # ── Identity-First Prompts ───────────────────────────────────────────────────
 # Every prompt starts with an identity anchor to force the model to preserve
@@ -135,6 +181,11 @@ def transform():
     if len(image_b64) > MAX_B64_SIZE:
         logger.error("Image too large (%d bytes) from %s", len(image_b64), ip)
         return jsonify({"success": False, "error": "Image too large."}), 400
+
+    try:
+        image_b64 = preprocess_face(image_b64)
+    except Exception as pp_err:
+        logger.warning("Pre-processing failed, using raw image: %s", pp_err)
 
     theme_name = data.get("theme")
     if theme_name and theme_name in THEMES:
