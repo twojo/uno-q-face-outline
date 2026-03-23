@@ -562,8 +562,34 @@
 
                 if (L.mesh && FaceLandmarker.FACE_LANDMARKS_TESSELATION)
                     drawConns(FaceLandmarker.FACE_LANDMARKS_TESSELATION, clr.mesh, 1.2);
-                if (L.outline && FaceLandmarker.FACE_LANDMARKS_FACE_OVAL)
-                    drawConns(FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, clr.edge, 4);
+                if (L.outline && FaceLandmarker.FACE_LANDMARKS_FACE_OVAL) {
+                    var cx = 0, cy = 0, oc = 0;
+                    var ovalConns = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL;
+                    var ovalIdxSet = new Set();
+                    for (var oi = 0; oi < ovalConns.length; oi++) {
+                        var oc1 = ovalConns[oi];
+                        ovalIdxSet.add(Array.isArray(oc1) ? oc1[0] : oc1.start);
+                        ovalIdxSet.add(Array.isArray(oc1) ? oc1[1] : oc1.end);
+                    }
+                    ovalIdxSet.forEach(function(idx) { if (lm[idx]) { cx += lm[idx].x; cy += lm[idx].y; oc++; } });
+                    if (oc > 0) { cx /= oc; cy /= oc; }
+                    var SCALE = 1.15;
+                    ctx.strokeStyle = clr.edge;
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    for (var oi2 = 0; oi2 < ovalConns.length; oi2++) {
+                        var c2 = ovalConns[oi2];
+                        var si2 = Array.isArray(c2) ? c2[0] : c2.start;
+                        var ei2 = Array.isArray(c2) ? c2[1] : c2.end;
+                        var a2 = lm[si2], b2 = lm[ei2];
+                        if (!a2 || !b2) continue;
+                        var ax = cx + (a2.x - cx) * SCALE, ay = cy + (a2.y - cy) * SCALE;
+                        var bx = cx + (b2.x - cx) * SCALE, by = cy + (b2.y - cy) * SCALE;
+                        ctx.moveTo(ax * vw, ay * vh);
+                        ctx.lineTo(bx * vw, by * vh);
+                    }
+                    ctx.stroke();
+                }
                 if (L.eyes) {
                     if (FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, clr.feat, 3);
                     if (FaceLandmarker.FACE_LANDMARKS_LEFT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, clr.feat, 3);
@@ -596,16 +622,18 @@
                     const dur = fmtTime(now - t.since);
                     const label = "Face " + t.id + "  \u00B7  " + dur;
                     ctx.save();
+                    ctx.translate(tagX, tagY);
+                    ctx.scale(-1, 1);
                     ctx.font = "600 15px 'Inter', sans-serif";
                     const tw = ctx.measureText(label).width;
                     ctx.fillStyle = "rgba(0,0,0,0.65)";
                     ctx.beginPath();
-                    ctx.roundRect(tagX - tw / 2 - 9, tagY - 13, tw + 18, 26, 6);
+                    ctx.roundRect(-tw / 2 - 9, -13, tw + 18, 26, 6);
                     ctx.fill();
                     ctx.fillStyle = clr.tag;
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
-                    ctx.fillText(label, tagX, tagY);
+                    ctx.fillText(label, 0, 0);
                     ctx.restore();
                 }
 
@@ -622,20 +650,22 @@
                 const chin = lm[152];
                 if (chin) {
                     const emoX = (t ? t.x * vw : chin.x * vw);
-                    const emoY = chin.y * vh + 30;
+                    const emoY = chin.y * vh + 35;
                     ctx.save();
-                    ctx.font = "32px sans-serif";
+                    ctx.translate(emoX, emoY);
+                    ctx.scale(-1, 1);
+                    ctx.font = "36px sans-serif";
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
                     if (isSmiling) {
                         ctx.shadowColor = "rgba(255,220,50,0.9)";
                         ctx.shadowBlur = 18;
                         ctx.globalAlpha = 1;
-                        ctx.fillText("\uD83D\uDE00", emoX, emoY);
+                        ctx.fillText("\uD83D\uDE00", 0, 0);
                         ctx.shadowBlur = 0;
                     } else {
                         ctx.globalAlpha = 0.25;
-                        ctx.fillText("\uD83D\uDE00", emoX, emoY);
+                        ctx.fillText("\uD83D\uDE00", 0, 0);
                     }
                     ctx.restore();
                 }
