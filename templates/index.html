@@ -206,7 +206,7 @@
             progressBar.style.transition = 'none';
             progressBar.style.width = '0%';
             void progressBar.offsetWidth;
-            progressBar.style.transition = 'width 30s linear';
+            progressBar.style.transition = 'width 60s linear';
             progressBar.style.width = '100%';
 
             clearInterval(elapsedInterval);
@@ -275,13 +275,8 @@
                     statusText.innerText = `"${data.prompt}"`;
                     actionBtn.innerText = '\u21BA Try Again';
                     modeBadge.style.display = 'inline-block';
-                    if (data.mode === 'img2img') {
-                        modeBadge.className = 'img2img';
-                        modeBadge.innerText = '✦ img2img — face preserved';
-                    } else {
-                        modeBadge.className = '';
-                        modeBadge.innerText = 'text-to-image mode — add FAL_KEY for face preservation';
-                    }
+                    modeBadge.className = 'img2img';
+                    modeBadge.innerText = '✦ img2img — face preserved';
                     isDisplayingResult = true;
                 } else {
                     throw new Error(data.error || 'Generation failed.');

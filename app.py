@@ -1,35 +1,35 @@
 import os
 import base64
 import random
+import tempfile
 import requests
 from flask import Flask, render_template, request, jsonify
+from gradio_client import Client, handle_file
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
-HF_API_TOKEN  = os.environ.get("HF_TOKEN")
-FAL_API_KEY   = os.environ.get("FAL_KEY")
+HF_API_TOKEN = os.environ.get("HF_TOKEN")
 
-# fal.ai endpoint for instruct-pix2pix (img2img, preserves face structure)
-FAL_URL  = "https://fal.run/fal-ai/fast-instruct-pix2pix"
-# Fallback: FLUX text-to-image when no FAL_KEY is set
-FLUX_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
+# Manjushri/SDXL-Turbo-Img2Img-CPU
+# API: /predict(image, prompt, iterations 1-5, seed, strength 0.1-1.0)
+SPACE = "Manjushri/SDXL-Turbo-Img2Img-CPU"
 
 PROMPTS = [
-    "A portrait of this exact person as a fearless Viking warrior with braided beard, keeping their original face and features",
-    "A portrait of this exact person as a steampunk cyborg with copper gears and goggles, keeping their facial structure",
-    "A portrait of this exact person in full Royal Guard ceremonial uniform, keeping their face",
-    "A portrait of this exact person in medieval full plate knight armour, keeping their original features",
-    "A portrait of this exact person as an astronaut floating near the moon, keeping their face",
-    "A portrait of this exact person as a pirate captain at sunset, keeping their facial features",
-    "A portrait of this exact person painted in Van Gogh's bold swirling style, keeping their likeness",
-    "A portrait of this exact person as a wise wizard in flowing robes, keeping their original face",
-    "A portrait of this exact person as a sci-fi space explorer, keeping their facial structure",
-    "A portrait of this exact person in a dramatic fantasy oil painting style, keeping their face",
+    "A portrait of this person as a fearless Viking warrior with braided beard and horned helmet",
+    "A portrait of this person as a steampunk cyborg with copper gears and glowing goggles",
+    "A portrait of this person as a Royal Guard in full ceremonial uniform",
+    "A portrait of this person in gleaming medieval full plate knight armour",
+    "A portrait of this person as an astronaut floating near the moon",
+    "A portrait of this person as a pirate captain at sunset on a tall ship",
+    "A portrait of this person painted in Van Gogh's bold swirling oil style",
+    "A portrait of this person as a wise wizard in flowing magical robes",
+    "A portrait of this person as a sci-fi space explorer with neon suit",
+    "A portrait of this person as a samurai warrior in feudal Japan",
 ]
 
 @app.route('/')
 def index():
-    return render_template('index.html', has_fal=bool(FAL_API_KEY))
+    return render_template('index.html')
 
 @app.route('/transform', methods=['POST'])
 def transform():
@@ -37,77 +37,58 @@ def transform():
     image_b64 = data.get('image', '').split(',')[-1]
     prompt    = random.choice(PROMPTS)
 
-    # ── img2img via fal.ai (face-preserving) ──────────────────────────
-    if FAL_API_KEY and image_b64:
-        try:
-            payload = {
-                "image_url": f"data:image/jpeg;base64,{image_b64}",
-                "prompt":    prompt,
-                "strength":  0.45,
-                "num_inference_steps": 30,
-                "guidance_scale": 7.5,
-                "image_guidance_scale": 1.5,
-            }
-            resp = requests.post(
-                FAL_URL,
-                headers={
-                    "Authorization": f"Key {FAL_API_KEY}",
-                    "Content-Type":  "application/json",
-                },
-                json=payload,
-                timeout=120,
-            )
+    if not image_b64:
+        return jsonify({"success": False, "error": "No image received."})
 
-            print(f"fal status: {resp.status_code}")
-            print(f"fal response: {resp.text[:300]}")
-
-            if resp.status_code == 200:
-                result = resp.json()
-                # fal.ai returns {images: [{url: "..."}]}
-                image_url = result.get("images", [{}])[0].get("url", "")
-                if image_url.startswith("data:"):
-                    return jsonify({"success": True, "image": image_url, "prompt": prompt, "mode": "img2img"})
-                # If it's a remote URL, fetch and re-encode
-                img_resp = requests.get(image_url, timeout=30)
-                result_b64 = base64.b64encode(img_resp.content).decode("utf-8")
-                return jsonify({
-                    "success": True,
-                    "image":   f"data:image/jpeg;base64,{result_b64}",
-                    "prompt":  prompt,
-                    "mode":    "img2img",
-                })
-            else:
-                return jsonify({"success": False, "error": f"fal.ai {resp.status_code}: {resp.text[:200]}"})
-
-        except Exception as e:
-            return jsonify({"success": False, "error": str(e)})
-
-    # ── Fallback: FLUX text-to-image ───────────────────────────────────
+    # Decode image and write to a temp file for gradio_client
+    image_bytes = base64.b64decode(image_b64)
+    tmp = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
     try:
-        # Strip "keeping their original face" from FLUX prompts (doesn't apply)
-        flux_prompt = prompt.split(",")[0].replace("A portrait of this exact person as ", "")
-        resp = requests.post(
-            FLUX_URL,
-            headers={"Authorization": f"Bearer {HF_API_TOKEN}"},
-            json={"inputs": flux_prompt},
-            timeout=120,
+        tmp.write(image_bytes)
+        tmp.flush()
+        tmp.close()
+
+        client = Client(SPACE)
+        result = client.predict(
+            handle_file(tmp.name),      # Raw Image
+            prompt,                     # Prompt (77 token max)
+            3,                          # Number of Iterations (1-5)
+            random.randint(0, 999999),  # Seed
+            0.45,                       # Strength (0.1-1.0) — preserves face
+            api_name="/predict",
         )
 
-        print(f"FLUX status: {resp.status_code}")
+        print(f"Gradio result type: {type(result)}, value: {str(result)[:120]}")
 
-        if resp.status_code == 200:
-            result_b64 = base64.b64encode(resp.content).decode("utf-8")
-            return jsonify({
-                "success": True,
-                "image":   f"data:image/jpeg;base64,{result_b64}",
-                "prompt":  flux_prompt,
-                "mode":    "text2img",
-            })
+        # result is a local file path to the output image
+        if isinstance(result, str) and os.path.exists(result):
+            with open(result, 'rb') as f:
+                out_bytes = f.read()
+        elif isinstance(result, dict):
+            out_path = result.get('path') or result.get('name') or result.get('url', '')
+            if os.path.exists(out_path):
+                with open(out_path, 'rb') as f:
+                    out_bytes = f.read()
+            elif out_path.startswith('http'):
+                out_bytes = requests.get(out_path, timeout=30).content
+            else:
+                return jsonify({"success": False, "error": f"Unexpected result format: {result}"})
         else:
-            return jsonify({"success": False, "error": f"FLUX {resp.status_code}: {resp.text[:200]}"})
+            return jsonify({"success": False, "error": f"Unexpected result: {result}"})
+
+        result_b64 = base64.b64encode(out_bytes).decode("utf-8")
+        return jsonify({
+            "success": True,
+            "image":   f"data:image/jpeg;base64,{result_b64}",
+            "prompt":  prompt,
+            "mode":    "img2img",
+        })
 
     except Exception as e:
+        print(f"Error: {e}")
         return jsonify({"success": False, "error": str(e)})
+    finally:
+        os.unlink(tmp.name)
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
