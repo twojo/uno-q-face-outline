@@ -15,3 +15,15 @@ CAPTURES_DIR = "/home/runner/workspace/captures"
 
 [services.development]
 run = "/home/runner/workspace/.pythonlibs/bin/python3 /home/runner/workspace/app.py"
+
+[services.production]
+
+[services.production.run]
+args = ["/home/runner/workspace/.pythonlibs/bin/python3", "/home/runner/workspace/app.py"]
+
+[services.production.run.env]
+PORT = "8002"
+CAPTURES_DIR = "/home/runner/workspace/captures"
+
+[services.production.health.startup]
+path = "/"
