@@ -30,13 +30,13 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "/home/runner/workspace/.pythonlibs/bin/python3 app.py"
-waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "webview"
+waitForPort = 8000
 
 [agent]
 stack = "PNPM_WORKSPACE"

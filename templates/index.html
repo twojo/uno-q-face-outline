@@ -2,386 +2,434 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AppLab Bricks - HuggingFace & Image Tools</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Smart Mirror AI Booth</title>
   <style>
-    /* ── Base ─────────────────────────────────────── */
+    /* ── Reset & Base ─────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    body {
-      font-family: "Segoe UI", Arial, sans-serif;
-      background: #0d1117;
-      color: #e6edf3;
-      min-height: 100vh;
+    :root {
+      --bg:        #080c10;
+      --surface:   #0f1923;
+      --border:    #1e2d3d;
+      --accent:    #00d4ff;
+      --accent2:   #7c3aed;
+      --text:      #e0eaf4;
+      --muted:     #4a6478;
+      --danger:    #f85149;
+      --success:   #3fb950;
+      --radius:    14px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      overflow: hidden;
+    }
+
+    /* ── Layout ───────────────────────────────────── */
+    .app {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.25rem;
+      padding: 1rem;
     }
 
     /* ── Header ───────────────────────────────────── */
-    header {
-      background: linear-gradient(135deg, #1c2a3a, #0d1117);
-      border-bottom: 1px solid #21262d;
-      padding: 1rem 2rem;
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
+    .header {
+      text-align: center;
+      line-height: 1.2;
     }
 
-    header .logo {
-      width: 38px; height: 38px;
-      background: linear-gradient(135deg, #238636, #1a7f37);
-      border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1.3rem;
+    .header h1 {
+      font-size: clamp(1.1rem, 3vw, 1.5rem);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
 
-    header h1 { font-size: 1.3rem; font-weight: 700; }
-    header span { color: #8b949e; font-size: 0.85rem; margin-left: auto; }
-
-    /* ── Layout ───────────────────────────────────── */
-    main {
-      max-width: 1100px;
-      margin: 2rem auto;
-      padding: 0 1.5rem;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 1.5rem;
+    .header p {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+      letter-spacing: 0.04em;
     }
 
-    /* ── Brick Card ───────────────────────────────── */
-    .brick {
-      background: #161b22;
-      border: 1px solid #21262d;
-      border-radius: 12px;
+    /* ── Mirror Frame ─────────────────────────────── */
+    .mirror-frame {
+      position: relative;
+      width: min(380px, 90vw);
+      aspect-ratio: 3 / 4;
+      border-radius: var(--radius);
       overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow:
+        0 0 0 1px var(--accent)22,
+        0 0 40px var(--accent)18,
+        inset 0 0 20px #00000060;
+      background: #000;
+      flex-shrink: 0;
+    }
+
+    /* Animated corner accents */
+    .mirror-frame::before,
+    .mirror-frame::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: var(--radius);
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .mirror-frame::before {
+      border: 2px solid transparent;
+      background: linear-gradient(var(--bg), var(--bg)) padding-box,
+                  linear-gradient(135deg, var(--accent)80, transparent 40%, transparent 60%, var(--accent2)80) border-box;
+    }
+
+    #video, #result-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    #video {
+      transform: scaleX(-1); /* mirror flip */
+    }
+
+    #result-img {
+      display: none;
+    }
+
+    /* ── Overlay states ───────────────────────────── */
+    .overlay {
+      position: absolute;
+      inset: 0;
       display: flex;
       flex-direction: column;
-    }
-
-    .brick-header {
-      padding: 1rem 1.25rem 0.75rem;
-      border-bottom: 1px solid #21262d;
-      display: flex;
       align-items: center;
-      gap: 0.6rem;
+      justify-content: center;
+      gap: 0.75rem;
+      z-index: 20;
+      border-radius: var(--radius);
+      background: rgba(8, 12, 16, 0.88);
+      backdrop-filter: blur(4px);
+      transition: opacity 0.3s;
     }
 
-    .brick-icon {
-      width: 32px; height: 32px;
-      border-radius: 6px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1rem;
+    .overlay.hidden { display: none; }
+
+    /* Loading spinner */
+    .spinner {
+      width: 48px; height: 48px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
     }
 
-    .brick-icon.hf  { background: #ffd21e22; color: #ffd21e; }
-    .brick-icon.img { background: #238636aa; color: #3fb950; }
-    .brick-icon.gen { background: #58a6ff22; color: #58a6ff; }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
-    .brick-title { font-size: 1rem; font-weight: 600; }
-    .brick-sub   { font-size: 0.75rem; color: #8b949e; margin-left: auto; }
-
-    .brick-body { padding: 1.25rem; flex: 1; display: flex; flex-direction: column; gap: 1rem; }
-
-    /* ── Form Controls ────────────────────────────── */
-    label { font-size: 0.8rem; color: #8b949e; display: block; margin-bottom: 0.3rem; }
-
-    input[type="text"],
-    input[type="number"],
-    select,
-    input[type="file"] {
-      width: 100%;
-      background: #0d1117;
-      border: 1px solid #30363d;
-      border-radius: 6px;
-      color: #e6edf3;
-      padding: 0.5rem 0.75rem;
-      font-size: 0.9rem;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    input[type="text"]:focus,
-    input[type="number"]:focus,
-    select:focus { border-color: #58a6ff; }
-
-    .row { display: flex; gap: 0.75rem; }
-    .row > * { flex: 1; }
-
-    /* ── Buttons ──────────────────────────────────── */
-    button {
-      border: none; border-radius: 6px;
-      padding: 0.55rem 1.1rem;
-      font-size: 0.9rem;
+    .overlay-title {
+      font-size: 0.85rem;
       font-weight: 600;
-      cursor: pointer;
-      transition: opacity 0.2s, transform 0.1s;
-    }
-    button:active { transform: scale(0.97); }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    .btn-primary { background: #238636; color: #fff; }
-    .btn-primary:hover:not(:disabled) { background: #2ea043; }
-    .btn-secondary { background: #21262d; color: #e6edf3; border: 1px solid #30363d; }
-    .btn-secondary:hover:not(:disabled) { background: #30363d; }
-
-    /* ── Output ───────────────────────────────────── */
-    .output {
-      background: #0d1117;
-      border: 1px solid #21262d;
-      border-radius: 6px;
-      padding: 0.75rem 1rem;
-      font-size: 0.82rem;
-      min-height: 80px;
-      color: #8b949e;
-      overflow-y: auto;
-      max-height: 240px;
-      white-space: pre-wrap;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+      text-align: center;
+      padding: 0 1rem;
     }
 
-    .output.has-content { color: #e6edf3; }
-
-    .model-item {
-      padding: 0.4rem 0;
-      border-bottom: 1px solid #21262d;
-      display: flex;
-      align-items: baseline;
-      gap: 0.5rem;
+    .overlay-sub {
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-align: center;
+      padding: 0 1.5rem;
+      line-height: 1.5;
     }
-    .model-item:last-child { border-bottom: none; }
-    .model-name { font-weight: 600; color: #58a6ff; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .model-tag  { font-size: 0.72rem; background: #21262d; border-radius: 4px; padding: 1px 6px; color: #8b949e; }
-    .model-meta { font-size: 0.72rem; color: #8b949e; white-space: nowrap; }
 
-    /* ── Image previews ───────────────────────────── */
-    .img-preview {
-      width: 100%;
-      border-radius: 6px;
-      border: 1px solid #30363d;
+    /* Camera permission error */
+    .cam-error {
+      font-size: 0.8rem;
+      color: var(--danger);
+      text-align: center;
+      padding: 0 1.5rem;
+      line-height: 1.6;
+    }
+
+    /* Prompt badge on result */
+    .prompt-badge {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: linear-gradient(transparent, rgba(8,12,16,0.95));
+      padding: 1.5rem 1rem 0.75rem;
+      font-size: 0.72rem;
+      color: #aac8e0;
+      line-height: 1.5;
+      z-index: 15;
       display: none;
-      margin-top: 0.5rem;
     }
 
-    /* ── Status badge ─────────────────────────────── */
-    .status {
-      font-size: 0.75rem;
-      padding: 0.2rem 0.6rem;
-      border-radius: 20px;
-      display: inline-block;
+    .prompt-badge span {
+      color: var(--accent);
+      font-weight: 600;
     }
-    .status.ok  { background: #1f4b1f; color: #3fb950; }
-    .status.err { background: #4b1f1f; color: #f85149; }
-    .status.loading { background: #1f3b4b; color: #58a6ff; }
+
+    /* ── Controls ─────────────────────────────────── */
+    .controls {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    button {
+      border: none;
+      border-radius: 50px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s, box-shadow 0.15s;
+      letter-spacing: 0.04em;
+    }
+
+    button:active:not(:disabled) { transform: scale(0.95); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    #btn-capture {
+      background: linear-gradient(135deg, var(--accent), #0099cc);
+      color: #000;
+      padding: 0.75rem 2.25rem;
+      font-size: 1rem;
+      box-shadow: 0 0 20px var(--accent)44;
+    }
+
+    #btn-capture:hover:not(:disabled) {
+      box-shadow: 0 0 32px var(--accent)77;
+    }
+
+    #btn-reset {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 0.75rem 1.5rem;
+      display: none;
+    }
+
+    #btn-reset:hover { background: var(--border); }
+
+    /* ── Status bar ───────────────────────────────── */
+    .status-bar {
+      font-size: 0.7rem;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      text-align: center;
+      min-height: 1rem;
+    }
+
+    .status-bar .dot {
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+      margin-right: 5px;
+      vertical-align: middle;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    /* ── Hidden canvas ────────────────────────────── */
+    canvas { display: none; }
   </style>
 </head>
 <body>
+<div class="app">
 
-<header>
-  <div class="logo">🔲</div>
-  <h1>AppLab Bricks</h1>
-  <span>HuggingFace Hub &amp; Image Toolkit</span>
-</header>
-
-<main>
-
-  <!-- ── Brick 1: HuggingFace Model Search ── -->
-  <div class="brick">
-    <div class="brick-header">
-      <div class="brick-icon hf">🤗</div>
-      <span class="brick-title">Model Search</span>
-      <span class="brick-sub">HuggingFace Hub</span>
-    </div>
-    <div class="brick-body">
-      <div>
-        <label for="hf-query">Search query</label>
-        <input type="text" id="hf-query" placeholder="e.g. text-classification, stable-diffusion…" />
-      </div>
-      <div>
-        <label for="hf-limit">Results</label>
-        <select id="hf-limit">
-          <option value="5">5</option>
-          <option value="10" selected>10</option>
-          <option value="20">20</option>
-        </select>
-      </div>
-      <button class="btn-primary" onclick="searchModels()">Search Models</button>
-      <div id="hf-output" class="output">Results will appear here…</div>
-    </div>
+  <div class="header">
+    <h1>⬡ Smart Mirror AI Booth</h1>
+    <p>Arduino Uno Q · Prototype on Replit</p>
   </div>
 
-  <!-- ── Brick 2: Image Inspector ── -->
-  <div class="brick">
-    <div class="brick-header">
-      <div class="brick-icon img">🖼️</div>
-      <span class="brick-title">Image Inspector</span>
-      <span class="brick-sub">Pillow</span>
+  <!-- Mirror frame -->
+  <div class="mirror-frame">
+
+    <video id="video" autoplay playsinline muted></video>
+    <img id="result-img" alt="AI-transformed photo" />
+
+    <!-- Loading overlay -->
+    <div class="overlay hidden" id="overlay-loading">
+      <div class="spinner"></div>
+      <div class="overlay-title">Transforming…</div>
+      <div class="overlay-sub" id="loading-prompt"></div>
     </div>
-    <div class="brick-body">
-      <div>
-        <label for="img-file">Upload an image</label>
-        <input type="file" id="img-file" accept="image/*" onchange="inspectImage()" />
+
+    <!-- Camera error overlay -->
+    <div class="overlay hidden" id="overlay-error">
+      <div style="font-size:2rem">📷</div>
+      <div class="cam-error" id="error-msg">
+        Camera access is required.<br/>Please allow camera permissions and reload.
       </div>
-      <div id="img-output" class="output">Upload an image to see its metadata…</div>
-      <img id="img-thumb" class="img-preview" alt="Thumbnail preview" />
     </div>
+
+    <!-- Prompt badge on result -->
+    <div class="prompt-badge" id="prompt-badge">
+      <span>Prompt:</span> <span id="prompt-text"></span>
+    </div>
+
   </div>
 
-  <!-- ── Brick 3: Image Generator ── -->
-  <div class="brick">
-    <div class="brick-header">
-      <div class="brick-icon gen">🎨</div>
-      <span class="brick-title">Image Generator</span>
-      <span class="brick-sub">Pillow</span>
-    </div>
-    <div class="brick-body">
-      <div class="row">
-        <div>
-          <label for="gen-width">Width (px)</label>
-          <input type="number" id="gen-width" value="200" min="10" max="800" />
-        </div>
-        <div>
-          <label for="gen-height">Height (px)</label>
-          <input type="number" id="gen-height" value="200" min="10" max="800" />
-        </div>
-      </div>
-      <div>
-        <label for="gen-color">Color</label>
-        <select id="gen-color">
-          <option value="blue">Blue</option>
-          <option value="red">Red</option>
-          <option value="green">Green</option>
-          <option value="yellow">Yellow</option>
-          <option value="purple">Purple</option>
-          <option value="orange">Orange</option>
-          <option value="white">White</option>
-          <option value="black">Black</option>
-        </select>
-      </div>
-      <button class="btn-primary" onclick="generateImage()">Generate Image</button>
-      <img id="gen-img" class="img-preview" alt="Generated image" />
-      <div id="gen-output" class="output">Configure options and click Generate…</div>
-    </div>
+  <!-- Buttons -->
+  <div class="controls">
+    <button id="btn-capture" disabled>Capture</button>
+    <button id="btn-reset">↺ Reset</button>
   </div>
 
-</main>
+  <!-- Status bar -->
+  <div class="status-bar" id="status-bar">Starting camera…</div>
+
+</div>
+
+<!-- Hidden canvas for frame grab -->
+<canvas id="canvas"></canvas>
 
 <script>
-  /* ── Helpers ── */
-  function setOutput(id, html, hasContent = true) {
-    const el = document.getElementById(id);
-    el.innerHTML = html;
-    el.classList.toggle("has-content", hasContent);
+  /* ── Element refs ── */
+  const video        = document.getElementById("video");
+  const resultImg    = document.getElementById("result-img");
+  const canvas       = document.getElementById("canvas");
+  const btnCapture   = document.getElementById("btn-capture");
+  const btnReset     = document.getElementById("btn-reset");
+  const overlayLoad  = document.getElementById("overlay-loading");
+  const overlayErr   = document.getElementById("overlay-error");
+  const loadPrompt   = document.getElementById("loading-prompt");
+  const promptBadge  = document.getElementById("prompt-badge");
+  const promptText   = document.getElementById("prompt-text");
+  const statusBar    = document.getElementById("status-bar");
+  const errorMsg     = document.getElementById("error-msg");
+
+  /* ── State helpers ── */
+  function setStatus(msg, live = true) {
+    statusBar.innerHTML = live
+      ? `<span class="dot"></span>${msg}`
+      : msg;
   }
 
-  function badge(text, cls) {
-    return `<span class="status ${cls}">${text}</span>`;
+  function showOverlay(el) {
+    [overlayLoad, overlayErr].forEach(o => o.classList.add("hidden"));
+    if (el) el.classList.remove("hidden");
   }
 
-  /* ── Model Search ── */
-  async function searchModels() {
-    const query = document.getElementById("hf-query").value.trim();
-    const limit  = document.getElementById("hf-limit").value;
-    const btn    = event.target;
-
-    if (!query) { setOutput("hf-output", "Please enter a search query."); return; }
-
-    btn.disabled = true;
-    setOutput("hf-output", badge("Searching…", "loading"), false);
-
+  /* ── Camera init ── */
+  async function startCamera() {
     try {
-      const res  = await fetch(`/api/search-models?query=${encodeURIComponent(query)}&limit=${limit}`);
-      const data = await res.json();
+      const constraints = {
+        video: {
+          facingMode: "user",
+          width:  { ideal: 640 },
+          height: { ideal: 853 },
+        },
+        audio: false,
+      };
 
-      if (!data.success) throw new Error(data.error);
-      if (!data.models.length) { setOutput("hf-output", "No models found."); return; }
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = stream;
 
-      const html = data.models.map(m => `
-        <div class="model-item">
-          <span class="model-name">${m.id}</span>
-          ${m.pipeline_tag ? `<span class="model-tag">${m.pipeline_tag}</span>` : ""}
-          <span class="model-meta">⬇ ${(m.downloads || 0).toLocaleString()} ❤ ${(m.likes || 0).toLocaleString()}</span>
-        </div>`).join("");
+      video.onloadedmetadata = () => {
+        video.play();
+        btnCapture.disabled = false;
+        setStatus("Camera ready — tap Capture to transform");
+      };
 
-      setOutput("hf-output", html);
     } catch (err) {
-      setOutput("hf-output", `${badge("Error", "err")} ${err.message}`);
-    } finally {
-      btn.disabled = false;
+      showOverlay(overlayErr);
+      errorMsg.textContent = `Camera error: ${err.message}. Allow camera access and reload.`;
+      setStatus("Camera unavailable", false);
     }
   }
 
-  /* ── Image Inspector ── */
-  async function inspectImage() {
-    const file = document.getElementById("img-file").files[0];
-    if (!file) return;
+  /* ── Capture & transform ── */
+  btnCapture.addEventListener("click", async () => {
+    /* Grab frame */
+    const w = video.videoWidth  || 512;
+    const h = video.videoHeight || 682;
+    canvas.width  = w;
+    canvas.height = h;
 
-    setOutput("img-output", badge("Reading image…", "loading"), false);
-    const thumb = document.getElementById("img-thumb");
-    thumb.style.display = "none";
+    const ctx = canvas.getContext("2d");
+    ctx.translate(w, 0);
+    ctx.scale(-1, 1); /* un-flip mirror */
+    ctx.drawImage(video, 0, 0, w, h);
 
-    const form = new FormData();
-    form.append("file", file);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
 
-    try {
-      const res  = await fetch("/api/image-info", { method: "POST", body: form });
-      const data = await res.json();
-
-      if (!data.success) throw new Error(data.error);
-      const i = data.info;
-
-      setOutput("img-output",
-        `${badge("OK", "ok")}  ${i.filename}\n\n` +
-        `Format : ${i.format || "unknown"}\n` +
-        `Mode   : ${i.mode}\n` +
-        `Size   : ${i.width} × ${i.height} px\n` +
-        `File   : ${i.size_kb} KB`
-      );
-
-      thumb.src = data.thumbnail;
-      thumb.style.display = "block";
-    } catch (err) {
-      setOutput("img-output", `${badge("Error", "err")} ${err.message}`);
-    }
-  }
-
-  /* ── Image Generator ── */
-  async function generateImage() {
-    const width  = parseInt(document.getElementById("gen-width").value)  || 200;
-    const height = parseInt(document.getElementById("gen-height").value) || 200;
-    const color  = document.getElementById("gen-color").value;
-    const btn    = event.target;
-    const genImg = document.getElementById("gen-img");
-
-    btn.disabled = true;
-    genImg.style.display = "none";
-    setOutput("gen-output", badge("Generating…", "loading"), false);
+    /* UI → loading */
+    btnCapture.disabled = true;
+    btnCapture.textContent = "Processing…";
+    btnReset.style.display = "none";
+    promptBadge.style.display = "none";
+    showOverlay(overlayLoad);
+    loadPrompt.textContent = "Sending to AI model…";
+    setStatus("Waiting for Hugging Face…", false);
 
     try {
-      const res  = await fetch("/api/create-image", {
+      const res = await fetch("/transform", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ width, height, color }),
+        body: JSON.stringify({ image: dataUrl }),
       });
+
       const data = await res.json();
 
-      if (!data.success) throw new Error(data.error);
+      if (!data.success) throw new Error(data.error || "Unknown error");
 
-      genImg.src = data.image;
-      genImg.style.display = "block";
-      setOutput("gen-output",
-        `${badge("OK", "ok")}  Image created\n\n` +
-        `Size  : ${data.info.width} × ${data.info.height} px\n` +
-        `Color : ${data.info.color}`
-      );
+      /* Show result */
+      resultImg.src = data.image;
+      resultImg.style.display = "block";
+      video.style.display = "none";
+      promptText.textContent = data.prompt;
+      promptBadge.style.display = "block";
+
+      showOverlay(null);
+      btnReset.style.display = "inline-block";
+      setStatus("Transformation complete!", false);
+
     } catch (err) {
-      setOutput("gen-output", `${badge("Error", "err")} ${err.message}`);
-    } finally {
-      btn.disabled = false;
+      showOverlay(null);
+      setStatus(`Error: ${err.message}`, false);
+      btnCapture.disabled = false;
+      btnCapture.textContent = "Capture";
     }
-  }
-
-  /* Enter key triggers model search */
-  document.getElementById("hf-query").addEventListener("keydown", e => {
-    if (e.key === "Enter") searchModels();
   });
-</script>
 
+  /* ── Reset to live mirror ── */
+  btnReset.addEventListener("click", () => {
+    resultImg.style.display = "none";
+    resultImg.src = "";
+    promptBadge.style.display = "none";
+    video.style.display = "block";
+    showOverlay(null);
+
+    btnReset.style.display = "none";
+    btnCapture.disabled = false;
+    btnCapture.textContent = "Capture";
+    setStatus("Camera ready — tap Capture to transform");
+  });
+
+  /* ── Boot ── */
+  startCamera();
+</script>
 </body>
 </html>

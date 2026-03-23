@@ -4,18 +4,22 @@
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
-## Flask Python Application
+## Smart Mirror AI Photo Booth
 
-A standalone Flask app lives at the root of the workspace:
+A standalone Flask app lives at the root of the workspace. Prototype for Arduino Uno Q deployment.
 
-- **`app.py`** — Flask application entry point. Serves three API endpoints:
-  - `GET /` — Renders `templates/index.html`
-  - `GET /api/search-models?query=&limit=` — Searches HuggingFace Hub models
-  - `POST /api/image-info` — Inspects an uploaded image (metadata + thumbnail) via Pillow
-  - `POST /api/create-image` — Generates a solid-color PNG image via Pillow
-- **`templates/index.html`** — Arduino AppLab / Bricks-style UI with three interactive panels
+- **`app.py`** — Flask server with two routes:
+  - `GET /` — Serves the smart mirror UI (`templates/index.html`)
+  - `POST /transform` — Accepts base64 JPEG, randomly selects a prompt, calls `timbrooks/instruct-pix2pix` via HuggingFace `InferenceClient`, returns base64 JPEG + prompt string
+- **`templates/index.html`** — Full smart mirror UI:
+  - Live camera feed via `getUserMedia` (front-facing, mirrored)
+  - Capture button → posts frame to `/transform`
+  - Loading overlay with spinner while AI processes
+  - Displays AI-transformed result with prompt badge
+  - Reset button returns to live mirror
 - **Dependencies**: Flask, huggingface-hub, Pillow (installed into `.pythonlibs`)
-- **Workflow**: "Start application" runs `.pythonlibs/bin/python3 app.py` on port 5000
+- **Workflow**: "Start application" runs `.pythonlibs/bin/python3 app.py` on port 8000
+- **Secrets**: `HF_TOKEN` — HuggingFace API token (stored as Replit secret)
 
 ## Stack
 
