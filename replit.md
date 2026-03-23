@@ -4,86 +4,47 @@
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
-## Smart Mirror AI Photo Booth
+## Face Tracker
 
-Standalone Flask app at the workspace root. Prototype for Arduino Uno Q (QRB2210) deployment.
+Standalone Flask app at the workspace root. Real-time face tracking with expression analysis using MediaPipe.
 
 ### Architecture
 
-Single-step identity-preserving transformation via **InstantID** (`fal-ai/instantid`):
-- Takes webcam capture as `face_image_url` reference
-- `ip_adapter_scale=0.95` for maximum identity fidelity
-- `controlnet_conditioning_scale=0.90` for strong facial structure preservation
-- 20 inference steps (fast), guidance_scale=4.0
-- Identity-anchored prompts: every prompt starts with "High-fidelity portrait of the exact person in the reference image"
-- Strict negative prompt blocks generic/deformed/stylized output
-- Rotating file logger: `mirror_debug.log` (5 MB x 3 backups)
+Pure client-side face detection using **MediaPipe Face Landmarker** (v0.10.3):
+- 478 facial landmarks tracked in real-time
+- Face blendshapes enabled for expression detection
+- Supports up to 4 simultaneous faces
+- GPU delegate with CPU fallback
+- All processing happens in the browser — backend only serves the HTML page
 
 ### Features
 
-- Single "Snap & Transform" button — no theme selection, always random
-- 3-2-1 countdown with camera flash effect
-- 6 themed prompt pools internally: Time Traveler, Action Hero, Fantasy Realm, Explorer, Pop Culture, Wild Card
-- Side-by-side before/after reveal with animation
-- Result metadata: theme, seed, prompt displayed
-- Scrollable gallery strip of past transformations
-- Fullscreen view on gallery thumbnail tap
-- Rotating fun loading messages during generation
-- Robust JSON parse error handling
+- Real-time face mesh tessellation overlay
+- Face outline (jawline/oval) tracking
+- Individual feature tracking: eyes, eyebrows, lips, iris
+- Landmark dot visualization
+- **Expression detection** with color-coded overlays:
+  - Neutral (cyan), Happy (green), Surprised (yellow), Angry (red)
+  - Sad (blue), Kiss (purple), Wink (violet), Jaw Open (amber)
+- Expression confidence percentage
+- Blendshape analysis bars (smile, brow raise/furrow, jaw, blink, pucker)
+- Head pose estimation (yaw/pitch)
+- FPS counter and landmark count
+- Toggle buttons to show/hide individual tracking layers
+- Smoothed color transitions between expressions
 
 ### Key Files
 
 | File | Purpose |
 |------|---------|
-| `app.py` | Flask HTTP backend for Replit (POST /transform) |
-| `main.py` | Bricks SDK backend for Arduino Uno Q (Socket.IO events) |
-| `main_free.py` | Free alternative using Hugging Face (no paid API key) |
-| `templates/index.html` | Full photo booth UI — camera, face mesh, countdown, reveal, gallery |
-| `arduino/` | Replit shim folder — mimics Arduino Bricks SDK for prototyping |
-| `arduino/app_bricks/web_ui.py` | Shim for WebUI (Flask-SocketIO on Replit) |
-| `arduino/app_utils.py` | Shim for App.run() |
+| `app.py` | Flask backend — serves the HTML page only |
+| `templates/index.html` | Full face tracker UI — camera, mesh, expression HUD, toggle controls |
 
 ### Dependencies
 
-- Python: `flask`, `flask-socketio`, `requests`, `Pillow`, `fal-client`
+- Python: `flask`
+- Client-side: MediaPipe Tasks Vision (CDN)
 - **Workflow**: "Smart Mirror" — `python3 app.py` on `PORT` (default 8000)
-- **Secret**: `FAL_KEY` — fal.ai API key (paid); or `HF_TOKEN` for free version
-
-### Deployment Targets
-
-| Target | Entry Point | Env Var | Notes |
-|--------|-------------|---------|-------|
-| Replit | `app.py` | `FAL_KEY` | Flask HTTP, keep `arduino/` folder |
-| Uno Q | `main.py` | `FAL_KEY` | Bricks SDK, DELETE `arduino/` folder |
-| Free | `main_free.py` | `HF_TOKEN` | Hugging Face instruct-pix2pix |
-
-### Deploying to the Uno Q
-
-1. Copy entire project to Uno Q filesystem
-2. `rm -rf arduino/` (real Bricks SDK is pre-installed on device)
-3. `pip install requests Pillow fal-client`
-4. `export FAL_KEY="your-key"`
-5. `python main.py` (NOT app.py)
-6. Real SDK handles: TLS, mDNS, QR-code pairing, iframe video streaming
-
-### Tuning Knobs
-
-- `ip_adapter_scale`: 0.85 (high fidelity to YOUR face; raise to 0.9 if still generic)
-- `controlnet_conditioning_scale`: 0.8 (respects the POSE; raise to 0.9 for stronger structure)
-- `guidance_scale`: 5.0 (lower = better blending with identity; raise for more prompt adherence)
-- `enhance_face_region`: True (keeps eyes/mouth sharp)
-
-### Rate Limiting
-
-Both `app.py` (per-IP) and `main.py` (per-SID) enforce a 5-second cooldown between transform requests. Returns 429 (HTTP) or an error event (WebSocket) on violation.
-
-### Face Detection Error Handling
-
-Both backends detect fal.ai "no face found" errors and return a user-friendly message: "No face detected in the photo. Make sure your face is clearly visible and try again."
-
-### Shim Compatibility
-
-The `arduino/app_bricks/web_ui.py` shim supports both decorator and direct-call patterns for `on_connect` and `on_message`, matching the real Bricks SDK API.
 
 ## Stack
 
@@ -103,15 +64,15 @@ The `arduino/app_bricks/web_ui.py` shim supports both decorator and direct-call 
 artifacts-monorepo/
 ├── artifacts/              # Deployable applications
 │   └── api-server/         # Express API server
-│   └── smart-mirror/       # AI photo booth artifact config
+│   └── smart-mirror/       # Face tracker artifact config
 ├── lib/                    # Shared libraries
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config
 │   ├── api-client-react/   # Generated React Query hooks
 │   ├── api-zod/            # Generated Zod schemas from OpenAPI
 │   └── db/                 # Drizzle ORM schema + DB connection
 ├── scripts/                # Utility scripts
-├── app.py                  # Smart Mirror Flask backend
-├── templates/index.html    # Smart Mirror UI
+├── app.py                  # Face Tracker Flask backend
+├── templates/index.html    # Face Tracker UI
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json
 ├── tsconfig.json

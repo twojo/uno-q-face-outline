@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <title>AI Mirror Booth</title>
+    <title>Face Tracker</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
 
@@ -11,7 +11,6 @@
 
         :root {
             --accent: #00ffcc;
-            --accent-dim: rgba(0,255,204,0.15);
             --bg: #0a0a0f;
             --card: #111118;
             --border: #222230;
@@ -59,17 +58,18 @@
         .mirror-frame {
             position: relative;
             width: 100%;
-            max-width: 480px;
-            aspect-ratio: 1;
+            max-width: 600px;
+            aspect-ratio: 4/3;
             border-radius: 24px;
             overflow: hidden;
             border: 2px solid var(--border);
             background: #000;
             box-shadow: 0 0 60px rgba(0,255,204,0.05);
+            transition: border-color 0.5s ease;
         }
 
         .mirror-frame video,
-        .mirror-frame #meshCanvas {
+        .mirror-frame canvas {
             position: absolute;
             inset: 0;
             width: 100%;
@@ -81,7 +81,6 @@
         #meshCanvas {
             z-index: 2;
             pointer-events: none;
-            opacity: 0.8;
         }
 
         .hud-overlay {
@@ -90,16 +89,27 @@
             left: 16px;
             z-index: 5;
             font-family: 'JetBrains Mono', monospace;
-            background: rgba(0,0,0,0.6);
-            padding: 8px 12px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 14px;
             border-left: 3px solid var(--accent);
-            backdrop-filter: blur(4px);
+            backdrop-filter: blur(6px);
             pointer-events: none;
             opacity: 0;
-            transition: opacity 0.3s;
+            transition: opacity 0.3s, border-color 0.5s;
+            border-radius: 0 8px 8px 0;
+            min-width: 180px;
         }
 
         .hud-overlay.visible { opacity: 1; }
+
+        .hud-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .hud-row:last-child { margin-bottom: 0; }
 
         .hud-label {
             font-size: 9px;
@@ -110,151 +120,96 @@
 
         .hud-value {
             color: var(--accent);
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 700;
+            transition: color 0.4s;
         }
 
-        .laser-line {
+        .stats-overlay {
             position: absolute;
-            top: -10px;
-            left: 0;
-            width: 100%;
-            height: 4px;
-            background: var(--accent);
-            box-shadow: 0 0 20px var(--accent), 0 0 40px var(--accent);
-            z-index: 10;
-            display: none;
-        }
-
-        @keyframes scanMove {
-            0% { top: 0%; }
-            100% { top: 100%; }
-        }
-
-        .countdown-overlay {
-            position: absolute;
-            inset: 0;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0,0,0,0.6);
-            z-index: 10;
-        }
-
-        .countdown-num {
-            font-size: 140px;
-            font-weight: 900;
-            color: var(--accent);
-            text-shadow: 0 0 80px var(--accent), 0 0 40px var(--accent);
-            animation: countPop 0.6s ease-out;
-        }
-
-        @keyframes countPop {
-            0% { transform: scale(2); opacity: 0; }
-            50% { transform: scale(0.9); opacity: 1; }
-            100% { transform: scale(1); opacity: 1; }
-        }
-
-        .flash-overlay {
-            position: absolute;
-            inset: 0;
-            background: #fff;
-            opacity: 0;
+            top: 16px;
+            right: 16px;
+            z-index: 5;
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 14px;
+            backdrop-filter: blur(6px);
             pointer-events: none;
-            z-index: 11;
+            opacity: 0;
+            transition: opacity 0.3s;
+            border-radius: 8px 0 0 8px;
+            border-right: 3px solid var(--accent);
+            min-width: 150px;
         }
 
-        .flash-overlay.fire { animation: flash 0.3s ease-out; }
+        .stats-overlay.visible { opacity: 1; }
 
-        @keyframes flash {
-            0% { opacity: 0.9; }
-            100% { opacity: 0; }
+        .expression-bar-container {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            right: 16px;
+            z-index: 5;
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(0,0,0,0.7);
+            padding: 12px 14px;
+            backdrop-filter: blur(6px);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
         }
 
-        .results-panel {
-            display: none;
-            width: 100%;
-            max-width: 480px;
+        .expression-bar-container.visible { opacity: 1; }
+
+        .expression-bar-title {
+            font-size: 9px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 8px;
         }
 
-        .comparison {
+        .expression-bar-row {
             display: flex;
+            align-items: center;
+            margin-bottom: 5px;
             gap: 8px;
         }
 
-        .comp-card {
-            flex: 1;
-            border-radius: 16px;
-            overflow: hidden;
-            border: 2px solid var(--border);
-            position: relative;
-        }
+        .expression-bar-row:last-child { margin-bottom: 0; }
 
-        .comp-card img {
-            width: 100%;
-            aspect-ratio: 1;
-            object-fit: cover;
-            display: block;
-        }
-
-        .comp-card.ai-card {
-            border-color: var(--accent);
-            box-shadow: 0 0 30px rgba(0,255,204,0.15);
-        }
-
-        .reveal-anim .comp-card.ai-card {
-            animation: revealSlide 0.6s cubic-bezier(0.16,1,0.3,1) both;
-        }
-
-        @keyframes revealSlide {
-            0% { transform: translateX(40px) scale(0.9); opacity: 0; }
-            100% { transform: translateX(0) scale(1); opacity: 1; }
-        }
-
-        .comp-label {
-            position: absolute;
-            bottom: 8px;
-            left: 8px;
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            background: rgba(0,0,0,0.7);
-            padding: 4px 10px;
-            border-radius: 20px;
-            backdrop-filter: blur(8px);
-        }
-
-        .comp-label.ai { color: var(--accent); }
-
-        .result-meta {
-            margin-top: 12px;
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 12px 16px;
-            font-size: 12px;
-        }
-
-        .meta-row {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 6px;
-        }
-
-        .meta-row:last-child { margin-bottom: 0; }
-
-        .meta-label {
-            color: var(--muted);
-            min-width: 50px;
-            font-weight: 500;
+        .bar-label {
+            font-size: 9px;
+            color: #aaa;
+            width: 80px;
             flex-shrink: 0;
+            text-transform: uppercase;
         }
 
-        .meta-val {
-            color: var(--accent);
-            word-break: break-word;
-            font-weight: 300;
+        .bar-track {
+            flex: 1;
+            height: 6px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.15s ease-out, background 0.3s;
+            width: 0%;
+        }
+
+        .bar-val {
+            font-size: 10px;
+            font-weight: 700;
+            width: 36px;
+            text-align: right;
+            flex-shrink: 0;
+            transition: color 0.3s;
         }
 
         .controls {
@@ -264,68 +219,38 @@
             align-items: center;
             gap: 12px;
             width: 100%;
-            max-width: 480px;
+            max-width: 600px;
         }
 
-        .main-btn {
-            width: 100%;
-            padding: 18px;
-            border: none;
-            border-radius: 16px;
-            font-size: 20px;
-            font-weight: 900;
+        .toggle-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .toggle-btn {
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            background: var(--card);
+            color: var(--muted);
             font-family: 'Outfit', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
             cursor: pointer;
             transition: all 0.2s;
             -webkit-tap-highlight-color: transparent;
         }
 
-        .main-btn.capture {
-            background: linear-gradient(135deg, var(--accent), #00cc99);
-            color: #000;
-            box-shadow: 0 4px 25px rgba(0,255,204,0.3);
+        .toggle-btn.active {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: rgba(0,255,204,0.08);
         }
 
-        .main-btn.capture:hover { box-shadow: 0 4px 35px rgba(0,255,204,0.5); transform: translateY(-1px); }
-        .main-btn.capture:active { transform: scale(0.97); }
-
-        .main-btn.again {
-            background: var(--card);
-            color: var(--text);
-            border: 1px solid var(--border);
-        }
-
-        .main-btn.again:hover { border-color: var(--accent); }
-
-        .main-btn:disabled {
-            background: var(--card) !important;
-            color: var(--muted) !important;
-            box-shadow: none !important;
-            cursor: not-allowed;
-            border: 1px solid var(--border) !important;
-        }
-
-        .loading-bar {
-            width: 100%;
-            height: 3px;
-            background: var(--card);
-            border-radius: 2px;
-            overflow: hidden;
-            display: none;
-        }
-
-        .loading-bar-inner {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, var(--accent), #7c3aed, var(--accent));
-            background-size: 200% 100%;
-            border-radius: 2px;
-            animation: shimmer 1.5s ease-in-out infinite;
-        }
-
-        @keyframes shimmer {
-            0%, 100% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
+        .toggle-btn:hover {
+            border-color: var(--accent);
         }
 
         .status-text {
@@ -343,153 +268,105 @@
             display: none;
         }
 
-        .gallery {
-            width: 100%;
-            max-width: 600px;
-            margin-top: 28px;
-            padding-top: 20px;
-            border-top: 1px solid var(--border);
-        }
-
-        .gallery-title {
-            font-size: 12px;
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            font-weight: 500;
-            margin-bottom: 10px;
-            text-align: center;
-        }
-
-        .gallery-strip {
-            display: flex;
-            gap: 8px;
-            overflow-x: auto;
-            padding-bottom: 8px;
-            scrollbar-width: thin;
-            scrollbar-color: var(--border) transparent;
-        }
-
-        .gallery-thumb {
-            flex-shrink: 0;
-            width: 80px;
-            height: 80px;
-            border-radius: 10px;
-            overflow: hidden;
-            border: 1px solid var(--border);
-            cursor: pointer;
-            transition: all 0.2s;
-            position: relative;
-        }
-
-        .gallery-thumb:hover { border-color: var(--accent); transform: scale(1.05); }
-        .gallery-thumb img { width: 100%; height: 100%; object-fit: cover; }
-
-        .gallery-thumb .g-label {
-            position: absolute;
-            bottom: 0; left: 0; right: 0;
-            font-size: 8px;
-            font-weight: 700;
-            text-transform: uppercase;
-            background: rgba(0,0,0,0.8);
-            color: var(--accent);
-            text-align: center;
-            padding: 2px;
-        }
-
-        .fullscreen-view {
-            display: none;
-            position: fixed;
-            inset: 0;
-            z-index: 100;
-            background: rgba(0,0,0,0.95);
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-        }
-
-        .fullscreen-view img {
-            max-width: 90%;
-            max-height: 90%;
-            border-radius: 16px;
-            border: 2px solid var(--accent);
-        }
-
         @media (max-width: 500px) {
             .header h1 { font-size: 22px; }
-            .mirror-frame { max-width: 100%; border-radius: 16px; }
-            .comp-card { border-radius: 12px; }
-            .countdown-num { font-size: 100px; }
+            .mirror-frame { max-width: 100%; border-radius: 16px; aspect-ratio: 1; }
         }
     </style>
 </head>
 <body>
     <div class="booth">
         <div class="header">
-            <h1>AI Mirror Booth</h1>
-            <p>Identity-Preserving Smart Mirror</p>
+            <h1>Face Tracker</h1>
+            <p>Real-time Expression Analysis</p>
         </div>
 
         <div class="mirror-frame" id="mirrorFrame">
             <video id="webcam" autoplay playsinline muted></video>
             <canvas id="meshCanvas"></canvas>
-            <div class="laser-line" id="laser"></div>
 
             <div class="hud-overlay" id="hudOverlay">
-                <div class="hud-label">Identity Lock</div>
-                <div id="confidence" class="hud-value">SCANNING...</div>
+                <div class="hud-row">
+                    <span class="hud-label">Expression</span>
+                    <span id="expressionLabel" class="hud-value">SCANNING...</span>
+                </div>
+                <div class="hud-row">
+                    <span class="hud-label">Confidence</span>
+                    <span id="confidence" class="hud-value">--</span>
+                </div>
+                <div class="hud-row">
+                    <span class="hud-label">Faces</span>
+                    <span id="faceCount" class="hud-value">0</span>
+                </div>
             </div>
 
-            <div class="countdown-overlay" id="countdownOverlay">
-                <div class="countdown-num" id="countdownNum">3</div>
+            <div class="stats-overlay" id="statsOverlay">
+                <div class="hud-row">
+                    <span class="hud-label">FPS</span>
+                    <span id="fpsValue" class="hud-value">--</span>
+                </div>
+                <div class="hud-row">
+                    <span class="hud-label">Landmarks</span>
+                    <span id="landmarkCount" class="hud-value">--</span>
+                </div>
+                <div class="hud-row">
+                    <span class="hud-label">Head Yaw</span>
+                    <span id="headYaw" class="hud-value">--</span>
+                </div>
+                <div class="hud-row">
+                    <span class="hud-label">Head Pitch</span>
+                    <span id="headPitch" class="hud-value">--</span>
+                </div>
             </div>
-            <div class="flash-overlay" id="flashOverlay"></div>
-        </div>
 
-        <div class="results-panel" id="resultsPanel">
-            <div class="comparison" id="comparison">
-                <div class="comp-card">
-                    <img id="capturedImg" alt="Your photo" />
-                    <span class="comp-label">You</span>
+            <div class="expression-bar-container" id="expressionBars">
+                <div class="expression-bar-title">Blendshape Analysis (Primary Face)</div>
+                <div class="expression-bar-row">
+                    <span class="bar-label">Smile</span>
+                    <div class="bar-track"><div class="bar-fill" id="barSmile"></div></div>
+                    <span class="bar-val" id="valSmile">0%</span>
                 </div>
-                <div class="comp-card ai-card">
-                    <img id="resultImg" alt="AI result" />
-                    <span class="comp-label ai">AI</span>
+                <div class="expression-bar-row">
+                    <span class="bar-label">Brow Raise</span>
+                    <div class="bar-track"><div class="bar-fill" id="barBrowUp"></div></div>
+                    <span class="bar-val" id="valBrowUp">0%</span>
                 </div>
-            </div>
-            <div class="result-meta">
-                <div class="meta-row">
-                    <span class="meta-label">Theme</span>
-                    <span class="meta-val" id="metaTheme">--</span>
+                <div class="expression-bar-row">
+                    <span class="bar-label">Brow Furrow</span>
+                    <div class="bar-track"><div class="bar-fill" id="barBrowDown"></div></div>
+                    <span class="bar-val" id="valBrowDown">0%</span>
                 </div>
-                <div class="meta-row">
-                    <span class="meta-label">Seed</span>
-                    <span class="meta-val" id="metaSeed">--</span>
+                <div class="expression-bar-row">
+                    <span class="bar-label">Jaw Open</span>
+                    <div class="bar-track"><div class="bar-fill" id="barJaw"></div></div>
+                    <span class="bar-val" id="valJaw">0%</span>
                 </div>
-                <div class="meta-row">
-                    <span class="meta-label">Prompt</span>
-                    <span class="meta-val" id="metaPrompt">--</span>
+                <div class="expression-bar-row">
+                    <span class="bar-label">Eye Blink</span>
+                    <div class="bar-track"><div class="bar-fill" id="barBlink"></div></div>
+                    <span class="bar-val" id="valBlink">0%</span>
+                </div>
+                <div class="expression-bar-row">
+                    <span class="bar-label">Pucker</span>
+                    <div class="bar-track"><div class="bar-fill" id="barPucker"></div></div>
+                    <span class="bar-val" id="valPucker">0%</span>
                 </div>
             </div>
         </div>
 
         <div class="controls">
-            <button class="main-btn capture" id="actionBtn">&#x1F3B2; Roll the AI Dice!</button>
-            <div class="loading-bar" id="loadingBar">
-                <div class="loading-bar-inner" id="loadingBarInner"></div>
+            <div class="toggle-row">
+                <button class="toggle-btn active" data-layer="mesh">Mesh</button>
+                <button class="toggle-btn active" data-layer="outline">Outline</button>
+                <button class="toggle-btn active" data-layer="eyes">Eyes</button>
+                <button class="toggle-btn active" data-layer="brows">Brows</button>
+                <button class="toggle-btn active" data-layer="lips">Lips</button>
+                <button class="toggle-btn active" data-layer="iris">Iris</button>
+                <button class="toggle-btn active" data-layer="dots">Dots</button>
             </div>
-            <div class="status-text" id="statusText"></div>
+            <div class="status-text" id="statusText">Initializing face tracker...</div>
             <div class="error-text" id="errorText"></div>
         </div>
-
-        <div class="gallery" id="gallery" style="display:none;">
-            <div class="gallery-title">Your Transformations</div>
-            <div class="gallery-strip" id="galleryStrip"></div>
-        </div>
-    </div>
-
-    <div class="fullscreen-view" id="fullscreenView">
-        <img id="fullscreenImg" alt="Full view" />
     </div>
 
 <script type="module">
@@ -498,54 +375,183 @@
     const video = document.getElementById("webcam");
     const meshCanvas = document.getElementById("meshCanvas");
     const meshCtx = meshCanvas.getContext("2d");
-    const confidenceLabel = document.getElementById("confidence");
     const hudOverlay = document.getElementById("hudOverlay");
-    const actionBtn = document.getElementById("actionBtn");
-    const laser = document.getElementById("laser");
-    const capturedImg = document.getElementById("capturedImg");
-    const resultImg = document.getElementById("resultImg");
-    const mirrorFrame = document.getElementById("mirrorFrame");
-    const resultsPanel = document.getElementById("resultsPanel");
-    const countdownOverlay = document.getElementById("countdownOverlay");
-    const countdownNum = document.getElementById("countdownNum");
-    const flashOverlay = document.getElementById("flashOverlay");
-    const loadingBar = document.getElementById("loadingBar");
-    const loadingBarInner = document.getElementById("loadingBarInner");
+    const statsOverlay = document.getElementById("statsOverlay");
+    const expressionBars = document.getElementById("expressionBars");
+    const expressionLabel = document.getElementById("expressionLabel");
+    const confidenceEl = document.getElementById("confidence");
+    const faceCountEl = document.getElementById("faceCount");
+    const fpsValue = document.getElementById("fpsValue");
+    const landmarkCount = document.getElementById("landmarkCount");
+    const headYaw = document.getElementById("headYaw");
+    const headPitch = document.getElementById("headPitch");
     const statusText = document.getElementById("statusText");
     const errorText = document.getElementById("errorText");
-    const comparison = document.getElementById("comparison");
-    const metaTheme = document.getElementById("metaTheme");
-    const metaSeed = document.getElementById("metaSeed");
-    const metaPrompt = document.getElementById("metaPrompt");
-    const gallery = document.getElementById("gallery");
-    const galleryStrip = document.getElementById("galleryStrip");
-    const fullscreenView = document.getElementById("fullscreenView");
-    const fullscreenImg = document.getElementById("fullscreenImg");
+    const mirrorFrame = document.getElementById("mirrorFrame");
+
+    const barSmile = document.getElementById("barSmile");
+    const barBrowUp = document.getElementById("barBrowUp");
+    const barBrowDown = document.getElementById("barBrowDown");
+    const barJaw = document.getElementById("barJaw");
+    const barBlink = document.getElementById("barBlink");
+    const barPucker = document.getElementById("barPucker");
+    const valSmile = document.getElementById("valSmile");
+    const valBrowUp = document.getElementById("valBrowUp");
+    const valBrowDown = document.getElementById("valBrowDown");
+    const valJaw = document.getElementById("valJaw");
+    const valBlink = document.getElementById("valBlink");
+    const valPucker = document.getElementById("valPucker");
 
     let faceLandmarker = null;
     let drawingUtils = null;
     let meshLoopRunning = false;
-    let meshPaused = false;
-    let isProcessing = false;
-    let isShowingResult = false;
-    let loadingInterval = null;
-    let historyArr = [];
-    let cameraReady = false;
 
-    const loadingMsgs = [
-        "Extracting facial geometry...",
-        "Mapping identity vectors...",
-        "Synthesizing neural portrait...",
-        "Calibrating identity transfer...",
-        "Reconstructing likeness matrix...",
-        "Rendering photorealistic output...",
-        "Finalizing identity fusion...",
-    ];
+    const layers = {
+        mesh: true,
+        outline: true,
+        eyes: true,
+        brows: true,
+        lips: true,
+        iris: true,
+        dots: true,
+    };
 
-    let meshAvailable = false;
+    const EXPRESSION_COLORS = {
+        neutral:   { h: 174, s: 100, l: 50, name: "NEUTRAL",   hex: "#00ffcc" },
+        happy:     { h: 142, s: 80,  l: 55, name: "HAPPY",     hex: "#2ecc71" },
+        surprised: { h: 48,  s: 100, l: 55, name: "SURPRISED", hex: "#f1c40f" },
+        angry:     { h: 0,   s: 80,  l: 55, name: "ANGRY",     hex: "#e74c3c" },
+        sad:       { h: 220, s: 70,  l: 60, name: "SAD",       hex: "#5b8def" },
+        kiss:      { h: 290, s: 70,  l: 60, name: "KISS",      hex: "#c77dff" },
+        wink:      { h: 270, s: 80,  l: 65, name: "WINK",      hex: "#a855f7" },
+        jawOpen:   { h: 25,  s: 95,  l: 55, name: "JAW OPEN",  hex: "#f59e0b" },
+    };
+
+    let currentExpression = EXPRESSION_COLORS.neutral;
+    let smoothedExpression = { ...EXPRESSION_COLORS.neutral };
+    let expressionConfidence = 0;
+
+    let frameCount = 0;
+    let lastFpsTime = performance.now();
+    let currentFps = 0;
+
+    document.querySelectorAll(".toggle-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const layer = btn.dataset.layer;
+            layers[layer] = !layers[layer];
+            btn.classList.toggle("active", layers[layer]);
+        });
+    });
+
+    function getBlendshapeValue(blendshapes, name) {
+        if (!blendshapes || !blendshapes[0] || !blendshapes[0].categories) return 0;
+        const cat = blendshapes[0].categories.find(c => c.categoryName === name);
+        return cat ? cat.score : 0;
+    }
+
+    function detectExpression(blendshapes) {
+        const smile = (getBlendshapeValue(blendshapes, "mouthSmileLeft") + getBlendshapeValue(blendshapes, "mouthSmileRight")) / 2;
+        const browUp = (getBlendshapeValue(blendshapes, "browInnerUp") + getBlendshapeValue(blendshapes, "browOuterUpLeft") + getBlendshapeValue(blendshapes, "browOuterUpRight")) / 3;
+        const browDown = (getBlendshapeValue(blendshapes, "browDownLeft") + getBlendshapeValue(blendshapes, "browDownRight")) / 2;
+        const jawOpen = getBlendshapeValue(blendshapes, "jawOpen");
+        const blinkL = getBlendshapeValue(blendshapes, "eyeBlinkLeft");
+        const blinkR = getBlendshapeValue(blendshapes, "eyeBlinkRight");
+        const blink = (blinkL + blinkR) / 2;
+        const pucker = getBlendshapeValue(blendshapes, "mouthPucker");
+        const mouthFrown = (getBlendshapeValue(blendshapes, "mouthFrownLeft") + getBlendshapeValue(blendshapes, "mouthFrownRight")) / 2;
+
+        let expr = EXPRESSION_COLORS.neutral;
+        let conf = 0.3;
+
+        const winkDiff = Math.abs(blinkL - blinkR);
+        if (winkDiff > 0.4 && (blinkL > 0.5 || blinkR > 0.5) && blink < 0.7) {
+            expr = EXPRESSION_COLORS.wink;
+            conf = 0.5 + winkDiff * 0.5;
+        } else if (pucker > 0.5) {
+            expr = EXPRESSION_COLORS.kiss;
+            conf = 0.5 + pucker * 0.5;
+        } else if (smile > 0.5 && jawOpen > 0.3) {
+            expr = EXPRESSION_COLORS.surprised;
+            conf = 0.5 + (smile + jawOpen) * 0.25;
+        } else if (smile > 0.35) {
+            expr = EXPRESSION_COLORS.happy;
+            conf = 0.4 + smile * 0.6;
+        } else if (browUp > 0.35 && jawOpen > 0.25) {
+            expr = EXPRESSION_COLORS.surprised;
+            conf = 0.4 + (browUp + jawOpen) * 0.3;
+        } else if (jawOpen > 0.5) {
+            expr = EXPRESSION_COLORS.jawOpen;
+            conf = 0.5 + jawOpen * 0.5;
+        } else if (browDown > 0.35 && mouthFrown > 0.2) {
+            expr = EXPRESSION_COLORS.angry;
+            conf = 0.4 + (browDown + mouthFrown) * 0.3;
+        } else if (mouthFrown > 0.3) {
+            expr = EXPRESSION_COLORS.sad;
+            conf = 0.4 + mouthFrown * 0.5;
+        } else if (browDown > 0.3) {
+            expr = EXPRESSION_COLORS.angry;
+            conf = 0.3 + browDown * 0.5;
+        }
+
+        expressionConfidence = Math.min(conf, 1);
+
+        currentExpression = expr;
+        smoothedExpression = lerpColor(smoothedExpression, expr, 0.15);
+
+        updateBar(barSmile, valSmile, smile);
+        updateBar(barBrowUp, valBrowUp, browUp);
+        updateBar(barBrowDown, valBrowDown, browDown);
+        updateBar(barJaw, valJaw, jawOpen);
+        updateBar(barBlink, valBlink, blink);
+        updateBar(barPucker, valPucker, pucker);
+
+        return expr;
+    }
+
+    function updateBar(barEl, valEl, value) {
+        const pct = Math.round(value * 100);
+        barEl.style.width = pct + "%";
+        barEl.style.background = expressionHSL(1);
+        valEl.textContent = pct + "%";
+        valEl.style.color = expressionHSL(1);
+    }
+
+    function lerpColor(a, b, t) {
+        return {
+            h: a.h + (b.h - a.h) * t,
+            s: a.s + (b.s - a.s) * t,
+            l: a.l + (b.l - a.l) * t,
+        };
+    }
+
+    function expressionHSL(alpha) {
+        const c = smoothedExpression;
+        return `hsla(${Math.round(c.h)}, ${c.s}%, ${c.l}%, ${alpha})`;
+    }
+
+    function estimateHeadPose(landmarks) {
+        const nose = landmarks[1];
+        const leftCheek = landmarks[234];
+        const rightCheek = landmarks[454];
+        const forehead = landmarks[10];
+        const chin = landmarks[152];
+
+        const faceWidth = Math.abs(rightCheek.x - leftCheek.x);
+        const faceCenterX = (leftCheek.x + rightCheek.x) / 2;
+        const yawOffset = (nose.x - faceCenterX) / (faceWidth || 0.01);
+        const yaw = Math.round(yawOffset * 90);
+
+        const faceHeight = Math.abs(chin.y - forehead.y);
+        const faceCenterY = (forehead.y + chin.y) / 2;
+        const pitchOffset = (nose.y - faceCenterY) / (faceHeight || 0.01);
+        const pitch = Math.round(pitchOffset * 90);
+
+        return { yaw, pitch };
+    }
 
     async function initFaceMesh() {
         try {
+            statusText.textContent = "Loading face detection model...";
             const filesetResolver = await FilesetResolver.forVisionTasks(
                 "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
             );
@@ -555,9 +561,9 @@
                     modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
                     delegate: "GPU"
                 },
-                outputFaceBlendshapes: false,
+                outputFaceBlendshapes: true,
                 runningMode: "VIDEO",
-                numFaces: 1
+                numFaces: 4
             };
 
             try {
@@ -569,30 +575,32 @@
             }
 
             drawingUtils = new DrawingUtils(meshCtx);
-            meshAvailable = true;
-            console.log("FaceLandmarker ready");
+            statusText.textContent = "Model loaded. Starting camera...";
+            console.log("FaceLandmarker ready with blendshapes");
+            return true;
         } catch (err) {
             console.error("MediaPipe init failed:", err);
-            meshAvailable = false;
-            confidenceLabel.innerText = "OFFLINE";
-            hudOverlay.classList.add("visible");
+            statusText.textContent = "";
+            errorText.textContent = "Face detection model failed to load. Try refreshing.";
+            errorText.style.display = "block";
+            return false;
         }
     }
 
     async function startCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 720 } },
+                video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
                 audio: false
             });
             video.srcObject = stream;
-            await new Promise((resolve) => {
-                video.onloadeddata = resolve;
-            });
-            cameraReady = true;
-            if (meshAvailable) startMeshLoop();
+            await new Promise((resolve) => { video.onloadeddata = resolve; });
+            statusText.textContent = "";
+            startMeshLoop();
         } catch (e) {
-            cameraReady = false;
+            statusText.textContent = "";
+            errorText.textContent = "Camera not available. Please allow camera access and refresh.";
+            errorText.style.display = "block";
         }
     }
 
@@ -604,11 +612,6 @@
 
     function predictWebcam() {
         if (!meshLoopRunning) return;
-
-        if (meshPaused) {
-            setTimeout(() => requestAnimationFrame(predictWebcam), 200);
-            return;
-        }
 
         if (!faceLandmarker || !drawingUtils || video.paused || video.ended || video.videoWidth === 0) {
             setTimeout(() => requestAnimationFrame(predictWebcam), 100);
@@ -628,238 +631,119 @@
 
         meshCtx.clearRect(0, 0, meshCanvas.width, meshCanvas.height);
 
-        if (results && results.faceLandmarks && results.faceLandmarks.length > 0) {
-            for (const landmarks of results.faceLandmarks) {
-                drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION,
-                    { color: "#00ffcc44", lineWidth: 1 });
-                drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE,
-                    { color: "#00ffcc" });
-                drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,
-                    { color: "#00ffcc" });
-                drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS,
-                    { color: "#00ffcc", lineWidth: 2 });
-                drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS,
-                    { color: "#00ffcc", lineWidth: 2 });
+        frameCount++;
+        const now = performance.now();
+        if (now - lastFpsTime >= 1000) {
+            currentFps = Math.round(frameCount * 1000 / (now - lastFpsTime));
+            frameCount = 0;
+            lastFpsTime = now;
+            fpsValue.textContent = currentFps;
+        }
+
+        const hasFaces = results && results.faceLandmarks && results.faceLandmarks.length > 0;
+
+        if (hasFaces) {
+            const numFaces = results.faceLandmarks.length;
+            faceCountEl.textContent = numFaces;
+
+            const targetExpr = detectExpression(results.faceBlendshapes);
+
+            expressionLabel.textContent = targetExpr.name;
+            expressionLabel.style.color = targetExpr.hex;
+            confidenceEl.textContent = Math.round(expressionConfidence * 100) + "%";
+            confidenceEl.style.color = expressionHSL(1);
+
+            const primaryLandmarks = results.faceLandmarks[0];
+            landmarkCount.textContent = primaryLandmarks.length;
+
+            const pose = estimateHeadPose(primaryLandmarks);
+            headYaw.textContent = (pose.yaw > 0 ? "+" : "") + pose.yaw + "°";
+            headPitch.textContent = (pose.pitch > 0 ? "+" : "") + pose.pitch + "°";
+
+            mirrorFrame.style.borderColor = expressionHSL(0.6);
+            hudOverlay.style.borderLeftColor = expressionHSL(1);
+            statsOverlay.style.borderRightColor = expressionHSL(1);
+
+            for (let fi = 0; fi < numFaces; fi++) {
+                const landmarks = results.faceLandmarks[fi];
+                const w = meshCanvas.width;
+                const h = meshCanvas.height;
+
+                if (layers.mesh) {
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION,
+                        { color: expressionHSL(0.12), lineWidth: 0.5 });
+                }
+
+                if (layers.outline) {
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,
+                        { color: expressionHSL(0.9), lineWidth: 2.5 });
+                }
+
+                if (layers.eyes) {
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE,
+                        { color: expressionHSL(0.95), lineWidth: 1.5 });
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,
+                        { color: expressionHSL(0.95), lineWidth: 1.5 });
+                }
+
+                if (layers.brows) {
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW,
+                        { color: expressionHSL(0.8), lineWidth: 2 });
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW,
+                        { color: expressionHSL(0.8), lineWidth: 2 });
+                }
+
+                if (layers.lips) {
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LIPS,
+                        { color: expressionHSL(0.95), lineWidth: 2 });
+                }
+
+                if (layers.iris) {
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS,
+                        { color: expressionHSL(1), lineWidth: 2.5 });
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS,
+                        { color: expressionHSL(1), lineWidth: 2.5 });
+                }
+
+                if (layers.dots) {
+                    meshCtx.save();
+                    const dotColor = expressionHSL(0.5);
+                    for (let i = 0; i < landmarks.length; i++) {
+                        const x = landmarks[i].x * w;
+                        const y = landmarks[i].y * h;
+                        meshCtx.fillStyle = dotColor;
+                        meshCtx.beginPath();
+                        meshCtx.arc(x, y, 0.8, 0, Math.PI * 2);
+                        meshCtx.fill();
+                    }
+                    meshCtx.restore();
+                }
             }
 
-            confidenceLabel.innerText = (96.4 + Math.random() * 3.4).toFixed(1) + "%";
             hudOverlay.classList.add("visible");
+            statsOverlay.classList.add("visible");
+            expressionBars.classList.add("visible");
         } else {
-            confidenceLabel.innerText = "NO FACE";
-            hudOverlay.classList.remove("visible");
+            expressionLabel.textContent = "NO FACE";
+            expressionLabel.style.color = "#ff5555";
+            confidenceEl.textContent = "--";
+            faceCountEl.textContent = "0";
+            landmarkCount.textContent = "--";
+            headYaw.textContent = "--";
+            headPitch.textContent = "--";
+            hudOverlay.classList.add("visible");
+            statsOverlay.classList.remove("visible");
+            expressionBars.classList.remove("visible");
+            mirrorFrame.style.borderColor = "var(--border)";
         }
 
         requestAnimationFrame(predictWebcam);
     }
 
-    function countdown() {
-        return new Promise(resolve => {
-            countdownOverlay.style.display = "flex";
-            let count = 3;
-            countdownNum.textContent = count;
-
-            const tick = setInterval(() => {
-                count--;
-                if (count > 0) {
-                    countdownNum.textContent = count;
-                    countdownNum.style.animation = "none";
-                    void countdownNum.offsetWidth;
-                    countdownNum.style.animation = "countPop 0.6s ease-out";
-                } else {
-                    clearInterval(tick);
-                    countdownOverlay.style.display = "none";
-                    flashOverlay.classList.remove("fire");
-                    void flashOverlay.offsetWidth;
-                    flashOverlay.classList.add("fire");
-                    resolve();
-                }
-            }, 1000);
-        });
+    const modelReady = await initFaceMesh();
+    if (modelReady) {
+        await startCamera();
     }
-
-    function captureFrame() {
-        const offscreen = document.createElement("canvas");
-        offscreen.width = video.videoWidth || 640;
-        offscreen.height = video.videoHeight || 480;
-        const ctx = offscreen.getContext("2d");
-        ctx.translate(offscreen.width, 0);
-        ctx.scale(-1, 1);
-        ctx.drawImage(video, 0, 0);
-        return offscreen.toDataURL("image/jpeg", 0.85);
-    }
-
-    function runLaserScan() {
-        return new Promise(resolve => {
-            let resolved = false;
-            function finish() {
-                if (resolved) return;
-                resolved = true;
-                laser.removeEventListener("animationend", finish);
-                laser.style.display = "none";
-                laser.style.animation = "none";
-                resolve();
-            }
-
-            laser.style.display = "block";
-            laser.style.animation = "none";
-            void laser.offsetWidth;
-            laser.style.animation = "scanMove 1.5s ease-in-out";
-            laser.addEventListener("animationend", finish);
-            setTimeout(finish, 2000);
-        });
-    }
-
-    function startLoading() {
-        loadingBar.style.display = "block";
-        loadingBarInner.style.transition = "none";
-        loadingBarInner.style.width = "0%";
-        void loadingBarInner.offsetWidth;
-        loadingBarInner.style.transition = "width 60s linear";
-        loadingBarInner.style.width = "100%";
-
-        let elapsed = 0;
-        let msgIdx = Math.floor(Math.random() * loadingMsgs.length);
-        statusText.textContent = loadingMsgs[msgIdx];
-
-        loadingInterval = setInterval(() => {
-            elapsed++;
-            if (elapsed % 5 === 0) msgIdx = (msgIdx + 1) % loadingMsgs.length;
-            statusText.textContent = loadingMsgs[msgIdx] + ` (${elapsed}s)`;
-        }, 1000);
-    }
-
-    function stopLoading() {
-        if (loadingInterval) {
-            clearInterval(loadingInterval);
-            loadingInterval = null;
-        }
-        loadingBar.style.display = "none";
-        loadingBarInner.style.transition = "none";
-        loadingBarInner.style.width = "0%";
-        statusText.textContent = "";
-    }
-
-    function addToGallery(aiSrc, theme) {
-        historyArr.unshift({ ai: aiSrc, theme });
-        if (historyArr.length > 20) historyArr.pop();
-
-        gallery.style.display = "block";
-        galleryStrip.innerHTML = "";
-        historyArr.forEach((item, i) => {
-            const thumb = document.createElement("div");
-            thumb.className = "gallery-thumb";
-            const img = document.createElement("img");
-            img.src = item.ai;
-            img.alt = "Transform " + (i + 1);
-            const label = document.createElement("div");
-            label.className = "g-label";
-            label.textContent = item.theme;
-            thumb.appendChild(img);
-            thumb.appendChild(label);
-            thumb.onclick = () => {
-                fullscreenImg.src = item.ai;
-                fullscreenView.style.display = "flex";
-            };
-            galleryStrip.appendChild(thumb);
-        });
-    }
-
-    fullscreenView.onclick = () => { fullscreenView.style.display = "none"; };
-
-    actionBtn.addEventListener("click", async () => {
-        if (isShowingResult) {
-            resultsPanel.style.display = "none";
-            mirrorFrame.style.display = "block";
-            meshPaused = false;
-            actionBtn.textContent = "\u{1F3B2} Roll the AI Dice!";
-            actionBtn.className = "main-btn capture";
-            errorText.style.display = "none";
-            isShowingResult = false;
-            return;
-        }
-
-        if (isProcessing) return;
-
-        if (!cameraReady) {
-            errorText.textContent = "Camera not available. Open this page in a new browser tab for camera access.";
-            errorText.style.display = "block";
-            return;
-        }
-
-        isProcessing = true;
-        actionBtn.disabled = true;
-        errorText.style.display = "none";
-
-        await countdown();
-
-        const imageData = captureFrame();
-        capturedImg.src = imageData;
-
-        meshPaused = true;
-        meshCtx.clearRect(0, 0, meshCanvas.width, meshCanvas.height);
-        hudOverlay.classList.remove("visible");
-
-        statusText.textContent = "Extrapolating facial data...";
-        await runLaserScan();
-
-        mirrorFrame.style.display = "none";
-        resultsPanel.style.display = "block";
-        resultImg.src = "";
-        comparison.classList.remove("reveal-anim");
-
-        startLoading();
-
-        try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 120000);
-
-            const response = await fetch("/transform", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ image: imageData }),
-                signal: controller.signal,
-            });
-            clearTimeout(timeout);
-
-            let data;
-            const text = await response.text();
-            try {
-                data = JSON.parse(text);
-            } catch (parseErr) {
-                throw new Error("Server returned an invalid response. Please try again.");
-            }
-
-            if (data.success) {
-                stopLoading();
-                resultImg.src = data.image;
-                comparison.classList.add("reveal-anim");
-                metaTheme.textContent = data.theme || "--";
-                metaSeed.textContent = data.seed != null ? data.seed : "--";
-                metaPrompt.textContent = data.prompt || "--";
-                actionBtn.textContent = "\u{1F3B2} Roll Again!";
-                actionBtn.className = "main-btn again";
-                isShowingResult = true;
-                addToGallery(data.image, data.theme || "Mystery");
-            } else {
-                throw new Error(data.error || "Generation failed.");
-            }
-        } catch (err) {
-            stopLoading();
-            resultsPanel.style.display = "none";
-            mirrorFrame.style.display = "block";
-            meshPaused = false;
-            errorText.textContent = err.name === "AbortError"
-                ? "Timed out. Try again."
-                : err.message;
-            errorText.style.display = "block";
-        } finally {
-            isProcessing = false;
-            actionBtn.disabled = false;
-        }
-    });
-
-    await initFaceMesh();
-    await startCamera();
 </script>
 </body>
 </html>
