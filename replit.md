@@ -6,45 +6,58 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ## Face Tracker
 
-Standalone Flask app at the workspace root. Real-time face tracking with expression analysis using MediaPipe.
+Standalone Flask app at the workspace root. Real-time face tracking using MediaPipe, branded for Qualcomm QRB2210.
 
 ### Architecture
 
 Pure client-side face detection using **MediaPipe Face Landmarker** (v0.10.3):
-- 478 facial landmarks tracked in real-time
-- Face blendshapes enabled for expression detection
-- Supports up to 4 simultaneous faces
+- 478 facial landmarks tracked per face in real-time
+- Supports up to 4 simultaneous faces with persistent ID tracking
 - GPU delegate with CPU fallback
 - All processing happens in the browser — backend only serves the HTML page
+- Blendshapes disabled (detection-only, no expression analysis)
 
 ### Features
 
-- Real-time face mesh tessellation overlay
+- Real-time face mesh tessellation overlay (all 478 landmarks)
 - Face outline (jawline/oval) tracking
 - Individual feature tracking: eyes, eyebrows, lips, iris
-- Landmark dot visualization
-- **Expression detection** with color-coded overlays:
-  - Neutral (cyan), Happy (green), Surprised (yellow), Angry (red)
-  - Sad (blue), Kiss (purple), Wink (violet), Jaw Open (amber)
-- Expression confidence percentage
-- Blendshape analysis bars (smile, brow raise/furrow, jaw, blink, pucker)
-- Head pose estimation (yaw/pitch)
-- FPS counter and landmark count
-- Toggle buttons to show/hide individual tracking layers
-- Smoothed color transitions between expressions
+- Landmark dot visualization (1px dots per landmark)
+- **Per-face persistent tracking**: faces get unique IDs and colors, with tracking duration shown
+- Face matching uses sorted global-minimum distance with adaptive thresholds (scaled by face width)
+- Tracks survive brief detection dropouts (800ms TTL)
+- Each face gets a unique color (blue, orange, green, purple) for easy identification
+- Floating label above each face showing "Face N · duration"
+- Head pose estimation (yaw/pitch) for primary face
+- 5 overlay presets: Full Mesh+Features (default), Outline+Features, Mesh Only, Dots Only, Minimal
+- HUD panels: face count, FPS, latency, delegate, resolution, yaw/pitch, uptime, frame count — updated every 2 seconds
+- Qualcomm branding with logo in header and professional dark UI
 
 ### Key Files
 
 | File | Purpose |
 |------|---------|
-| `app.py` | Flask backend — serves the HTML page only |
-| `templates/index.html` | Full face tracker UI — camera, mesh, expression HUD, toggle controls |
+| `app.py` | Flask backend — serves the HTML page and static files |
+| `templates/index.html` | Full face tracker UI — camera, mesh overlay, tracking HUD, overlay controls |
+| `static/qualcomm-logo.png` | Qualcomm brand logo |
 
 ### Dependencies
 
 - Python: `flask`
-- Client-side: MediaPipe Tasks Vision (CDN)
+- Client-side: MediaPipe Tasks Vision (CDN via skypack)
+- WASM: MediaPipe via jsdelivr CDN
+- Fonts: Inter + JetBrains Mono (Google Fonts)
 - **Workflow**: "Smart Mirror" — `python3 app.py` on `PORT` (default 8000)
+
+### Critical Implementation Notes
+
+- Video uses `display: block; width: 100%` with `transform: scaleX(-1)` for mirror effect
+- Canvas uses `position: absolute; top:0; left:0; width:100%; height:100%` with matching `scaleX(-1)`
+- Canvas internal dimensions set to `video.videoWidth/Height` once (not every frame)
+- DrawingUtils recreated only when canvas dimensions change
+- Timestamps for `detectForVideo` use `requestAnimationFrame` callback time with guaranteed monotonic increment
+- Model fails in headless/no-WebGL environments (Replit preview) — works in real browser with camera
+- Stats update every 2 seconds to minimize DOM overhead
 
 ## Stack
 
@@ -73,6 +86,7 @@ artifacts-monorepo/
 ├── scripts/                # Utility scripts
 ├── app.py                  # Face Tracker Flask backend
 ├── templates/index.html    # Face Tracker UI
+├── static/                 # Static assets (logo, etc.)
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json
 ├── tsconfig.json

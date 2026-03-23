@@ -37,9 +37,7 @@
         }
 
         .header img { height: 24px; opacity: 0.9; }
-
         .header-div { width: 1px; height: 24px; background: var(--border); }
-
         .header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
 
         .viewport {
@@ -98,6 +96,22 @@
         .hud-k { color: #444c5c; text-transform: uppercase; letter-spacing: 0.06em; font-size: 8px; font-weight: 500; }
         .hud-v { color: #7a8599; font-weight: 500; }
 
+        .face-list {
+            margin-top: 3px;
+            padding-top: 3px;
+            border-top: 1px solid rgba(255,255,255,0.04);
+        }
+
+        .face-entry {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            line-height: 1.55;
+        }
+
+        .face-id { font-size: 8px; font-weight: 500; }
+        .face-time { color: #7a8599; font-size: 9px; font-weight: 500; }
+
         .controls {
             margin-top: 10px;
             display: flex;
@@ -138,12 +152,14 @@
         <canvas id="overlay"></canvas>
 
         <div class="hud hud-tl on" id="hudTL">
-            <div class="hud-row"><span class="hud-k">Faces</span><span class="hud-v" id="hFaces">0</span></div>
-            <div class="hud-row"><span class="hud-k">FPS</span><span class="hud-v" id="hFps">--</span></div>
-            <div class="hud-row"><span class="hud-k">Latency</span><span class="hud-v" id="hLat">--</span></div>
+            <div class="hud-row"><span class="hud-k">Tracking</span><span class="hud-v" id="hFaces">0 faces</span></div>
+            <div class="hud-row"><span class="hud-k">Points/Face</span><span class="hud-v" id="hPts">478</span></div>
+            <div id="faceList" class="face-list"></div>
         </div>
 
         <div class="hud hud-tr on" id="hudTR">
+            <div class="hud-row"><span class="hud-k">FPS</span><span class="hud-v" id="hFps">--</span></div>
+            <div class="hud-row"><span class="hud-k">Latency</span><span class="hud-v" id="hLat">--</span></div>
             <div class="hud-row"><span class="hud-k">Delegate</span><span class="hud-v" id="hDel">--</span></div>
             <div class="hud-row"><span class="hud-k">Res</span><span class="hud-v" id="hRes">--</span></div>
         </div>
@@ -162,8 +178,8 @@
     <div class="controls">
         <label>Overlay</label>
         <select id="preset">
-            <option value="full">Full Mesh + Features</option>
-            <option value="outline" selected>Outline + Features</option>
+            <option value="full" selected>Full Mesh + Features</option>
+            <option value="outline">Outline + Features</option>
             <option value="mesh">Mesh Only</option>
             <option value="dots">Dots Only</option>
             <option value="minimal">Minimal</option>
@@ -182,12 +198,14 @@
     const statusEl = document.getElementById("status");
     const errorEl = document.getElementById("error");
     const hudBL = document.getElementById("hudBL");
+    const faceListEl = document.getElementById("faceList");
 
-    const MESH   = "rgba(50,83,220,0.12)";
-    const EDGE   = "rgba(50,83,220,0.7)";
-    const FEAT   = "rgba(50,83,220,0.85)";
-    const IRIS   = "rgba(0,200,255,0.9)";
-    const DOT    = "rgba(50,83,220,0.4)";
+    const FACE_COLORS = [
+        { mesh: "rgba(50,83,220,0.12)", edge: "rgba(50,83,220,0.7)",  feat: "rgba(50,83,220,0.85)", iris: "rgba(0,200,255,0.9)",  dot: "rgba(50,83,220,0.45)",  label: "#3253dc", tag: "#5577ff" },
+        { mesh: "rgba(220,130,50,0.12)", edge: "rgba(220,150,50,0.7)", feat: "rgba(220,150,50,0.85)", iris: "rgba(255,180,0,0.9)",  dot: "rgba(220,150,50,0.45)", label: "#dc9632", tag: "#ffaa33" },
+        { mesh: "rgba(50,200,120,0.12)", edge: "rgba(50,200,120,0.7)", feat: "rgba(50,200,120,0.85)", iris: "rgba(100,255,180,0.9)", dot: "rgba(50,200,120,0.45)", label: "#32c878", tag: "#44dd88" },
+        { mesh: "rgba(200,50,180,0.12)", edge: "rgba(200,50,180,0.7)", feat: "rgba(200,50,180,0.85)", iris: "rgba(255,100,220,0.9)", dot: "rgba(200,50,180,0.45)", label: "#c832b4", tag: "#ee55cc" },
+    ];
 
     const PRESETS = {
         full:    { mesh:1, outline:1, eyes:1, brows:1, lips:1, iris:1, dots:1 },
@@ -197,19 +215,74 @@
         minimal: { mesh:0, outline:1, eyes:0, brows:0, lips:0, iris:1, dots:0 },
     };
 
-    let L = { ...PRESETS.outline };
+    let L = { ...PRESETS.full };
     presetEl.onchange = () => { L = { ...PRESETS[presetEl.value] }; };
 
     let fl = null, du = null, delegate = "CPU";
     let cW = 0, cH = 0;
-    let frameCnt = 0, fpsCnt = 0, fpsT = 0, fps = 0, total = 0;
-    const t0 = performance.now();
+    let fpsCnt = 0, fpsT = 0, fps = 0, total = 0;
+    const startTime = performance.now();
     let lastTs = -1, lastHud = 0;
     let latMs = 0, nFaces = 0, yaw = 0, pitch = 0;
 
-    function fmt(ms) {
+    let trackedFaces = [];
+    let nextFaceId = 1;
+    const TRACK_TTL = 800;
+
+    function fmtTime(ms) {
+        const s = Math.floor(ms / 1000);
+        if (s < 60) return s + "s";
+        const m = Math.floor(s / 60);
+        return m + "m " + (s % 60) + "s";
+    }
+
+    function fmtUptime(ms) {
         const s = Math.floor(ms / 1000);
         return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+    }
+
+    function faceCenter(lm) {
+        const nose = lm[1];
+        const lc = lm[234], rc = lm[454];
+        return { x: (lc.x + rc.x) / 2, y: nose.y, w: Math.abs(rc.x - lc.x) };
+    }
+
+    function matchFaces(newFaces, now) {
+        const centers = newFaces.map(lm => faceCenter(lm));
+        const usedTrack = new Set();
+        const usedNew = new Set();
+        const matched = new Array(centers.length).fill(null);
+
+        const pairs = [];
+        for (let i = 0; i < centers.length; i++) {
+            for (let j = 0; j < trackedFaces.length; j++) {
+                const c = centers[i], t = trackedFaces[j];
+                const threshold = Math.max(t.w * 1.5, 0.08);
+                const dist = Math.sqrt(Math.pow(c.x - t.x, 2) + Math.pow(c.y - t.y, 2));
+                if (dist < threshold) pairs.push({ i, j, dist });
+            }
+        }
+        pairs.sort((a, b) => a.dist - b.dist);
+
+        for (const p of pairs) {
+            if (usedNew.has(p.i) || usedTrack.has(p.j)) continue;
+            usedNew.add(p.i);
+            usedTrack.add(p.j);
+            const t = trackedFaces[p.j], c = centers[p.i];
+            matched[p.i] = { id: t.id, x: c.x, y: c.y, w: c.w, since: t.since, colorIdx: t.colorIdx, lastSeen: now };
+        }
+
+        for (let i = 0; i < centers.length; i++) {
+            if (matched[i]) continue;
+            const c = centers[i];
+            const ci = (nextFaceId - 1) % FACE_COLORS.length;
+            matched[i] = { id: nextFaceId++, x: c.x, y: c.y, w: c.w, since: now, colorIdx: ci, lastSeen: now };
+        }
+
+        const survivors = trackedFaces.filter((t, j) => !usedTrack.has(j) && (now - t.lastSeen) < TRACK_TTL);
+        trackedFaces = matched.concat(survivors);
+
+        return matched;
     }
 
     async function init() {
@@ -281,31 +354,53 @@
         const faces = res && res.faceLandmarks ? res.faceLandmarks : [];
         nFaces = faces.length;
 
+        const tracked = matchFaces(faces, now);
+
         for (let i = 0; i < faces.length; i++) {
             const lm = faces[i];
-            if (L.mesh)    du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_TESSELATION,    { color: MESH, lineWidth: 0.5 });
-            if (L.outline) du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,      { color: EDGE, lineWidth: 2 });
+            const clr = FACE_COLORS[tracked[i].colorIdx];
+
+            if (L.mesh)    du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_TESSELATION,    { color: clr.mesh, lineWidth: 0.5 });
+            if (L.outline) du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,      { color: clr.edge, lineWidth: 2 });
             if (L.eyes) {
-                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, { color: FEAT, lineWidth: 1.5 });
-                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,  { color: FEAT, lineWidth: 1.5 });
+                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, { color: clr.feat, lineWidth: 1.5 });
+                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,  { color: clr.feat, lineWidth: 1.5 });
             }
             if (L.brows) {
-                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, { color: FEAT, lineWidth: 1.5 });
-                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW,  { color: FEAT, lineWidth: 1.5 });
+                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, { color: clr.feat, lineWidth: 1.5 });
+                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW,  { color: clr.feat, lineWidth: 1.5 });
             }
-            if (L.lips)    du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LIPS,           { color: FEAT, lineWidth: 1.5 });
+            if (L.lips) du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LIPS, { color: clr.feat, lineWidth: 1.5 });
             if (L.iris) {
-                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, { color: IRIS, lineWidth: 2 });
-                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS,  { color: IRIS, lineWidth: 2 });
+                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, { color: clr.iris, lineWidth: 2 });
+                du.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS,  { color: clr.iris, lineWidth: 2 });
             }
             if (L.dots) {
-                ctx.fillStyle = DOT;
+                ctx.fillStyle = clr.dot;
                 for (let j = 0; j < lm.length; j++) {
                     ctx.beginPath();
-                    ctx.arc(lm[j].x * vw, lm[j].y * vh, 0.8, 0, 6.283);
+                    ctx.arc(lm[j].x * vw, lm[j].y * vh, 1, 0, 6.283);
                     ctx.fill();
                 }
             }
+
+            const t = tracked[i];
+            const tagX = t.x * vw;
+            const tagY = (lm[10].y * vh) - 12;
+            const dur = fmtTime(now - t.since);
+            const label = "Face " + t.id + "  \u00B7  " + dur;
+            ctx.save();
+            ctx.font = "600 11px 'Inter', sans-serif";
+            const tw = ctx.measureText(label).width;
+            ctx.fillStyle = "rgba(0,0,0,0.55)";
+            ctx.beginPath();
+            ctx.roundRect(tagX - tw / 2 - 6, tagY - 10, tw + 12, 18, 4);
+            ctx.fill();
+            ctx.fillStyle = clr.tag;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(label, tagX, tagY - 1);
+            ctx.restore();
         }
 
         if (faces.length > 0) {
@@ -322,11 +417,21 @@
 
         if (now - lastHud >= 2000) {
             lastHud = now;
-            document.getElementById("hFaces").textContent = nFaces;
+            document.getElementById("hFaces").textContent = nFaces + (nFaces === 1 ? " face" : " faces");
+            document.getElementById("hPts").textContent = nFaces > 0 ? (478 * nFaces).toLocaleString() + " (" + 478 + "\u00D7" + nFaces + ")" : "478";
             document.getElementById("hFps").textContent = fps;
             document.getElementById("hLat").textContent = Math.round(latMs) + "ms";
-            document.getElementById("hUp").textContent = fmt(now - t0);
+            document.getElementById("hUp").textContent = fmtUptime(now - startTime);
             document.getElementById("hFrames").textContent = total.toLocaleString();
+
+            let listHtml = "";
+            for (const t of tracked) {
+                const dur = fmtTime(now - t.since);
+                const clr = FACE_COLORS[t.colorIdx];
+                listHtml += '<div class="face-entry"><span class="face-id" style="color:' + clr.tag + '">Face ' + t.id + '</span><span class="face-time">' + dur + '</span></div>';
+            }
+            faceListEl.innerHTML = listHtml;
+
             if (nFaces > 0) {
                 document.getElementById("hYaw").textContent = (yaw > 0 ? "+" : "") + yaw + "\u00B0";
                 document.getElementById("hPitch").textContent = (pitch > 0 ? "+" : "") + pitch + "\u00B0";
