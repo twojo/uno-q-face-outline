@@ -10,10 +10,14 @@ Standalone Flask app at the workspace root. Prototype for Arduino Uno Q (QRB2210
 
 ### Architecture
 
-Two-step AI pipeline per transformation:
-1. **FLUX Schnell** (`fal-ai/flux/schnell`) generates a themed character image (~$0.003)
-2. **Face Swap** (`fal-ai/face-swap`) maps the user's face onto the character (~$0.01)
-3. Graceful fallback: if face swap fails (no face detected), shows the generated image
+Single-step identity-preserving transformation via **InstantID** (`fal-ai/instant-id`):
+- Takes webcam capture as `face_image_url` reference
+- `ip_adapter_scale=0.85` for high identity fidelity
+- `controlnet_conditioning_scale=0.80` for facial structure preservation
+- 30 inference steps, guidance_scale=5.0
+- Identity-anchored prompts: every prompt starts with "High-fidelity portrait of the exact person in the reference image"
+- Strict negative prompt blocks generic/deformed/stylized output
+- Rotating file logger: `mirror_debug.log` (5 MB x 3 backups)
 
 ### Features
 

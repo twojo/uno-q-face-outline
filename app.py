@@ -1,92 +1,142 @@
+"""
+AI Mirror Booth — fal.ai InstantID Backend
+Designed for Arduino Uno Q (QRB2210) deployment.
+Single-step identity-preserving face transformation via InstantID.
+"""
+
 import os
+import sys
 import base64
 import random
 import time
+import logging
+from logging.handlers import RotatingFileHandler
+
 import requests
 import fal_client
 from flask import Flask, render_template, request, jsonify
 
-app = Flask(__name__, static_folder='static', template_folder='templates')
+# ── Logging ──────────────────────────────────────────────────────────────────
 
-app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5 MB max request size
+LOG_FILE = "mirror_debug.log"
 
-MAX_B64_SIZE = 2 * 1024 * 1024  # 2 MB max base64 image data
+logger = logging.getLogger("mirror")
+logger.setLevel(logging.DEBUG)
+
+file_handler = RotatingFileHandler(LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=3)
+file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+))
+logger.addHandler(file_handler)
+
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+logger.addHandler(console_handler)
+
+# ── App Setup ────────────────────────────────────────────────────────────────
+
+app = Flask(__name__, static_folder="static", template_folder="templates")
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5 MB
+
+FAL_MODEL = "fal-ai/instant-id"
+MAX_B64_SIZE = 2 * 1024 * 1024
 RATE_LIMIT_SECONDS = 5
 _last_request_by_ip = {}
 
+# ── Identity-First Prompts ───────────────────────────────────────────────────
+# Every prompt starts with an identity anchor to force the model to preserve
+# the reference face. Artistic direction comes second.
+
+IDENTITY_PREFIX = (
+    "High-fidelity portrait of the exact person in the reference image, "
+    "preserving all facial features and skin details, "
+)
+
+NEGATIVE_PROMPT = (
+    "deformed face, generic features, different person, blurry, low quality, "
+    "stylized illustration, cartoon, anime, 3d render, painting, sketch, "
+    "disfigured, bad anatomy, extra limbs, mutated hands"
+)
+
 THEMES = {
     "Time Traveler": [
-        "A close-up portrait of a person as an ancient Egyptian pharaoh wearing a golden nemes headdress and kohl eyeliner, inside a torch-lit pyramid chamber, photorealistic",
-        "A close-up portrait of a person as a 1920s flapper at a speakeasy, sequined headband, art deco background, warm amber lighting, photorealistic",
-        "A close-up portrait of a person as a Roman centurion in polished bronze armour with a red-plumed helmet, Colosseum behind them, photorealistic",
-        "A close-up portrait of a person as a futuristic cyberpunk hacker with neon face tattoos, holographic HUD in front of their eyes, rain-soaked neon city, photorealistic",
+        IDENTITY_PREFIX + "dressed as an ancient Egyptian pharaoh with golden nemes headdress, inside a torch-lit pyramid chamber, cinematic lighting, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a 1920s flapper at a speakeasy, sequined headband, art deco background, warm amber lighting, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a Roman centurion in polished bronze armour with red-plumed helmet, Colosseum behind, golden hour, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a cyberpunk hacker with neon-lit face, holographic HUD, rain-soaked neon city, cinematic lighting, shot on 35mm, photorealistic",
     ],
     "Action Hero": [
-        "A close-up portrait of a person as a fearless Viking warrior with war paint and a horned helmet on a misty battlefield, photorealistic",
-        "A close-up portrait of a person as a samurai warrior in ornate black and gold armour, cherry blossom petals floating around, photorealistic",
-        "A close-up portrait of a person as a space marine in heavy battle armour on an alien planet with two moons in the sky, photorealistic",
-        "A close-up portrait of a person as a medieval knight in gleaming silver plate armour holding a flaming sword, epic storm clouds, photorealistic",
+        IDENTITY_PREFIX + "as a Viking warrior with war paint and fur-trimmed armour on a misty battlefield, dramatic sky, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a samurai warrior in ornate black and gold armour, cherry blossom petals floating, soft morning light, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a space marine in heavy battle armour on an alien planet with two moons, cinematic lighting, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a medieval knight in gleaming silver plate armour holding a flaming sword, epic storm clouds, shot on 35mm, photorealistic",
     ],
     "Fantasy Realm": [
-        "A close-up portrait of a person as a powerful wizard with glowing blue eyes in a robe covered in arcane runes, ancient library background, photorealistic",
-        "A close-up portrait of a person as an elf ranger with pointed ears and leaf-pattern cloak in an enchanted glowing forest, photorealistic",
-        "A close-up portrait of a person as a dragon rider wearing scaled armour with a massive dragon visible behind them in flight, photorealistic",
-        "A close-up portrait of a person as a vampire lord in a gothic castle, pale skin, crimson eyes, velvet cape, candlelight, photorealistic",
+        IDENTITY_PREFIX + "as a wizard with glowing blue eyes wearing arcane-runed robes in an ancient candlelit library, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as an elf ranger with pointed ears and leaf-pattern cloak in a bioluminescent enchanted forest, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a dragon rider wearing scaled armour with a massive dragon in flight behind, sunset sky, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a vampire lord in a gothic castle, pale skin, crimson eyes, velvet cape, candlelight atmosphere, shot on 35mm, photorealistic",
     ],
     "Explorer": [
-        "A close-up portrait of a person as a NASA astronaut inside the International Space Station with Earth visible through the window, photorealistic",
-        "A close-up portrait of a person as a deep-sea diver in a vintage brass diving helmet, underwater with bioluminescent jellyfish, photorealistic",
-        "A close-up portrait of a person as an arctic explorer in a fur-lined parka on a frozen tundra with northern lights above, photorealistic",
-        "A close-up portrait of a person as a jungle explorer with a weathered hat and binoculars in a dense tropical rainforest, photorealistic",
+        IDENTITY_PREFIX + "as a NASA astronaut inside the International Space Station with Earth visible through the cupola window, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a deep-sea diver in a vintage brass diving helmet, underwater with bioluminescent jellyfish, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as an arctic explorer in a fur-lined parka on frozen tundra with northern lights above, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a jungle explorer with a weathered hat and binoculars in dense tropical rainforest, dappled sunlight, shot on 35mm, photorealistic",
     ],
     "Pop Culture": [
-        "A close-up portrait of a person as a retro disco king with a shiny jumpsuit, afro, and mirrored sunglasses on a light-up dance floor, photorealistic",
-        "A close-up portrait of a person as a punk rocker with a tall mohawk, leather jacket covered in pins, on a concert stage, photorealistic",
-        "A close-up portrait of a person as a classic Hollywood film noir detective in a trench coat and fedora, rainy alley with neon signs, photorealistic",
-        "A close-up portrait of a person as a superhero in a gleaming suit with a flowing cape, standing on a rooftop at sunset overlooking a city, photorealistic",
+        IDENTITY_PREFIX + "as a retro disco dancer with a shiny jumpsuit and mirrored sunglasses on a light-up dance floor, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a punk rocker with a tall mohawk and leather jacket covered in pins on a concert stage, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a classic film noir detective in trench coat and fedora, rainy alley with neon signs, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a superhero in a gleaming suit with flowing cape on a rooftop at sunset overlooking a city, shot on 35mm, photorealistic",
     ],
     "Wild Card": [
-        "A close-up portrait of a person as a mad scientist with wild hair and oversized goggles in a lab full of bubbling beakers and tesla coils, photorealistic",
-        "A close-up portrait of a person as a pirate captain with a tricorn hat and golden tooth on the deck of a ghost ship in fog, photorealistic",
-        "A close-up portrait of a person as a steampunk airship pilot wearing brass goggles and a leather aviator cap, clouds and gears behind them, photorealistic",
-        "A close-up portrait of a person as a Western outlaw with a bandana and dusty hat in a saloon doorway at high noon, photorealistic",
+        IDENTITY_PREFIX + "as a mad scientist with wild hair and oversized goggles in a lab of bubbling beakers and tesla coils, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a pirate captain with tricorn hat and golden tooth on the deck of a ghost ship in fog, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a steampunk airship pilot wearing brass goggles and leather aviator cap, clouds below, shot on 35mm, photorealistic",
+        IDENTITY_PREFIX + "as a Western outlaw with bandana and dusty hat in a saloon doorway at high noon, shot on 35mm, photorealistic",
     ],
 }
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# ── Routes ───────────────────────────────────────────────────────────────────
 
-@app.route('/themes', methods=['GET'])
+@app.route("/")
+def index():
+    logger.info("Serving index page")
+    return render_template("index.html")
+
+
+@app.route("/themes", methods=["GET"])
 def get_themes():
     return jsonify({"themes": list(THEMES.keys())})
 
-@app.route('/transform', methods=['POST'])
+
+@app.route("/transform", methods=["POST"])
 def transform():
     ip = request.remote_addr or "unknown"
     now = time.time()
     last = _last_request_by_ip.get(ip, 0)
     if now - last < RATE_LIMIT_SECONDS:
         wait = int(RATE_LIMIT_SECONDS - (now - last)) + 1
+        logger.warning("Rate limit hit from %s", ip)
         return jsonify({"success": False, "error": f"Please wait {wait}s before trying again."}), 429
     _last_request_by_ip[ip] = now
 
     data = request.get_json(silent=True)
     if not data or not isinstance(data, dict):
+        logger.error("Invalid JSON payload from %s", ip)
         return jsonify({"success": False, "error": "Invalid request."}), 400
 
-    raw_image = data.get('image', '')
+    raw_image = data.get("image", "")
     if not isinstance(raw_image, str) or not raw_image:
+        logger.error("Missing image field from %s", ip)
         return jsonify({"success": False, "error": "No image provided."}), 400
 
-    image_b64 = raw_image.split(',')[-1]
+    image_b64 = raw_image.split(",")[-1]
     if len(image_b64) > MAX_B64_SIZE:
-        return jsonify({"success": False, "error": "Image too large. Use a smaller photo."}), 400
+        logger.error("Image too large (%d bytes) from %s", len(image_b64), ip)
+        return jsonify({"success": False, "error": "Image too large."}), 400
 
-    if not image_b64:
-        return jsonify({"success": False, "error": "No image data received."}), 400
-
-    theme_name = data.get('theme')
+    theme_name = data.get("theme")
     if theme_name and theme_name in THEMES:
         prompt = random.choice(THEMES[theme_name])
     else:
@@ -94,52 +144,50 @@ def transform():
         prompt = random.choice(THEMES[theme_name])
 
     face_data_uri = f"data:image/jpeg;base64,{image_b64}"
+    logger.info("Transform request: theme=%s, ip=%s", theme_name, ip)
+    logger.debug("Prompt: %s", prompt[:120])
 
     try:
-        print(f"[{theme_name}] Step 1: Generating themed image...")
-        gen_result = fal_client.subscribe(
-            "fal-ai/flux/schnell",
+        t0 = time.time()
+        logger.info("Calling InstantID model...")
+
+        result = fal_client.subscribe(
+            FAL_MODEL,
             arguments={
+                "face_image_url": face_data_uri,
                 "prompt": prompt,
-                "image_size": "square",
-                "num_images": 1,
+                "negative_prompt": NEGATIVE_PROMPT,
+                "ip_adapter_scale": 0.85,
+                "controlnet_conditioning_scale": 0.80,
+                "num_inference_steps": 30,
+                "guidance_scale": 5.0,
                 "seed": random.randint(0, 999999),
             },
         )
 
-        gen_images = gen_result.get("images") or []
-        if not gen_images:
-            return jsonify({"success": False, "error": "Image generation failed."})
+        elapsed = time.time() - t0
+        logger.info("InstantID completed in %.1fs", elapsed)
+        logger.debug("Result keys: %s", list(result.keys()) if isinstance(result, dict) else type(result))
 
-        base_image_url = gen_images[0].get("url", "")
-        if not base_image_url:
-            return jsonify({"success": False, "error": "Image generation failed."})
+        images = result.get("images") or []
+        if isinstance(images, dict):
+            images = [images]
 
-        print(f"Step 1 done. Step 2: Face swap...")
-        swap_mode = "face-swap"
-        final_url = ""
-        try:
-            swap_result = fal_client.subscribe(
-                "fal-ai/face-swap",
-                arguments={
-                    "base_image_url": base_image_url,
-                    "swap_image_url": face_data_uri,
-                },
-            )
-            swap_image = swap_result.get("image") or {}
-            if isinstance(swap_image, dict):
-                final_url = swap_image.get("url", "")
-            elif isinstance(swap_result.get("images"), list) and swap_result["images"]:
-                final_url = swap_result["images"][0].get("url", "")
-        except Exception as swap_err:
-            print(f"Face swap failed (fallback): {swap_err}")
-            swap_mode = "generated"
+        image_url = ""
+        if images and isinstance(images[0], dict):
+            image_url = images[0].get("url", "")
 
-        if not final_url:
-            final_url = base_image_url
-            swap_mode = "generated"
+        if not image_url:
+            image_obj = result.get("image")
+            if isinstance(image_obj, dict):
+                image_url = image_obj.get("url", "")
 
-        img_resp = requests.get(final_url, timeout=30)
+        if not image_url:
+            logger.error("No image URL in response: %s", list(result.keys()))
+            return jsonify({"success": False, "error": "Model returned no image."}), 500
+
+        logger.info("Downloading result from %s...", image_url[:80])
+        img_resp = requests.get(image_url, timeout=30)
         result_b64 = base64.b64encode(img_resp.content).decode("utf-8")
 
         content_type = img_resp.headers.get("Content-Type", "image/jpeg")
@@ -150,18 +198,33 @@ def transform():
         else:
             mime = "image/jpeg"
 
+        logger.info("Transform complete: theme=%s, elapsed=%.1fs, mime=%s", theme_name, time.time() - t0, mime)
+
         return jsonify({
             "success": True,
             "image": f"data:{mime};base64,{result_b64}",
             "prompt": prompt,
             "theme": theme_name,
-            "mode": swap_mode,
+            "mode": "instant-id",
         })
 
     except Exception as e:
-        print(f"Error: {e}")
+        logger.exception("Transform failed: %s", e)
         return jsonify({"success": False, "error": "Transformation failed. Please try again."}), 500
 
-if __name__ == '__main__':
+
+# ── Entry Point ──────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    fal_key = os.environ.get("FAL_KEY")
+    if not fal_key:
+        logger.critical("FAL_KEY not set — cannot start. Export FAL_KEY and retry.")
+        sys.exit(1)
+
+    logger.info("FAL_KEY loaded (length=%d)", len(fal_key))
+    logger.info("Model: %s", FAL_MODEL)
+    logger.info("Identity settings: ip_adapter_scale=0.85, controlnet=0.80, steps=30, guidance=5.0")
+
     port = int(os.environ.get("PORT", 8000))
-    app.run(host='0.0.0.0', port=port)
+    logger.info("Starting AI Mirror Booth on port %d", port)
+    app.run(host="0.0.0.0", port=port)
