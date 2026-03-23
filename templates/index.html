@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AppLab Bricks - HuggingFace & Image Tools</title>
+  <style>
+    /* ── Base ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      min-height: 100vh;
+    }
+
+    /* ── Header ───────────────────────────────────── */
+    header {
+      background: linear-gradient(135deg, #1c2a3a, #0d1117);
+      border-bottom: 1px solid #21262d;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    header .logo {
+      width: 38px; height: 38px;
+      background: linear-gradient(135deg, #238636, #1a7f37);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.3rem;
+    }
+
+    header h1 { font-size: 1.3rem; font-weight: 700; }
+    header span { color: #8b949e; font-size: 0.85rem; margin-left: auto; }
+
+    /* ── Layout ───────────────────────────────────── */
+    main {
+      max-width: 1100px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+    }
+
+    /* ── Brick Card ───────────────────────────────── */
+    .brick {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .brick-header {
+      padding: 1rem 1.25rem 0.75rem;
+      border-bottom: 1px solid #21262d;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .brick-icon {
+      width: 32px; height: 32px;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem;
+    }
+
+    .brick-icon.hf  { background: #ffd21e22; color: #ffd21e; }
+    .brick-icon.img { background: #238636aa; color: #3fb950; }
+    .brick-icon.gen { background: #58a6ff22; color: #58a6ff; }
+
+    .brick-title { font-size: 1rem; font-weight: 600; }
+    .brick-sub   { font-size: 0.75rem; color: #8b949e; margin-left: auto; }
+
+    .brick-body { padding: 1.25rem; flex: 1; display: flex; flex-direction: column; gap: 1rem; }
+
+    /* ── Form Controls ────────────────────────────── */
+    label { font-size: 0.8rem; color: #8b949e; display: block; margin-bottom: 0.3rem; }
+
+    input[type="text"],
+    input[type="number"],
+    select,
+    input[type="file"] {
+      width: 100%;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #e6edf3;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input[type="text"]:focus,
+    input[type="number"]:focus,
+    select:focus { border-color: #58a6ff; }
+
+    .row { display: flex; gap: 0.75rem; }
+    .row > * { flex: 1; }
+
+    /* ── Buttons ──────────────────────────────────── */
+    button {
+      border: none; border-radius: 6px;
+      padding: 0.55rem 1.1rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    button:active { transform: scale(0.97); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-primary { background: #238636; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #2ea043; }
+    .btn-secondary { background: #21262d; color: #e6edf3; border: 1px solid #30363d; }
+    .btn-secondary:hover:not(:disabled) { background: #30363d; }
+
+    /* ── Output ───────────────────────────────────── */
+    .output {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      font-size: 0.82rem;
+      min-height: 80px;
+      color: #8b949e;
+      overflow-y: auto;
+      max-height: 240px;
+      white-space: pre-wrap;
+    }
+
+    .output.has-content { color: #e6edf3; }
+
+    .model-item {
+      padding: 0.4rem 0;
+      border-bottom: 1px solid #21262d;
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+    }
+    .model-item:last-child { border-bottom: none; }
+    .model-name { font-weight: 600; color: #58a6ff; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .model-tag  { font-size: 0.72rem; background: #21262d; border-radius: 4px; padding: 1px 6px; color: #8b949e; }
+    .model-meta { font-size: 0.72rem; color: #8b949e; white-space: nowrap; }
+
+    /* ── Image previews ───────────────────────────── */
+    .img-preview {
+      width: 100%;
+      border-radius: 6px;
+      border: 1px solid #30363d;
+      display: none;
+      margin-top: 0.5rem;
+    }
+
+    /* ── Status badge ─────────────────────────────── */
+    .status {
+      font-size: 0.75rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 20px;
+      display: inline-block;
+    }
+    .status.ok  { background: #1f4b1f; color: #3fb950; }
+    .status.err { background: #4b1f1f; color: #f85149; }
+    .status.loading { background: #1f3b4b; color: #58a6ff; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🔲</div>
+  <h1>AppLab Bricks</h1>
+  <span>HuggingFace Hub &amp; Image Toolkit</span>
+</header>
+
+<main>
+
+  <!-- ── Brick 1: HuggingFace Model Search ── -->
+  <div class="brick">
+    <div class="brick-header">
+      <div class="brick-icon hf">🤗</div>
+      <span class="brick-title">Model Search</span>
+      <span class="brick-sub">HuggingFace Hub</span>
+    </div>
+    <div class="brick-body">
+      <div>
+        <label for="hf-query">Search query</label>
+        <input type="text" id="hf-query" placeholder="e.g. text-classification, stable-diffusion…" />
+      </div>
+      <div>
+        <label for="hf-limit">Results</label>
+        <select id="hf-limit">
+          <option value="5">5</option>
+          <option value="10" selected>10</option>
+          <option value="20">20</option>
+        </select>
+      </div>
+      <button class="btn-primary" onclick="searchModels()">Search Models</button>
+      <div id="hf-output" class="output">Results will appear here…</div>
+    </div>
+  </div>
+
+  <!-- ── Brick 2: Image Inspector ── -->
+  <div class="brick">
+    <div class="brick-header">
+      <div class="brick-icon img">🖼️</div>
+      <span class="brick-title">Image Inspector</span>
+      <span class="brick-sub">Pillow</span>
+    </div>
+    <div class="brick-body">
+      <div>
+        <label for="img-file">Upload an image</label>
+        <input type="file" id="img-file" accept="image/*" onchange="inspectImage()" />
+      </div>
+      <div id="img-output" class="output">Upload an image to see its metadata…</div>
+      <img id="img-thumb" class="img-preview" alt="Thumbnail preview" />
+    </div>
+  </div>
+
+  <!-- ── Brick 3: Image Generator ── -->
+  <div class="brick">
+    <div class="brick-header">
+      <div class="brick-icon gen">🎨</div>
+      <span class="brick-title">Image Generator</span>
+      <span class="brick-sub">Pillow</span>
+    </div>
+    <div class="brick-body">
+      <div class="row">
+        <div>
+          <label for="gen-width">Width (px)</label>
+          <input type="number" id="gen-width" value="200" min="10" max="800" />
+        </div>
+        <div>
+          <label for="gen-height">Height (px)</label>
+          <input type="number" id="gen-height" value="200" min="10" max="800" />
+        </div>
+      </div>
+      <div>
+        <label for="gen-color">Color</label>
+        <select id="gen-color">
+          <option value="blue">Blue</option>
+          <option value="red">Red</option>
+          <option value="green">Green</option>
+          <option value="yellow">Yellow</option>
+          <option value="purple">Purple</option>
+          <option value="orange">Orange</option>
+          <option value="white">White</option>
+          <option value="black">Black</option>
+        </select>
+      </div>
+      <button class="btn-primary" onclick="generateImage()">Generate Image</button>
+      <img id="gen-img" class="img-preview" alt="Generated image" />
+      <div id="gen-output" class="output">Configure options and click Generate…</div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  /* ── Helpers ── */
+  function setOutput(id, html, hasContent = true) {
+    const el = document.getElementById(id);
+    el.innerHTML = html;
+    el.classList.toggle("has-content", hasContent);
+  }
+
+  function badge(text, cls) {
+    return `<span class="status ${cls}">${text}</span>`;
+  }
+
+  /* ── Model Search ── */
+  async function searchModels() {
+    const query = document.getElementById("hf-query").value.trim();
+    const limit  = document.getElementById("hf-limit").value;
+    const btn    = event.target;
+
+    if (!query) { setOutput("hf-output", "Please enter a search query."); return; }
+
+    btn.disabled = true;
+    setOutput("hf-output", badge("Searching…", "loading"), false);
+
+    try {
+      const res  = await fetch(`/api/search-models?query=${encodeURIComponent(query)}&limit=${limit}`);
+      const data = await res.json();
+
+      if (!data.success) throw new Error(data.error);
+      if (!data.models.length) { setOutput("hf-output", "No models found."); return; }
+
+      const html = data.models.map(m => `
+        <div class="model-item">
+          <span class="model-name">${m.id}</span>
+          ${m.pipeline_tag ? `<span class="model-tag">${m.pipeline_tag}</span>` : ""}
+          <span class="model-meta">⬇ ${(m.downloads || 0).toLocaleString()} ❤ ${(m.likes || 0).toLocaleString()}</span>
+        </div>`).join("");
+
+      setOutput("hf-output", html);
+    } catch (err) {
+      setOutput("hf-output", `${badge("Error", "err")} ${err.message}`);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  /* ── Image Inspector ── */
+  async function inspectImage() {
+    const file = document.getElementById("img-file").files[0];
+    if (!file) return;
+
+    setOutput("img-output", badge("Reading image…", "loading"), false);
+    const thumb = document.getElementById("img-thumb");
+    thumb.style.display = "none";
+
+    const form = new FormData();
+    form.append("file", file);
+
+    try {
+      const res  = await fetch("/api/image-info", { method: "POST", body: form });
+      const data = await res.json();
+
+      if (!data.success) throw new Error(data.error);
+      const i = data.info;
+
+      setOutput("img-output",
+        `${badge("OK", "ok")}  ${i.filename}\n\n` +
+        `Format : ${i.format || "unknown"}\n` +
+        `Mode   : ${i.mode}\n` +
+        `Size   : ${i.width} × ${i.height} px\n` +
+        `File   : ${i.size_kb} KB`
+      );
+
+      thumb.src = data.thumbnail;
+      thumb.style.display = "block";
+    } catch (err) {
+      setOutput("img-output", `${badge("Error", "err")} ${err.message}`);
+    }
+  }
+
+  /* ── Image Generator ── */
+  async function generateImage() {
+    const width  = parseInt(document.getElementById("gen-width").value)  || 200;
+    const height = parseInt(document.getElementById("gen-height").value) || 200;
+    const color  = document.getElementById("gen-color").value;
+    const btn    = event.target;
+    const genImg = document.getElementById("gen-img");
+
+    btn.disabled = true;
+    genImg.style.display = "none";
+    setOutput("gen-output", badge("Generating…", "loading"), false);
+
+    try {
+      const res  = await fetch("/api/create-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ width, height, color }),
+      });
+      const data = await res.json();
+
+      if (!data.success) throw new Error(data.error);
+
+      genImg.src = data.image;
+      genImg.style.display = "block";
+      setOutput("gen-output",
+        `${badge("OK", "ok")}  Image created\n\n` +
+        `Size  : ${data.info.width} × ${data.info.height} px\n` +
+        `Color : ${data.info.color}`
+      );
+    } catch (err) {
+      setOutput("gen-output", `${badge("Error", "err")} ${err.message}`);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  /* Enter key triggers model search */
+  document.getElementById("hf-query").addEventListener("keydown", e => {
+    if (e.key === "Enter") searchModels();
+  });
+</script>
+
+</body>
+</html>

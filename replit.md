@@ -4,6 +4,19 @@
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
+## Flask Python Application
+
+A standalone Flask app lives at the root of the workspace:
+
+- **`app.py`** — Flask application entry point. Serves three API endpoints:
+  - `GET /` — Renders `templates/index.html`
+  - `GET /api/search-models?query=&limit=` — Searches HuggingFace Hub models
+  - `POST /api/image-info` — Inspects an uploaded image (metadata + thumbnail) via Pillow
+  - `POST /api/create-image` — Generates a solid-color PNG image via Pillow
+- **`templates/index.html`** — Arduino AppLab / Bricks-style UI with three interactive panels
+- **Dependencies**: Flask, huggingface-hub, Pillow (installed into `.pythonlibs`)
+- **Workflow**: "Start application" runs `.pythonlibs/bin/python3 app.py` on port 5000
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces
