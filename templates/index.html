@@ -5,20 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Smart Mirror AI Booth</title>
   <style>
-    /* ── Reset & Base ─────────────────────────────── */
+    /* ── Reset ───────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #080c10;
-      --surface:   #0f1923;
-      --border:    #1e2d3d;
-      --accent:    #00d4ff;
-      --accent2:   #7c3aed;
-      --text:      #e0eaf4;
-      --muted:     #4a6478;
-      --danger:    #f85149;
-      --success:   #3fb950;
-      --radius:    14px;
+      --bg:       #000;
+      --surface:  #0d0d0d;
+      --border:   #1a1a2e;
+      --glow:     #00d4ff;
+      --glow2:    #7c3aed;
+      --text:     #e8f4fd;
+      --muted:    #3a5068;
+      --danger:   #ff4545;
+      --success:  #00e676;
+      --r:        16px;
     }
 
     html, body {
@@ -27,92 +27,93 @@
       color: var(--text);
       font-family: "Segoe UI", system-ui, sans-serif;
       overflow: hidden;
+      -webkit-tap-highlight-color: transparent;
     }
 
-    /* ── Layout ───────────────────────────────────── */
+    /* ── App shell ───────────────────────────────────── */
     .app {
       height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 1.25rem;
-      padding: 1rem;
+      gap: 1.1rem;
+      padding: 0.75rem 1rem;
     }
 
-    /* ── Header ───────────────────────────────────── */
-    .header {
-      text-align: center;
-      line-height: 1.2;
-    }
+    /* ── Header ──────────────────────────────────────── */
+    .header { text-align: center; }
 
     .header h1 {
-      font-size: clamp(1.1rem, 3vw, 1.5rem);
+      font-size: clamp(0.95rem, 2.5vw, 1.3rem);
       font-weight: 700;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
-      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      background: linear-gradient(90deg, var(--glow) 0%, var(--glow2) 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
     }
 
     .header p {
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       color: var(--muted);
-      margin-top: 0.25rem;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.06em;
+      margin-top: 0.2rem;
     }
 
-    /* ── Mirror Frame ─────────────────────────────── */
+    /* ── Mirror frame ────────────────────────────────── */
     .mirror-frame {
       position: relative;
-      width: min(380px, 90vw);
+      width: min(360px, 88vw);
       aspect-ratio: 3 / 4;
-      border-radius: var(--radius);
+      border-radius: var(--r);
       overflow: hidden;
-      border: 1px solid var(--border);
-      box-shadow:
-        0 0 0 1px var(--accent)22,
-        0 0 40px var(--accent)18,
-        inset 0 0 20px #00000060;
       background: #000;
       flex-shrink: 0;
+      /* Elegant double-ring glow border */
+      box-shadow:
+        0 0 0 1px #ffffff08,
+        0 0 0 2px var(--glow)30,
+        0 0 40px var(--glow)14,
+        0 0 80px var(--glow)08;
     }
 
-    /* Animated corner accents */
-    .mirror-frame::before,
+    /* Corner accent overlay — pure CSS, no images */
     .mirror-frame::after {
       content: "";
       position: absolute;
       inset: 0;
-      border-radius: var(--radius);
+      border-radius: var(--r);
+      border: 1.5px solid transparent;
+      background:
+        linear-gradient(#000, #000) padding-box,
+        linear-gradient(135deg,
+          var(--glow)90 0%,
+          transparent 35%,
+          transparent 65%,
+          var(--glow2)90 100%
+        ) border-box;
       pointer-events: none;
-      z-index: 10;
+      z-index: 30;
     }
 
-    .mirror-frame::before {
-      border: 2px solid transparent;
-      background: linear-gradient(var(--bg), var(--bg)) padding-box,
-                  linear-gradient(135deg, var(--accent)80, transparent 40%, transparent 60%, var(--accent2)80) border-box;
-    }
-
+    /* ── Video / result image ────────────────────────── */
     #video, #result-img {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
       display: block;
     }
 
-    #video {
-      transform: scaleX(-1); /* mirror flip */
-    }
+    /* Mirror effect: horizontal flip so it feels like a real mirror */
+    #video { transform: scaleX(-1); }
 
-    #result-img {
-      display: none;
-    }
+    #result-img { display: none; }
 
-    /* ── Overlay states ───────────────────────────── */
+    /* ── Generic overlay ─────────────────────────────── */
     .overlay {
       position: absolute;
       inset: 0;
@@ -120,120 +121,174 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 0.75rem;
+      gap: 1rem;
       z-index: 20;
-      border-radius: var(--radius);
-      background: rgba(8, 12, 16, 0.88);
-      backdrop-filter: blur(4px);
-      transition: opacity 0.3s;
+      border-radius: var(--r);
+      background: rgba(0, 0, 0, 0.82);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
     }
 
     .overlay.hidden { display: none; }
 
-    /* Loading spinner */
+    /* ── Loading overlay ─────────────────────────────── */
     .spinner {
-      width: 48px; height: 48px;
-      border: 3px solid var(--border);
-      border-top-color: var(--accent);
+      width: 52px; height: 52px;
+      border: 3px solid #ffffff14;
+      border-top-color: var(--glow);
       border-radius: 50%;
-      animation: spin 0.8s linear infinite;
+      animation: spin 0.75s linear infinite;
     }
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .overlay-title {
-      font-size: 0.85rem;
+    .loading-label {
+      font-size: 0.82rem;
       font-weight: 600;
-      color: var(--accent);
-      letter-spacing: 0.06em;
+      color: var(--glow);
+      letter-spacing: 0.08em;
       text-align: center;
-      padding: 0 1rem;
     }
 
-    .overlay-sub {
-      font-size: 0.72rem;
+    /* Animated ellipsis dots */
+    .dots::after {
+      content: "";
+      animation: dots 1.4s steps(4, end) infinite;
+    }
+    @keyframes dots {
+      0%   { content: ""; }
+      25%  { content: "."; }
+      50%  { content: ".."; }
+      75%  { content: "..."; }
+    }
+
+    .loading-sub {
+      font-size: 0.68rem;
       color: var(--muted);
       text-align: center;
-      padding: 0 1.5rem;
-      line-height: 1.5;
+      padding: 0 2rem;
+      line-height: 1.6;
     }
 
-    /* Camera permission error */
-    .cam-error {
+    /* ── Error overlay ───────────────────────────────── */
+    .error-icon { font-size: 2.4rem; }
+
+    .error-msg {
       font-size: 0.8rem;
       color: var(--danger);
       text-align: center;
       padding: 0 1.5rem;
-      line-height: 1.6;
+      line-height: 1.65;
     }
 
-    /* Prompt badge on result */
+    .btn-try-again {
+      border: 1.5px solid var(--danger);
+      background: transparent;
+      color: var(--danger);
+      border-radius: 50px;
+      padding: 0.6rem 1.6rem;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+      transition: background 0.2s, color 0.2s;
+    }
+    .btn-try-again:hover { background: var(--danger); color: #000; }
+    .btn-try-again:active { transform: scale(0.96); }
+
+    /* ── Prompt badge ────────────────────────────────── */
     .prompt-badge {
       position: absolute;
       bottom: 0; left: 0; right: 0;
-      background: linear-gradient(transparent, rgba(8,12,16,0.95));
-      padding: 1.5rem 1rem 0.75rem;
-      font-size: 0.72rem;
-      color: #aac8e0;
-      line-height: 1.5;
-      z-index: 15;
+      background: linear-gradient(transparent, rgba(0,0,0,0.92));
+      padding: 2rem 1rem 0.9rem;
+      font-size: 0.7rem;
+      color: #9ec4d8;
+      line-height: 1.6;
+      z-index: 25;
       display: none;
     }
 
-    .prompt-badge span {
-      color: var(--accent);
-      font-weight: 600;
-    }
+    .prompt-badge strong { color: var(--glow); }
 
-    /* ── Controls ─────────────────────────────────── */
+    /* ── Shutter / Capture button ────────────────────── */
     .controls {
       display: flex;
-      gap: 0.75rem;
+      flex-direction: column;
       align-items: center;
+      gap: 0.7rem;
     }
 
-    button {
-      border: none;
-      border-radius: 50px;
-      font-size: 0.9rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: transform 0.15s, opacity 0.15s, box-shadow 0.15s;
-      letter-spacing: 0.04em;
-    }
-
-    button:active:not(:disabled) { transform: scale(0.95); }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
-
+    /* Large circular shutter button */
     #btn-capture {
-      background: linear-gradient(135deg, var(--accent), #0099cc);
-      color: #000;
-      padding: 0.75rem 2.25rem;
-      font-size: 1rem;
-      box-shadow: 0 0 20px var(--accent)44;
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      border: 3px solid var(--glow);
+      background: transparent;
+      cursor: pointer;
+      position: relative;
+      transition: box-shadow 0.2s, transform 0.15s;
+      flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Inner filled circle */
+    #btn-capture::before {
+      content: "";
+      position: absolute;
+      inset: 6px;
+      border-radius: 50%;
+      background: var(--glow);
+      transition: background 0.2s, opacity 0.2s;
     }
 
     #btn-capture:hover:not(:disabled) {
-      box-shadow: 0 0 32px var(--accent)77;
+      box-shadow: 0 0 0 6px var(--glow)28, 0 0 28px var(--glow)44;
     }
 
-    #btn-reset {
-      background: var(--surface);
-      color: var(--text);
-      border: 1px solid var(--border);
-      padding: 0.75rem 1.5rem;
-      display: none;
+    #btn-capture:active:not(:disabled) { transform: scale(0.92); }
+
+    #btn-capture:disabled {
+      border-color: var(--muted);
+      opacity: 0.45;
+      cursor: not-allowed;
     }
 
-    #btn-reset:hover { background: var(--border); }
+    #btn-capture:disabled::before { background: var(--muted); }
 
-    /* ── Status bar ───────────────────────────────── */
-    .status-bar {
+    /* Label below shutter */
+    .capture-label {
       font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
       color: var(--muted);
-      letter-spacing: 0.05em;
+    }
+
+    /* Reset / secondary button */
+    #btn-reset {
+      border: 1px solid #2a3a4a;
+      background: transparent;
+      color: var(--text);
+      border-radius: 50px;
+      padding: 0.55rem 1.5rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: none;
+      letter-spacing: 0.04em;
+      transition: background 0.2s;
+    }
+    #btn-reset:hover { background: #1a2a3a; }
+    #btn-reset:active { transform: scale(0.96); }
+
+    /* ── Status bar ──────────────────────────────────── */
+    .status-bar {
+      font-size: 0.68rem;
+      color: var(--muted);
+      letter-spacing: 0.06em;
       text-align: center;
-      min-height: 1rem;
+      min-height: 0.9rem;
     }
 
     .status-bar .dot {
@@ -248,10 +303,10 @@
 
     @keyframes pulse {
       0%, 100% { opacity: 1; }
-      50%       { opacity: 0.3; }
+      50%       { opacity: 0.25; }
     }
 
-    /* ── Hidden canvas ────────────────────────────── */
+    /* ── Hidden canvas ───────────────────────────────── */
     canvas { display: none; }
   </style>
 </head>
@@ -259,72 +314,81 @@
 <div class="app">
 
   <div class="header">
-    <h1>⬡ Smart Mirror AI Booth</h1>
-    <p>Arduino Uno Q · Prototype on Replit</p>
+    <h1>⬡ Smart Mirror</h1>
+    <p>Arduino Uno Q · AI Photo Booth</p>
   </div>
 
-  <!-- Mirror frame -->
+  <!-- ── Mirror frame ── -->
   <div class="mirror-frame">
 
+    <!-- Live camera feed — mirrored via CSS scaleX(-1) -->
     <video id="video" autoplay playsinline muted></video>
+
+    <!-- AI-generated result image -->
     <img id="result-img" alt="AI-transformed photo" />
 
     <!-- Loading overlay -->
     <div class="overlay hidden" id="overlay-loading">
       <div class="spinner"></div>
-      <div class="overlay-title">Transforming…</div>
-      <div class="overlay-sub" id="loading-prompt"></div>
+      <div class="loading-label">Processing AI<span class="dots"></span></div>
+      <div class="loading-sub" id="loading-sub">Sending frame to Hugging Face…</div>
     </div>
 
-    <!-- Camera error overlay -->
+    <!-- Error overlay (API failure / camera denied) -->
     <div class="overlay hidden" id="overlay-error">
-      <div style="font-size:2rem">📷</div>
-      <div class="cam-error" id="error-msg">
-        Camera access is required.<br/>Please allow camera permissions and reload.
-      </div>
+      <div class="error-icon">⚠️</div>
+      <div class="error-msg" id="error-msg">Something went wrong.</div>
+      <button class="btn-try-again" id="btn-try-again">Try Again</button>
     </div>
 
-    <!-- Prompt badge on result -->
+    <!-- Prompt badge shown on result -->
     <div class="prompt-badge" id="prompt-badge">
-      <span>Prompt:</span> <span id="prompt-text"></span>
+      <strong>Prompt:</strong> <span id="prompt-text"></span>
     </div>
 
   </div>
 
-  <!-- Buttons -->
+  <!-- ── Controls ── -->
   <div class="controls">
-    <button id="btn-capture" disabled>Capture</button>
-    <button id="btn-reset">↺ Reset</button>
+    <button id="btn-capture" disabled aria-label="Capture photo"></button>
+    <span class="capture-label" id="capture-label">Capture</span>
+    <button id="btn-reset">↺ New Photo</button>
   </div>
 
-  <!-- Status bar -->
   <div class="status-bar" id="status-bar">Starting camera…</div>
 
 </div>
 
-<!-- Hidden canvas for frame grab -->
+<!-- Hidden canvas for frame extraction (not rendered) -->
 <canvas id="canvas"></canvas>
 
 <script>
-  /* ── Element refs ── */
+  "use strict";
+
+  /* ── Constants ─────────────────────────────────────────── */
+  const FETCH_TIMEOUT_MS = 90_000; // 90 s — HF inference can be slow
+
+  /* ── Element refs ─────────────────────────────────────── */
   const video        = document.getElementById("video");
   const resultImg    = document.getElementById("result-img");
   const canvas       = document.getElementById("canvas");
   const btnCapture   = document.getElementById("btn-capture");
+  const captureLabel = document.getElementById("capture-label");
   const btnReset     = document.getElementById("btn-reset");
+  const btnTryAgain  = document.getElementById("btn-try-again");
   const overlayLoad  = document.getElementById("overlay-loading");
   const overlayErr   = document.getElementById("overlay-error");
-  const loadPrompt   = document.getElementById("loading-prompt");
+  const loadingSub   = document.getElementById("loading-sub");
   const promptBadge  = document.getElementById("prompt-badge");
   const promptText   = document.getElementById("prompt-text");
   const statusBar    = document.getElementById("status-bar");
   const errorMsg     = document.getElementById("error-msg");
 
-  /* ── State helpers ── */
+  /* ── Helpers ──────────────────────────────────────────── */
   function setStatus(msg, live = true) {
     statusBar.innerHTML = live
       ? `<span class="dot"></span>${msg}`
-      : msg;
+      : `<span style="color:#4a6478">${msg}</span>`;
   }
 
   function showOverlay(el) {
@@ -332,21 +396,48 @@
     if (el) el.classList.remove("hidden");
   }
 
-  /* ── Camera init ── */
+  function resetToMirror() {
+    resultImg.style.display = "none";
+    resultImg.src           = "";
+    promptBadge.style.display = "none";
+    video.style.display     = "block";
+    showOverlay(null);
+    btnReset.style.display  = "none";
+    btnCapture.disabled     = false;
+    captureLabel.textContent = "Capture";
+    setStatus("Camera ready — tap Capture to transform");
+  }
+
+  function showError(msg, isCameraError = false) {
+    errorMsg.textContent = msg;
+    // For camera errors, "Try Again" reloads the page to re-request permission
+    btnTryAgain.onclick = isCameraError
+      ? () => location.reload()
+      : resetToMirror;
+    showOverlay(overlayErr);
+    btnCapture.disabled     = true;
+    captureLabel.textContent = "Capture";
+  }
+
+  /* ── Camera initialisation ────────────────────────────── */
   async function startCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showError(
+        "Your browser does not support camera access.\n" +
+        "Use Chrome or Firefox over HTTPS.",
+        true
+      );
+      setStatus("Camera API unavailable", false);
+      return;
+    }
+
     try {
-      const constraints = {
-        video: {
-          facingMode: "user",
-          width:  { ideal: 640 },
-          height: { ideal: 853 },
-        },
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 853 } },
         audio: false,
-      };
+      });
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       video.srcObject = stream;
-
       video.onloadedmetadata = () => {
         video.play();
         btnCapture.disabled = false;
@@ -354,81 +445,103 @@
       };
 
     } catch (err) {
-      showOverlay(overlayErr);
-      errorMsg.textContent = `Camera error: ${err.message}. Allow camera access and reload.`;
+      showError(
+        `Camera denied: ${err.message}\n` +
+        "Allow camera access in your browser settings, then tap Try Again.",
+        true
+      );
       setStatus("Camera unavailable", false);
     }
   }
 
-  /* ── Capture & transform ── */
+  /* ── Capture & transform ──────────────────────────────── */
   btnCapture.addEventListener("click", async () => {
-    /* Grab frame */
+    // ── 1. Grab frame from video ──────────────────────────
     const w = video.videoWidth  || 512;
     const h = video.videoHeight || 682;
+
     canvas.width  = w;
     canvas.height = h;
 
     const ctx = canvas.getContext("2d");
+    // Un-flip the mirror so the AI receives a natural (non-mirrored) image
+    ctx.save();
     ctx.translate(w, 0);
-    ctx.scale(-1, 1); /* un-flip mirror */
+    ctx.scale(-1, 1);
     ctx.drawImage(video, 0, 0, w, h);
+    ctx.restore();
 
     const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
 
-    /* UI → loading */
-    btnCapture.disabled = true;
-    btnCapture.textContent = "Processing…";
-    btnReset.style.display = "none";
+    // ── 2. Enter loading state ────────────────────────────
+    btnCapture.disabled      = true;
+    captureLabel.textContent  = "Processing…";
+    btnReset.style.display   = "none";
     promptBadge.style.display = "none";
     showOverlay(overlayLoad);
-    loadPrompt.textContent = "Sending to AI model…";
-    setStatus("Waiting for Hugging Face…", false);
+    loadingSub.textContent   = "Sending frame to Hugging Face…";
+    setStatus("Waiting for AI model…", false);
+
+    // ── 3. POST to /transform with timeout ────────────────
+    const controller = new AbortController();
+    const timeoutId  = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
     try {
       const res = await fetch("/transform", {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: dataUrl }),
+        body:    JSON.stringify({ image: dataUrl }),
+        signal:  controller.signal,
       });
 
+      clearTimeout(timeoutId);
+
+      // Non-2xx HTTP → surface the status as an error
+      if (!res.ok) {
+        const text = await res.text().catch(() => `HTTP ${res.status}`);
+        throw new Error(`Server error ${res.status}: ${text}`);
+      }
+
       const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Unknown server error");
 
-      if (!data.success) throw new Error(data.error || "Unknown error");
-
-      /* Show result */
+      // ── 4. Display result ─────────────────────────────
+      resultImg.onload = () => {
+        video.style.display    = "none";
+        resultImg.style.display = "block";
+        promptText.textContent  = data.prompt;
+        promptBadge.style.display = "block";
+        showOverlay(null);
+        btnReset.style.display  = "inline-block";
+        captureLabel.textContent = "Capture";
+        setStatus("Transformation complete!", false);
+      };
       resultImg.src = data.image;
-      resultImg.style.display = "block";
-      video.style.display = "none";
-      promptText.textContent = data.prompt;
-      promptBadge.style.display = "block";
-
-      showOverlay(null);
-      btnReset.style.display = "inline-block";
-      setStatus("Transformation complete!", false);
 
     } catch (err) {
-      showOverlay(null);
-      setStatus(`Error: ${err.message}`, false);
-      btnCapture.disabled = false;
-      btnCapture.textContent = "Capture";
+      clearTimeout(timeoutId);
+
+      let msg;
+      if (err.name === "AbortError") {
+        msg = `Request timed out after ${FETCH_TIMEOUT_MS / 1000}s.\n` +
+              "The AI model may be busy — please try again.";
+      } else if (!navigator.onLine) {
+        msg = "No internet connection. Check your network and try again.";
+      } else {
+        msg = err.message || "An unexpected error occurred.";
+      }
+
+      showError(msg, false);
+      setStatus("Error — see details above", false);
     }
   });
 
-  /* ── Reset to live mirror ── */
-  btnReset.addEventListener("click", () => {
-    resultImg.style.display = "none";
-    resultImg.src = "";
-    promptBadge.style.display = "none";
-    video.style.display = "block";
-    showOverlay(null);
+  /* ── Reset / Try Again ────────────────────────────────── */
+  btnReset.addEventListener("click", resetToMirror);
 
-    btnReset.style.display = "none";
-    btnCapture.disabled = false;
-    btnCapture.textContent = "Capture";
-    setStatus("Camera ready — tap Capture to transform");
-  });
+  // btnTryAgain.onclick is set dynamically in showError()
 
-  /* ── Boot ── */
+  /* ── Boot ─────────────────────────────────────────────── */
   startCamera();
 </script>
 </body>
