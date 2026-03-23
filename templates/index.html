@@ -313,7 +313,7 @@
                 modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
                 delegate: delegate
             },
-            outputFaceBlendshapes: false,
+            outputFaceBlendshapes: true,
             runningMode: "VIDEO",
             numFaces: 4,
             minFaceDetectionConfidence: 0.3,
@@ -606,6 +606,37 @@
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
                     ctx.fillText(label, tagX, tagY);
+                    ctx.restore();
+                }
+
+                let smileScore = 0;
+                if (res.faceBlendshapes && res.faceBlendshapes[i]) {
+                    const bs = res.faceBlendshapes[i].categories;
+                    for (const b of bs) {
+                        if (b.categoryName === "mouthSmileLeft" || b.categoryName === "mouthSmileRight") {
+                            smileScore = Math.max(smileScore, b.score);
+                        }
+                    }
+                }
+                const isSmiling = smileScore > 0.4;
+                const chin = lm[152];
+                if (chin) {
+                    const emoX = (t ? t.x * vw : chin.x * vw);
+                    const emoY = chin.y * vh + 30;
+                    ctx.save();
+                    ctx.font = "32px sans-serif";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    if (isSmiling) {
+                        ctx.shadowColor = "rgba(255,220,50,0.9)";
+                        ctx.shadowBlur = 18;
+                        ctx.globalAlpha = 1;
+                        ctx.fillText("\uD83D\uDE00", emoX, emoY);
+                        ctx.shadowBlur = 0;
+                    } else {
+                        ctx.globalAlpha = 0.25;
+                        ctx.fillText("\uD83D\uDE00", emoX, emoY);
+                    }
                     ctx.restore();
                 }
             }
