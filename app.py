@@ -9,8 +9,7 @@ from flask import Flask, render_template, request, jsonify
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
 HF_API_TOKEN = os.environ.get("HF_TOKEN")
-API_URL = "https://api-inference.huggingface.co/models/timbrooks/instruct-pix2pix"
-headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
+API_URL = "https://router.huggingface.co/hf-inference/models/timbrooks/instruct-pix2pix"
 
 PROMPTS = [
     "Turn this person into a scuba diver swimming in a coral reef",
@@ -36,11 +35,18 @@ def transform():
     prompt = random.choice(PROMPTS)
 
     try:
-        payload = {
-            "inputs": image_b64,
-            "parameters": {"prompt": prompt}
-        }
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=120)
+        # New HF router expects raw binary image in the body, prompt as query param
+        image_bytes = base64.b64decode(image_b64)
+        response = requests.post(
+            API_URL,
+            headers={
+                "Authorization": f"Bearer {HF_API_TOKEN}",
+                "Content-Type": "image/jpeg",
+            },
+            params={"prompt": prompt},
+            data=image_bytes,
+            timeout=120,
+        )
 
         if response.status_code == 200:
             result_b64 = base64.b64encode(response.content).decode("utf-8")
@@ -50,7 +56,7 @@ def transform():
                 "prompt": prompt
             })
         else:
-            return jsonify({"success": False, "error": f"API Error: {response.text}"})
+            return jsonify({"success": False, "error": f"API Error {response.status_code}: {response.text}"})
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
