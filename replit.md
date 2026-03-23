@@ -4,53 +4,45 @@
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
-## Smart Mirror AI Photo Booth (Arduino Bricks edition)
+## Smart Mirror AI Photo Booth
 
-Standalone Flask + Socket.IO app at the workspace root. Prototype for Arduino Uno Q (QRB2210) deployment. Architecture is aligned with the official Arduino Bricks framework so `app.py` runs unchanged on the Uno Q.
+Standalone Flask app at the workspace root. Prototype for Arduino Uno Q (QRB2210) deployment.
 
-### Communication flow
+### Architecture
 
-```
-Phone browser → socket.emit("capture") → handle_capture() → HuggingFace → socket.emit("result") → browser
-```
+Two-step AI pipeline per transformation:
+1. **FLUX Schnell** (`fal-ai/flux/schnell`) generates a themed character image (~$0.003)
+2. **Face Swap** (`fal-ai/face-swap`) maps the user's face onto the character (~$0.01)
+3. Graceful fallback: if face swap fails (no face detected), shows the generated image
 
-### Key files
+### Features
+
+- 3-2-1 countdown with camera flash effect
+- 6 themed categories: Time Traveler, Action Hero, Fantasy Realm, Explorer, Pop Culture, Wild Card
+- "Surprise Me" mode picks a random theme
+- Side-by-side before/after reveal with animation
+- Scrollable gallery strip of past transformations
+- Fullscreen view on gallery thumbnail tap
+- Rotating fun loading messages during generation
+
+### Key Files
 
 | File | Purpose |
 |------|---------|
-| `app.py` | Bricks-style backend — `WebUI`, `App.run()`, event wiring |
-| `arduino/` | **Replit-only shim** — delete on Uno Q, real SDK takes over |
-| `arduino/app_bricks/web_ui.py` | `WebUI` shim (Flask-SocketIO) |
-| `arduino/app_utils.py` | `App.run()` shim |
-| `templates/index.html` | Socket.IO-based UI (no Flask `url_for`) |
-| `static/script.js` | `socket.on/emit` — mirrors Bricks event pattern |
-| `static/style.css` | State-driven via `body[data-state]` attribute selectors |
-| `static/libs/socket.io.min.js` | Bundled offline (no CDN needed on Uno Q) |
-| `captures/` | `original_YYYYMMDD_*.jpg` + `ai_YYYYMMDD_*.jpg` pairs |
-| `smart_mirror.log` | Rotating log (5 MB × 3 backups) |
-
-### Socket.IO events
-
-| Direction | Event | Payload |
-|-----------|-------|---------|
-| server → browser | `welcome` | `{status, prompts}` |
-| browser → server | `capture` | `{image: "<data-url>"}` |
-| server → browser | `processing` | `{prompt}` |
-| server → browser | `result` | `{image: "<data-url>", prompt}` |
-| server → browser | `transform_error` | `{message}` |
+| `app.py` | Flask backend — /themes endpoint, /transform pipeline (FLUX + face-swap) |
+| `templates/index.html` | Full photo booth UI — camera, countdown, reveal, gallery |
 
 ### Dependencies
 
-- Python: `flask-socketio`, `huggingface_hub`, `Pillow` (in `.pythonlibs`)
-- JS: `socket.io.min.js` v4.7.2 (bundled in `static/libs/`)
-- **Workflow**: "Start application" — `python3 app.py` on `PORT` (default 8000)
-- **Secret**: `HF_TOKEN` — HuggingFace API token
+- Python: `flask`, `requests`, `Pillow`, `fal-client`
+- **Workflow**: "Smart Mirror" — `python3 app.py` on `PORT` (default 8000)
+- **Secret**: `FAL_KEY` — fal.ai API key
 
 ### Deploying to the Uno Q
 
-1. Copy all files **except** the `arduino/` folder (the real SDK is pre-installed).
-2. `pip install flask-socketio huggingface_hub Pillow`
-3. `export HF_TOKEN="hf_..."`
+1. Copy `app.py` and `templates/index.html`
+2. `pip install flask requests Pillow fal-client`
+3. `export FAL_KEY="your-key"`
 4. `python3 app.py`
 
 ## Stack
@@ -71,17 +63,19 @@ Phone browser → socket.emit("capture") → handle_capture() → HuggingFace �
 artifacts-monorepo/
 ├── artifacts/              # Deployable applications
 │   └── api-server/         # Express API server
+│   └── smart-mirror/       # AI photo booth artifact config
 ├── lib/                    # Shared libraries
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config
 │   ├── api-client-react/   # Generated React Query hooks
 │   ├── api-zod/            # Generated Zod schemas from OpenAPI
 │   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
+├── scripts/                # Utility scripts
+├── app.py                  # Smart Mirror Flask backend
+├── templates/index.html    # Smart Mirror UI
+├── pnpm-workspace.yaml
+├── tsconfig.base.json
+├── tsconfig.json
+└── package.json
 ```
 
 ## TypeScript & Composite Projects

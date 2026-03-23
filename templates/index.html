@@ -3,304 +3,691 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <title>Smart Mirror Booth</title>
+    <title>AI Mirror Booth</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;900&display=swap');
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --accent: #00ffcc;
+            --accent-dim: rgba(0,255,204,0.15);
+            --bg: #0a0a0f;
+            --card: #111118;
+            --border: #222230;
+            --text: #e8e8f0;
+            --muted: #666680;
+        }
 
         body {
-            background: #000;
-            color: #fff;
-            font-family: sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Outfit', sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .booth {
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
             min-height: 100vh;
-            padding: 1rem;
+            padding: 20px;
+            position: relative;
         }
 
-        /* Live camera view */
-        .camera-wrap {
-            width: 100%;
-            max-width: 560px;
+        .header {
+            text-align: center;
+            margin-bottom: 16px;
+            z-index: 2;
         }
 
-        video {
+        .header h1 {
+            font-size: 28px;
+            font-weight: 900;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #fff, var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header p {
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 4px;
+            font-weight: 300;
+        }
+
+        .mirror-frame {
+            position: relative;
             width: 100%;
-            border-radius: 16px;
+            max-width: 480px;
+            aspect-ratio: 1;
+            border-radius: 24px;
+            overflow: hidden;
+            border: 2px solid var(--border);
+            background: #000;
+            box-shadow: 0 0 60px rgba(0,255,204,0.05);
+        }
+
+        .mirror-frame video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
             transform: scaleX(-1);
-            border: 2px solid #333;
             display: block;
         }
 
-        /* Side-by-side result view */
-        .results-wrap {
+        .countdown-overlay {
+            position: absolute;
+            inset: 0;
             display: none;
-            width: 100%;
-            max-width: 760px;
-            gap: 12px;
-            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.6);
+            z-index: 10;
         }
 
-        .result-panel {
-            flex: 1;
+        .countdown-num {
+            font-size: 140px;
+            font-weight: 900;
+            color: var(--accent);
+            text-shadow: 0 0 80px var(--accent), 0 0 40px var(--accent);
+            animation: countPop 0.6s ease-out;
+        }
+
+        @keyframes countPop {
+            0% { transform: scale(2); opacity: 0; }
+            50% { transform: scale(0.9); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .flash-overlay {
+            position: absolute;
+            inset: 0;
+            background: #fff;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 11;
+        }
+
+        .flash-overlay.fire {
+            animation: flash 0.3s ease-out;
+        }
+
+        @keyframes flash {
+            0% { opacity: 0.9; }
+            100% { opacity: 0; }
+        }
+
+        .results-panel {
+            display: none;
+            width: 100%;
+            max-width: 480px;
+        }
+
+        .comparison {
+            position: relative;
+            width: 100%;
             display: flex;
-            flex-direction: column;
-            align-items: center;
             gap: 8px;
         }
 
-        .panel-label {
-            font-size: 13px;
-            color: #888;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
+        .comp-card {
+            flex: 1;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 2px solid var(--border);
+            position: relative;
         }
 
-        .result-panel img {
+        .comp-card img {
             width: 100%;
-            border-radius: 14px;
+            aspect-ratio: 1;
+            object-fit: cover;
             display: block;
         }
 
-        #capturedImg { border: 2px solid #444; }
-        #resultImg   { border: 2px solid #00ffcc; }
-
-        /* Controls */
-        .btn-container {
-            text-align: center;
-            margin-top: 18px;
-            width: 100%;
-            max-width: 760px;
+        .comp-card.ai-card {
+            border-color: var(--accent);
+            box-shadow: 0 0 30px rgba(0,255,204,0.15);
         }
 
-        button {
-            background: #00ffcc;
-            color: #000;
-            border: none;
-            padding: 18px 40px;
-            font-size: 20px;
-            font-weight: bold;
-            border-radius: 30px;
+        .comp-label {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            background: rgba(0,0,0,0.7);
+            padding: 4px 10px;
+            border-radius: 20px;
+            backdrop-filter: blur(8px);
+        }
+
+        .comp-label.ai { color: var(--accent); }
+
+        .theme-badge {
+            text-align: center;
+            margin-top: 12px;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--accent);
+            letter-spacing: 0.05em;
+        }
+
+        .prompt-text {
+            text-align: center;
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--muted);
+            font-weight: 300;
+            line-height: 1.4;
+            padding: 0 10px;
+        }
+
+        .reveal-anim .comp-card.ai-card {
+            animation: revealSlide 0.6s cubic-bezier(0.16,1,0.3,1) both;
+        }
+
+        @keyframes revealSlide {
+            0% { transform: translateX(40px) scale(0.9); opacity: 0; }
+            100% { transform: translateX(0) scale(1); opacity: 1; }
+        }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+            max-width: 480px;
+        }
+
+        .theme-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            justify-content: center;
+        }
+
+        .theme-pill {
+            padding: 6px 14px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 500;
             cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0,255,204,0.4);
-            transition: 0.2s;
+            transition: all 0.2s;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .theme-pill:hover { border-color: var(--accent); color: var(--text); }
+
+        .theme-pill.active {
+            background: var(--accent-dim);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .main-btn {
+            width: 100%;
+            padding: 18px;
+            border: none;
+            border-radius: 16px;
+            font-size: 18px;
+            font-weight: 700;
+            font-family: 'Outfit', sans-serif;
+            cursor: pointer;
+            transition: all 0.2s;
             -webkit-tap-highlight-color: transparent;
         }
 
-        button:active  { transform: scale(0.95); }
+        .main-btn.capture {
+            background: linear-gradient(135deg, var(--accent), #00cc99);
+            color: #000;
+            box-shadow: 0 4px 25px rgba(0,255,204,0.3);
+        }
 
-        button:disabled {
-            background: #555;
-            color: #888;
-            box-shadow: none;
+        .main-btn.capture:hover { box-shadow: 0 4px 35px rgba(0,255,204,0.5); transform: translateY(-1px); }
+        .main-btn.capture:active { transform: scale(0.97); }
+
+        .main-btn.again {
+            background: var(--card);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .main-btn.again:hover { border-color: var(--accent); }
+
+        .main-btn:disabled {
+            background: var(--card) !important;
+            color: var(--muted) !important;
+            box-shadow: none !important;
             cursor: not-allowed;
+            border: 1px solid var(--border) !important;
         }
 
-        #statusText {
-            margin-top: 14px;
-            font-size: 15px;
-            color: #aaa;
-            min-height: 20px;
-            padding: 0 1rem;
-            line-height: 1.5;
-        }
-
-        #errorOverlay {
-            color: #ff4444;
-            font-weight: bold;
-            display: none;
-            margin-top: 10px;
-            padding: 0 1rem;
-        }
-
-        #modeBadge {
-            display: inline-block;
-            margin-top: 8px;
-            font-size: 12px;
-            padding: 3px 10px;
-            border-radius: 20px;
-            background: #1a1a1a;
-            color: #666;
-            letter-spacing: 0.04em;
-        }
-        #modeBadge.img2img { background: #0a2a20; color: #00ffcc; }
-
-        #progressWrap {
+        .loading-bar {
             width: 100%;
-            max-width: 760px;
-            height: 4px;
-            background: #222;
+            height: 3px;
+            background: var(--card);
             border-radius: 2px;
-            margin-top: 14px;
             overflow: hidden;
             display: none;
         }
 
-        #progressBar {
+        .loading-bar-inner {
             height: 100%;
             width: 0%;
-            background: linear-gradient(90deg, #00ffcc, #7c3aed);
+            background: linear-gradient(90deg, var(--accent), #7c3aed, var(--accent));
+            background-size: 200% 100%;
             border-radius: 2px;
-            transition: width 30s linear;
+            animation: shimmer 1.5s ease-in-out infinite;
+        }
+
+        @keyframes shimmer {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .loading-text {
+            font-size: 14px;
+            color: var(--muted);
+            font-weight: 300;
+            min-height: 20px;
+            text-align: center;
+        }
+
+        .error-text {
+            color: #ff5555;
+            font-size: 13px;
+            text-align: center;
+            display: none;
+        }
+
+        .gallery {
+            width: 100%;
+            max-width: 600px;
+            margin-top: 28px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        .gallery-title {
+            font-size: 12px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-weight: 500;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .gallery-strip {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+        }
+
+        .gallery-strip::-webkit-scrollbar { height: 4px; }
+        .gallery-strip::-webkit-scrollbar-track { background: transparent; }
+        .gallery-strip::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+        .gallery-thumb {
+            flex-shrink: 0;
+            width: 80px;
+            height: 80px;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .gallery-thumb:hover {
+            border-color: var(--accent);
+            transform: scale(1.05);
+        }
+
+        .gallery-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .gallery-thumb .g-label {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            font-size: 8px;
+            font-weight: 700;
+            text-transform: uppercase;
+            background: rgba(0,0,0,0.8);
+            color: var(--accent);
+            text-align: center;
+            padding: 2px;
+            letter-spacing: 0.05em;
+        }
+
+        .fullscreen-view {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background: rgba(0,0,0,0.95);
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .fullscreen-view img {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 16px;
+            border: 2px solid var(--accent);
+        }
+
+        canvas { display: none; }
+
+        @media (max-width: 500px) {
+            .header h1 { font-size: 22px; }
+            .mirror-frame { max-width: 100%; border-radius: 16px; }
+            .comp-card { border-radius: 12px; }
+            .countdown-num { font-size: 100px; }
         }
     </style>
 </head>
 <body>
+    <div class="booth">
+        <div class="header">
+            <h1>AI Mirror Booth</h1>
+            <p>Step up. Strike a pose. See yourself transformed.</p>
+        </div>
 
-    <div class="camera-wrap" id="cameraWrap">
-        <video id="video" autoplay playsinline muted></video>
+        <div class="mirror-frame" id="mirrorFrame">
+            <video id="video" autoplay playsinline muted></video>
+            <div class="countdown-overlay" id="countdownOverlay">
+                <div class="countdown-num" id="countdownNum">3</div>
+            </div>
+            <div class="flash-overlay" id="flashOverlay"></div>
+        </div>
+
+        <div class="results-panel" id="resultsPanel">
+            <div class="comparison" id="comparison">
+                <div class="comp-card">
+                    <img id="capturedImg" alt="Your photo" />
+                    <span class="comp-label">You</span>
+                </div>
+                <div class="comp-card ai-card">
+                    <img id="resultImg" alt="AI result" />
+                    <span class="comp-label ai">AI</span>
+                </div>
+            </div>
+            <div class="theme-badge" id="themeBadge"></div>
+            <div class="prompt-text" id="promptText"></div>
+        </div>
+
+        <canvas id="canvas"></canvas>
+
+        <div class="controls">
+            <div class="theme-selector" id="themeSelector"></div>
+            <button class="main-btn capture" id="actionBtn">Snap & Transform</button>
+            <div class="loading-bar" id="loadingBar">
+                <div class="loading-bar-inner" id="loadingBarInner"></div>
+            </div>
+            <div class="loading-text" id="loadingText"></div>
+            <div class="error-text" id="errorText"></div>
+        </div>
+
+        <div class="gallery" id="gallery" style="display:none;">
+            <div class="gallery-title">Your Transformations</div>
+            <div class="gallery-strip" id="galleryStrip"></div>
+        </div>
     </div>
 
-    <div class="results-wrap" id="resultsWrap">
-        <div class="result-panel">
-            <span class="panel-label">You</span>
-            <img id="capturedImg" alt="Captured photo" />
-        </div>
-        <div class="result-panel">
-            <span class="panel-label">AI Vision</span>
-            <img id="resultImg" alt="AI result" />
-        </div>
-    </div>
-
-    <canvas id="canvas" style="display:none;"></canvas>
-
-    <div class="btn-container">
-        <button id="actionBtn">&#127922; Roll the AI Dice!</button>
-        <div id="progressWrap"><div id="progressBar"></div></div>
-        <div id="statusText"></div>
-        <div id="modeBadge" style="display:none;"></div>
-        <div id="errorOverlay"></div>
+    <div class="fullscreen-view" id="fullscreenView">
+        <img id="fullscreenImg" alt="Full view" />
     </div>
 
     <script>
-        const video        = document.getElementById('video');
-        const canvas       = document.getElementById('canvas');
-        const actionBtn    = document.getElementById('actionBtn');
-        const capturedImg  = document.getElementById('capturedImg');
-        const resultImg    = document.getElementById('resultImg');
-        const statusText   = document.getElementById('statusText');
-        const errorOverlay = document.getElementById('errorOverlay');
-        const progressWrap = document.getElementById('progressWrap');
-        const progressBar  = document.getElementById('progressBar');
-        const cameraWrap   = document.getElementById('cameraWrap');
-        const resultsWrap  = document.getElementById('resultsWrap');
-        const modeBadge    = document.getElementById('modeBadge');
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const actionBtn = document.getElementById('actionBtn');
+        const capturedImg = document.getElementById('capturedImg');
+        const resultImg = document.getElementById('resultImg');
+        const mirrorFrame = document.getElementById('mirrorFrame');
+        const resultsPanel = document.getElementById('resultsPanel');
+        const countdownOverlay = document.getElementById('countdownOverlay');
+        const countdownNum = document.getElementById('countdownNum');
+        const flashOverlay = document.getElementById('flashOverlay');
+        const loadingBar = document.getElementById('loadingBar');
+        const loadingBarInner = document.getElementById('loadingBarInner');
+        const loadingText = document.getElementById('loadingText');
+        const errorText = document.getElementById('errorText');
+        const themeBadge = document.getElementById('themeBadge');
+        const promptText = document.getElementById('promptText');
+        const themeSelector = document.getElementById('themeSelector');
+        const gallery = document.getElementById('gallery');
+        const galleryStrip = document.getElementById('galleryStrip');
+        const fullscreenView = document.getElementById('fullscreenView');
+        const fullscreenImg = document.getElementById('fullscreenImg');
+        const comparison = document.getElementById('comparison');
 
-        let isDisplayingResult = false;
-        let elapsedInterval    = null;
-        let elapsedSeconds     = 0;
+        let selectedTheme = null;
+        let isProcessing = false;
+        let isShowingResult = false;
+        let loadingInterval = null;
+        let loadingMsgs = [
+            "Warming up the flux capacitor...",
+            "Consulting the style oracle...",
+            "Mixing the magic pixels...",
+            "Summoning your alter ego...",
+            "Raiding the costume department...",
+            "Calibrating the cool factor...",
+            "Rewriting your origin story...",
+        ];
+        let history = [];
 
-        // ── Camera init ────────────────────────────────────────────────
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 720 } }, audio: false })
             .then(stream => { video.srcObject = stream; })
             .catch(() => {
-                errorOverlay.innerText = "Camera access required. Allow camera in your browser and reload.";
-                errorOverlay.style.display = 'block';
+                errorText.innerText = "Camera access required. Allow camera and reload.";
+                errorText.style.display = 'block';
+                actionBtn.disabled = true;
             });
 
-        // ── Progress helpers ───────────────────────────────────────────
-        function startProgress() {
-            elapsedSeconds = 0;
-            progressWrap.style.display = 'block';
-            progressBar.style.transition = 'none';
-            progressBar.style.width = '0%';
-            void progressBar.offsetWidth;
-            progressBar.style.transition = 'width 60s linear';
-            progressBar.style.width = '100%';
+        function buildThemeUI(themes) {
+            themeSelector.innerHTML = '';
+            const randomPill = document.createElement('button');
+            randomPill.className = 'theme-pill active';
+            randomPill.textContent = 'Surprise Me';
+            randomPill.onclick = () => selectTheme(null, randomPill);
+            themeSelector.appendChild(randomPill);
 
-            clearInterval(elapsedInterval);
-            elapsedInterval = setInterval(() => {
-                elapsedSeconds++;
-                statusText.innerText = `Rolling the dice\u2026 ${elapsedSeconds}s`;
-            }, 1000);
+            themes.forEach(t => {
+                const pill = document.createElement('button');
+                pill.className = 'theme-pill';
+                pill.textContent = t;
+                pill.onclick = () => selectTheme(t, pill);
+                themeSelector.appendChild(pill);
+            });
         }
 
-        function stopProgress() {
-            clearInterval(elapsedInterval);
-            progressWrap.style.display = 'none';
-            progressBar.style.transition = 'none';
-            progressBar.style.width = '0%';
+        buildThemeUI(['Time Traveler','Action Hero','Fantasy Realm','Explorer','Pop Culture','Wild Card']);
+
+        fetch('/themes').then(r => r.json()).then(data => {
+            if (data.themes && data.themes.length) buildThemeUI(data.themes);
+        }).catch(() => {});
+
+        function selectTheme(theme, pill) {
+            selectedTheme = theme;
+            document.querySelectorAll('.theme-pill').forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
         }
 
-        // ── Capture & generate ─────────────────────────────────────────
-        actionBtn.addEventListener('click', async () => {
+        function countdown() {
+            return new Promise(resolve => {
+                countdownOverlay.style.display = 'flex';
+                let count = 3;
+                countdownNum.textContent = count;
 
-            if (isDisplayingResult) {
-                resultsWrap.style.display = 'none';
-                cameraWrap.style.display  = 'block';
-                actionBtn.innerText = '\uD83C\uDFB2 Roll the AI Dice!';
-                statusText.innerText = '';
-                errorOverlay.style.display = 'none';
-                modeBadge.style.display = 'none';
-                isDisplayingResult = false;
-                return;
-            }
+                const tick = setInterval(() => {
+                    count--;
+                    if (count > 0) {
+                        countdownNum.textContent = count;
+                        countdownNum.style.animation = 'none';
+                        void countdownNum.offsetWidth;
+                        countdownNum.style.animation = 'countPop 0.6s ease-out';
+                    } else {
+                        clearInterval(tick);
+                        countdownOverlay.style.display = 'none';
+                        flashOverlay.classList.remove('fire');
+                        void flashOverlay.offsetWidth;
+                        flashOverlay.classList.add('fire');
+                        resolve();
+                    }
+                }, 1000);
+            });
+        }
 
-            actionBtn.disabled = true;
-            errorOverlay.style.display = 'none';
-            statusText.innerText = 'Rolling the dice\u2026 0s';
-            startProgress();
-
-            // Freeze current frame as "your photo" (un-mirror for natural orientation)
+        function captureFrame() {
             const ctx = canvas.getContext('2d');
-            canvas.width  = video.videoWidth  || 640;
+            canvas.width = video.videoWidth || 640;
             canvas.height = video.videoHeight || 480;
             ctx.translate(canvas.width, 0);
             ctx.scale(-1, 1);
             ctx.drawImage(video, 0, 0);
-            capturedImg.src = canvas.toDataURL('image/jpeg', 0.8);
+            return canvas.toDataURL('image/jpeg', 0.85);
+        }
 
-            // Switch layout: hide camera, show side-by-side
-            cameraWrap.style.display  = 'none';
-            resultsWrap.style.display = 'flex';
+        function startLoading() {
+            loadingBar.style.display = 'block';
+            loadingBarInner.style.width = '100%';
+            loadingBarInner.style.transition = 'width 45s linear';
+
+            let elapsed = 0;
+            let msgIdx = Math.floor(Math.random() * loadingMsgs.length);
+            loadingText.textContent = loadingMsgs[msgIdx];
+
+            loadingInterval = setInterval(() => {
+                elapsed++;
+                if (elapsed % 5 === 0) {
+                    msgIdx = (msgIdx + 1) % loadingMsgs.length;
+                    loadingText.textContent = loadingMsgs[msgIdx] + ` (${elapsed}s)`;
+                } else {
+                    loadingText.textContent = loadingMsgs[msgIdx] + ` (${elapsed}s)`;
+                }
+            }, 1000);
+        }
+
+        function stopLoading() {
+            clearInterval(loadingInterval);
+            loadingBar.style.display = 'none';
+            loadingBarInner.style.transition = 'none';
+            loadingBarInner.style.width = '0%';
+            loadingText.textContent = '';
+        }
+
+        function addToGallery(originalSrc, aiSrc, theme) {
+            history.unshift({ original: originalSrc, ai: aiSrc, theme });
+            if (history.length > 20) history.pop();
+
+            gallery.style.display = 'block';
+            galleryStrip.innerHTML = '';
+            history.forEach((item, i) => {
+                const thumb = document.createElement('div');
+                thumb.className = 'gallery-thumb';
+                thumb.innerHTML = `<img src="${item.ai}" alt="Transform ${i+1}" /><div class="g-label">${item.theme}</div>`;
+                thumb.onclick = () => {
+                    fullscreenImg.src = item.ai;
+                    fullscreenView.style.display = 'flex';
+                };
+                galleryStrip.appendChild(thumb);
+            });
+        }
+
+        fullscreenView.onclick = () => { fullscreenView.style.display = 'none'; };
+
+        actionBtn.addEventListener('click', async () => {
+            if (isShowingResult) {
+                resultsPanel.style.display = 'none';
+                mirrorFrame.style.display = 'block';
+                actionBtn.textContent = 'Snap & Transform';
+                actionBtn.className = 'main-btn capture';
+                errorText.style.display = 'none';
+                isShowingResult = false;
+                return;
+            }
+
+            if (isProcessing) return;
+            isProcessing = true;
+            actionBtn.disabled = true;
+            errorText.style.display = 'none';
+
+            await countdown();
+            const imageData = captureFrame();
+            capturedImg.src = imageData;
+
+            mirrorFrame.style.display = 'none';
+            resultsPanel.style.display = 'block';
+            resultImg.src = '';
+            comparison.classList.remove('reveal-anim');
+
+            startLoading();
 
             try {
                 const controller = new AbortController();
-                const timeoutId  = setTimeout(() => controller.abort(), 120000);
+                const timeout = setTimeout(() => controller.abort(), 120000);
+
+                const body = { image: imageData };
+                if (selectedTheme) body.theme = selectedTheme;
 
                 const response = await fetch('/transform', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: capturedImg.src }),
-                    signal: controller.signal
+                    body: JSON.stringify(body),
+                    signal: controller.signal,
                 });
-
-                clearTimeout(timeoutId);
+                clearTimeout(timeout);
                 const data = await response.json();
 
                 if (data.success) {
-                    stopProgress();
+                    stopLoading();
                     resultImg.src = data.image;
-                    statusText.innerText = `"${data.prompt}"`;
-                    actionBtn.innerText = '\uD83C\uDFB2 Roll Again!';
-                    modeBadge.style.display = 'inline-block';
-                    if (data.mode === 'face-swap') {
-                        modeBadge.className = 'img2img';
-                        modeBadge.innerText = '✦ face-swap — identity preserved';
-                    } else {
-                        modeBadge.className = 'txt2img';
-                        modeBadge.innerText = '✦ text2img — no face detected';
-                    }
-                    isDisplayingResult = true;
+                    comparison.classList.add('reveal-anim');
+                    themeBadge.textContent = data.theme || 'Surprise';
+                    promptText.textContent = data.prompt;
+                    actionBtn.textContent = 'Try Another';
+                    actionBtn.className = 'main-btn again';
+                    isShowingResult = true;
+                    addToGallery(imageData, data.image, data.theme || 'Surprise');
                 } else {
                     throw new Error(data.error || 'Generation failed.');
                 }
-
             } catch (err) {
-                stopProgress();
-                cameraWrap.style.display  = 'block';
-                resultsWrap.style.display = 'none';
-                errorOverlay.innerText = err.name === 'AbortError'
-                    ? 'Request timed out — the model may be loading, try again.'
+                stopLoading();
+                resultsPanel.style.display = 'none';
+                mirrorFrame.style.display = 'block';
+                errorText.textContent = err.name === 'AbortError'
+                    ? 'Timed out. Try again.'
                     : err.message;
-                errorOverlay.style.display = 'block';
-                statusText.innerText = '';
+                errorText.style.display = 'block';
             } finally {
+                isProcessing = false;
                 actionBtn.disabled = false;
             }
         });
     </script>
-
 </body>
 </html>
