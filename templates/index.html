@@ -58,8 +58,7 @@
         .mirror-frame {
             position: relative;
             width: 100%;
-            max-width: 600px;
-            aspect-ratio: 4/3;
+            max-width: 640px;
             border-radius: 24px;
             overflow: hidden;
             border: 2px solid var(--border);
@@ -68,17 +67,19 @@
             transition: border-color 0.5s ease;
         }
 
-        .mirror-frame video,
-        .mirror-frame canvas {
-            position: absolute;
-            inset: 0;
+        .mirror-frame video {
+            display: block;
             width: 100%;
-            height: 100%;
-            object-fit: cover;
             transform: scaleX(-1);
         }
 
         #meshCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
             z-index: 2;
             pointer-events: none;
         }
@@ -219,38 +220,65 @@
             align-items: center;
             gap: 12px;
             width: 100%;
-            max-width: 600px;
+            max-width: 640px;
         }
 
-        .toggle-row {
+        .controls-row {
             display: flex;
+            align-items: center;
+            gap: 12px;
             flex-wrap: wrap;
-            gap: 8px;
             justify-content: center;
         }
 
-        .toggle-btn {
-            padding: 8px 16px;
-            border: 1px solid var(--border);
-            border-radius: 20px;
-            background: var(--card);
+        .controls-row label {
+            font-size: 13px;
             color: var(--muted);
+            font-weight: 500;
+        }
+
+        .styled-select {
+            position: relative;
+        }
+
+        .styled-select select {
+            appearance: none;
+            -webkit-appearance: none;
+            padding: 8px 36px 8px 14px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--card);
+            color: var(--accent);
             font-family: 'Outfit', sans-serif;
             font-size: 13px;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s;
-            -webkit-tap-highlight-color: transparent;
+            transition: border-color 0.2s;
+            outline: none;
         }
 
-        .toggle-btn.active {
+        .styled-select select:hover,
+        .styled-select select:focus {
             border-color: var(--accent);
-            color: var(--accent);
-            background: rgba(0,255,204,0.08);
         }
 
-        .toggle-btn:hover {
-            border-color: var(--accent);
+        .styled-select::after {
+            content: "";
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 5px solid var(--accent);
+            pointer-events: none;
+        }
+
+        .styled-select select option {
+            background: var(--card);
+            color: var(--text);
         }
 
         .status-text {
@@ -270,7 +298,7 @@
 
         @media (max-width: 500px) {
             .header h1 { font-size: 22px; }
-            .mirror-frame { max-width: 100%; border-radius: 16px; aspect-ratio: 1; }
+            .mirror-frame { max-width: 100%; border-radius: 16px; }
         }
     </style>
 </head>
@@ -355,14 +383,17 @@
         </div>
 
         <div class="controls">
-            <div class="toggle-row">
-                <button class="toggle-btn active" data-layer="mesh">Mesh</button>
-                <button class="toggle-btn active" data-layer="outline">Outline</button>
-                <button class="toggle-btn active" data-layer="eyes">Eyes</button>
-                <button class="toggle-btn active" data-layer="brows">Brows</button>
-                <button class="toggle-btn active" data-layer="lips">Lips</button>
-                <button class="toggle-btn active" data-layer="iris">Iris</button>
-                <button class="toggle-btn active" data-layer="dots">Dots</button>
+            <div class="controls-row">
+                <label>Overlay</label>
+                <div class="styled-select">
+                    <select id="overlaySelect">
+                        <option value="full">Full Mesh + Features</option>
+                        <option value="outline">Outline + Features</option>
+                        <option value="mesh">Mesh Only</option>
+                        <option value="dots">Dots Only</option>
+                        <option value="minimal">Minimal (Outline)</option>
+                    </select>
+                </div>
             </div>
             <div class="status-text" id="statusText">Initializing face tracker...</div>
             <div class="error-text" id="errorText"></div>
@@ -388,6 +419,7 @@
     const statusText = document.getElementById("statusText");
     const errorText = document.getElementById("errorText");
     const mirrorFrame = document.getElementById("mirrorFrame");
+    const overlaySelect = document.getElementById("overlaySelect");
 
     const barSmile = document.getElementById("barSmile");
     const barBrowUp = document.getElementById("barBrowUp");
@@ -406,15 +438,19 @@
     let drawingUtils = null;
     let meshLoopRunning = false;
 
-    const layers = {
-        mesh: true,
-        outline: true,
-        eyes: true,
-        brows: true,
-        lips: true,
-        iris: true,
-        dots: true,
+    const OVERLAY_PRESETS = {
+        full:    { mesh: true,  outline: true,  eyes: true,  brows: true,  lips: true,  iris: true,  dots: true },
+        outline: { mesh: false, outline: true,  eyes: true,  brows: true,  lips: true,  iris: true,  dots: false },
+        mesh:    { mesh: true,  outline: false, eyes: false, brows: false, lips: false, iris: false, dots: false },
+        dots:    { mesh: false, outline: false, eyes: false, brows: false, lips: false, iris: false, dots: true },
+        minimal: { mesh: false, outline: true,  eyes: false, brows: false, lips: false, iris: true,  dots: false },
     };
+
+    let layers = { ...OVERLAY_PRESETS.full };
+
+    overlaySelect.addEventListener("change", () => {
+        layers = { ...OVERLAY_PRESETS[overlaySelect.value] };
+    });
 
     const EXPRESSION_COLORS = {
         neutral:   { h: 174, s: 100, l: 50, name: "NEUTRAL",   hex: "#00ffcc" },
@@ -434,14 +470,6 @@
     let frameCount = 0;
     let lastFpsTime = performance.now();
     let currentFps = 0;
-
-    document.querySelectorAll(".toggle-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-            const layer = btn.dataset.layer;
-            layers[layer] = !layers[layer];
-            btn.classList.toggle("active", layers[layer]);
-        });
-    });
 
     function getBlendshapeValue(blendshapes, name) {
         if (!blendshapes || !blendshapes[0] || !blendshapes[0].categories) return 0;
@@ -618,8 +646,10 @@
             return;
         }
 
-        meshCanvas.width = video.videoWidth;
-        meshCanvas.height = video.videoHeight;
+        const vw = video.videoWidth;
+        const vh = video.videoHeight;
+        meshCanvas.width = vw;
+        meshCanvas.height = vh;
 
         let results;
         try {
@@ -629,7 +659,7 @@
             return;
         }
 
-        meshCtx.clearRect(0, 0, meshCanvas.width, meshCanvas.height);
+        meshCtx.clearRect(0, 0, vw, vh);
 
         frameCount++;
         const now = performance.now();
@@ -657,66 +687,62 @@
             landmarkCount.textContent = primaryLandmarks.length;
 
             const pose = estimateHeadPose(primaryLandmarks);
-            headYaw.textContent = (pose.yaw > 0 ? "+" : "") + pose.yaw + "°";
-            headPitch.textContent = (pose.pitch > 0 ? "+" : "") + pose.pitch + "°";
+            headYaw.textContent = (pose.yaw > 0 ? "+" : "") + pose.yaw + "\u00B0";
+            headPitch.textContent = (pose.pitch > 0 ? "+" : "") + pose.pitch + "\u00B0";
 
             mirrorFrame.style.borderColor = expressionHSL(0.6);
             hudOverlay.style.borderLeftColor = expressionHSL(1);
             statsOverlay.style.borderRightColor = expressionHSL(1);
 
             for (let fi = 0; fi < numFaces; fi++) {
-                const landmarks = results.faceLandmarks[fi];
-                const w = meshCanvas.width;
-                const h = meshCanvas.height;
+                const lm = results.faceLandmarks[fi];
 
                 if (layers.mesh) {
-                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION,
-                        { color: expressionHSL(0.12), lineWidth: 0.5 });
+                    drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_TESSELATION,
+                        { color: expressionHSL(0.18), lineWidth: 0.5 });
                 }
 
                 if (layers.outline) {
-                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,
+                    drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,
                         { color: expressionHSL(0.9), lineWidth: 2.5 });
                 }
 
                 if (layers.eyes) {
-                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE,
+                    drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE,
                         { color: expressionHSL(0.95), lineWidth: 1.5 });
-                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,
+                    drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,
                         { color: expressionHSL(0.95), lineWidth: 1.5 });
                 }
 
                 if (layers.brows) {
-                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW,
+                    drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW,
                         { color: expressionHSL(0.8), lineWidth: 2 });
-                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW,
+                    drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW,
                         { color: expressionHSL(0.8), lineWidth: 2 });
                 }
 
                 if (layers.lips) {
-                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LIPS,
+                    drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LIPS,
                         { color: expressionHSL(0.95), lineWidth: 2 });
                 }
 
                 if (layers.iris) {
-                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS,
+                    drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS,
                         { color: expressionHSL(1), lineWidth: 2.5 });
-                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS,
+                    drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS,
                         { color: expressionHSL(1), lineWidth: 2.5 });
                 }
 
                 if (layers.dots) {
-                    meshCtx.save();
-                    const dotColor = expressionHSL(0.5);
-                    for (let i = 0; i < landmarks.length; i++) {
-                        const x = landmarks[i].x * w;
-                        const y = landmarks[i].y * h;
+                    const dotColor = expressionHSL(0.6);
+                    for (let i = 0; i < lm.length; i++) {
+                        const x = lm[i].x * vw;
+                        const y = lm[i].y * vh;
                         meshCtx.fillStyle = dotColor;
                         meshCtx.beginPath();
-                        meshCtx.arc(x, y, 0.8, 0, Math.PI * 2);
+                        meshCtx.arc(x, y, 1, 0, Math.PI * 2);
                         meshCtx.fill();
                     }
-                    meshCtx.restore();
                 }
             }
 
