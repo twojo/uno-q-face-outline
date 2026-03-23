@@ -114,6 +114,18 @@
             padding: 0 1rem;
         }
 
+        #modeBadge {
+            display: inline-block;
+            margin-top: 8px;
+            font-size: 12px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            background: #1a1a1a;
+            color: #666;
+            letter-spacing: 0.04em;
+        }
+        #modeBadge.img2img { background: #0a2a20; color: #00ffcc; }
+
         #progressWrap {
             width: 100%;
             max-width: 760px;
@@ -157,6 +169,7 @@
         <button id="actionBtn">&#9711; Capture</button>
         <div id="progressWrap"><div id="progressBar"></div></div>
         <div id="statusText"></div>
+        <div id="modeBadge" style="display:none;"></div>
         <div id="errorOverlay"></div>
     </div>
 
@@ -172,6 +185,7 @@
         const progressBar  = document.getElementById('progressBar');
         const cameraWrap   = document.getElementById('cameraWrap');
         const resultsWrap  = document.getElementById('resultsWrap');
+        const modeBadge    = document.getElementById('modeBadge');
 
         let isDisplayingResult = false;
         let elapsedInterval    = null;
@@ -218,6 +232,7 @@
                 actionBtn.innerText = '\u25CE Capture';
                 statusText.innerText = '';
                 errorOverlay.style.display = 'none';
+                modeBadge.style.display = 'none';
                 isDisplayingResult = false;
                 return;
             }
@@ -247,7 +262,7 @@
                 const response = await fetch('/transform', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({}),
+                    body: JSON.stringify({ image: capturedImg.src }),
                     signal: controller.signal
                 });
 
@@ -259,6 +274,14 @@
                     resultImg.src = data.image;
                     statusText.innerText = `"${data.prompt}"`;
                     actionBtn.innerText = '\u21BA Try Again';
+                    modeBadge.style.display = 'inline-block';
+                    if (data.mode === 'img2img') {
+                        modeBadge.className = 'img2img';
+                        modeBadge.innerText = '✦ img2img — face preserved';
+                    } else {
+                        modeBadge.className = '';
+                        modeBadge.innerText = 'text-to-image mode — add FAL_KEY for face preservation';
+                    }
                     isDisplayingResult = true;
                 } else {
                     throw new Error(data.error || 'Generation failed.');
