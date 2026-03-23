@@ -154,6 +154,17 @@
 
         .controls select:focus { border-color: var(--blue); }
 
+        .buy-link {
+            font-size: 11px;
+            color: #60a5fa;
+            text-decoration: none;
+            padding: 5px 12px;
+            border: 1px solid rgba(96,165,250,0.3);
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .buy-link:hover { background: rgba(96,165,250,0.1); border-color: #60a5fa; }
+
         .diag {
             margin-top: 14px;
             width: 100%;
@@ -251,6 +262,7 @@
             <option value="minimal">Minimal</option>
             <option value="emojis">Outline + Emojis</option>
         </select>
+        <a href="https://store.arduino.cc/products/arduino-uno-q-4gb" target="_blank" rel="noopener" class="buy-link">Get the Uno Q 4GB &rarr;</a>
     </div>
 
     <div class="diag" id="diagPanel">
@@ -592,9 +604,19 @@
                     }
                     ctx.stroke();
                 }
+                let eyeBlinkL_v = 0, eyeBlinkR_v = 0;
+                if (res.faceBlendshapes && res.faceBlendshapes[i]) {
+                    for (const b of res.faceBlendshapes[i].categories) {
+                        if (b.categoryName === "eyeBlinkLeft") eyeBlinkL_v = b.score;
+                        if (b.categoryName === "eyeBlinkRight") eyeBlinkR_v = b.score;
+                    }
+                }
+                const BLINK_TH = 0.45;
+                const blinkColorL = eyeBlinkL_v > BLINK_TH ? "rgba(255,60,100,1)" : clr.feat;
+                const blinkColorR = eyeBlinkR_v > BLINK_TH ? "rgba(255,60,100,1)" : clr.feat;
                 if (L.eyes) {
-                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, clr.feat, 4);
-                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, clr.feat, 4);
+                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, blinkColorR, 4);
+                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, blinkColorL, 4);
                 }
                 if (L.brows) {
                     if (FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, clr.feat, 4);
