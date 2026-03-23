@@ -399,10 +399,10 @@
     setDiag("dCanvas", "ok", cvs.width + "x" + cvs.height + " — drawing test passed");
 
     const FACE_COLORS = [
-        { mesh: "rgba(90,120,255,0.25)", edge: "rgba(90,160,255,0.95)",  feat: "rgba(100,180,255,1)", iris: "rgba(0,220,255,1)",  dot: "rgba(90,160,255,0.7)",  tag: "#7799ff" },
-        { mesh: "rgba(255,180,60,0.25)", edge: "rgba(255,190,70,0.95)", feat: "rgba(255,200,80,1)", iris: "rgba(255,220,90,1)",  dot: "rgba(255,190,70,0.7)", tag: "#ffbb44" },
-        { mesh: "rgba(80,230,150,0.25)", edge: "rgba(90,240,160,0.95)", feat: "rgba(100,250,180,1)", iris: "rgba(120,255,200,1)", dot: "rgba(90,240,160,0.7)", tag: "#66ee99" },
-        { mesh: "rgba(230,120,230,0.25)", edge: "rgba(240,140,240,0.95)", feat: "rgba(250,160,250,1)", iris: "rgba(255,170,255,1)", dot: "rgba(240,140,240,0.7)", tag: "#ee88ee" },
+        { mesh: "rgba(120,160,255,0.55)", edge: "rgba(90,160,255,0.95)",  feat: "rgba(100,180,255,1)", iris: "rgba(0,220,255,1)",  dot: "rgba(90,160,255,0.7)",  tag: "#7799ff" },
+        { mesh: "rgba(255,190,80,0.55)", edge: "rgba(255,190,70,0.95)", feat: "rgba(255,200,80,1)", iris: "rgba(255,220,90,1)",  dot: "rgba(255,190,70,0.7)", tag: "#ffbb44" },
+        { mesh: "rgba(100,240,170,0.55)", edge: "rgba(90,240,160,0.95)", feat: "rgba(100,250,180,1)", iris: "rgba(120,255,200,1)", dot: "rgba(90,240,160,0.7)", tag: "#66ee99" },
+        { mesh: "rgba(240,150,240,0.55)", edge: "rgba(240,140,240,0.95)", feat: "rgba(250,160,250,1)", iris: "rgba(255,170,255,1)", dot: "rgba(240,140,240,0.7)", tag: "#ee88ee" },
     ];
 
     const PRESETS = {
@@ -575,7 +575,7 @@
                 }
 
                 if (L.mesh && FaceLandmarker.FACE_LANDMARKS_TESSELATION)
-                    drawConns(FaceLandmarker.FACE_LANDMARKS_TESSELATION, clr.mesh, 2);
+                    drawConns(FaceLandmarker.FACE_LANDMARKS_TESSELATION, clr.mesh, 3.5);
                 if (L.outline && FaceLandmarker.FACE_LANDMARKS_FACE_OVAL) {
                     var cx = 0, cy = 0, oc = 0;
                     var ovalConns = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL;
