@@ -172,6 +172,8 @@ def handle_capture(sid: str, data: dict):
         ui.send_message("result", {
             "image": f"data:image/jpeg;base64,{out_b64}",
             "prompt": prompt,
+            "timestamp": datetime.now().isoformat(),
+            "elapsed_s": round(time.perf_counter() - t_start, 1),
         })
 
     except Exception as exc:

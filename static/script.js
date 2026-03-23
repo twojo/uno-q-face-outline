@@ -51,6 +51,9 @@ const feedbackPrompt = document.getElementById("sm-feedback-prompt");
 const statusDot      = document.getElementById("sm-status-dot");
 const statusText     = document.getElementById("sm-status-text");
 const errorMsg       = document.getElementById("sm-error-msg");
+const progressBar    = document.getElementById("sm-progress-bar");
+const elapsedEl      = document.getElementById("sm-elapsed");
+const historyList    = document.getElementById("sm-history-list");
 
 
 /* ── State helpers ─────────────────────────────────────────────────── */
@@ -74,6 +77,115 @@ function setConnection(state) {
 /** Update the subheader status text. */
 function setStatus(msg) {
   statusText.textContent = msg;
+}
+
+
+/* ── Elapsed timer & progress bar ──────────────────────────────────── */
+/*
+ * The progress bar gives visual confirmation the model is running
+ * (not frozen). It animates from 0 → 100% over PROGRESS_DURATION_S seconds
+ * using a CSS transition driven by JS. If inference takes longer than that,
+ * the bar stays full but keeps moving slightly via the spinner.
+ * The elapsed counter ticks every second so you can see real time spent.
+ */
+
+const PROGRESS_DURATION_S = 90;  // conservative upper bound for HF free tier
+let _timerInterval = null;
+let _timerSeconds  = 0;
+
+function startTimer() {
+  _timerSeconds = 0;
+  elapsedEl.textContent = "0s elapsed";
+
+  /* Restart the CSS width transition each capture:
+   * 1. Kill transition so the reset to 0% is instant.
+   * 2. Force a reflow so the browser registers the 0% width.
+   * 3. Re-apply the transition and animate to 100%. */
+  progressBar.style.transition = "none";
+  progressBar.style.width = "0%";
+  void progressBar.offsetWidth;                         // force reflow
+  progressBar.style.transition = `width ${PROGRESS_DURATION_S}s linear`;
+  progressBar.style.width = "100%";
+
+  clearInterval(_timerInterval);
+  _timerInterval = setInterval(() => {
+    _timerSeconds++;
+    elapsedEl.textContent = `${_timerSeconds}s elapsed`;
+  }, 1000);
+}
+
+function stopTimer() {
+  clearInterval(_timerInterval);
+  _timerInterval = null;
+  /* Freeze the bar at wherever it reached */
+  const computed = getComputedStyle(progressBar).width;
+  progressBar.style.transition = "none";
+  progressBar.style.width = computed;
+}
+
+
+/* ── History ledger ─────────────────────────────────────────────────── */
+/*
+ * Mirrors the reference app's "Recent detections" list.
+ * Each entry shows: thumbnail · prompt (2-line truncated) · timestamp.
+ * Clicking a row restores that result image to the viewport.
+ * Keeps at most MAX_HISTORY entries; oldest are trimmed from the bottom.
+ */
+
+const MAX_HISTORY = 10;
+
+function addHistoryEntry(data) {
+  /* Remove the "No transforms yet" placeholder on first entry */
+  const placeholder = historyList.querySelector(".sm-history-empty");
+  if (placeholder) placeholder.remove();
+
+  /* Format the time — prefer the server timestamp, fall back to now */
+  const ts = data.timestamp ? new Date(data.timestamp) : new Date();
+  const timeStr = ts.toLocaleTimeString([], {
+    hour: "2-digit", minute: "2-digit", second: "2-digit"
+  });
+  const elapsedStr = data.elapsed_s != null ? ` · ${data.elapsed_s}s` : "";
+
+  const li = document.createElement("li");
+  li.className = "sm-history-entry";
+  li.setAttribute("tabindex", "0");
+  li.setAttribute("role", "button");
+  li.setAttribute("aria-label", `View: ${data.prompt}`);
+
+  const thumb = document.createElement("img");
+  thumb.className = "sm-history-thumb";
+  thumb.src = data.image;
+  thumb.alt = "AI result thumbnail";
+
+  const info = document.createElement("div");
+  info.className = "sm-history-info";
+  info.innerHTML = `
+    <p class="sm-history-prompt">${data.prompt}</p>
+    <p class="sm-history-time">${timeStr}${elapsedStr}</p>
+  `;
+
+  li.appendChild(thumb);
+  li.appendChild(info);
+
+  /* Clicking (or Enter key) restores that result to the viewport */
+  const restore = () => {
+    resultImg.onload = () => {
+      promptBadge.textContent = `Prompt: ${data.prompt}`;
+      feedbackPrompt.textContent = data.prompt;
+      setState("result");
+      captureBtn.disabled = false;
+    };
+    resultImg.src = data.image;
+  };
+  li.addEventListener("click", restore);
+  li.addEventListener("keydown", (e) => { if (e.key === "Enter") restore(); });
+
+  historyList.prepend(li);
+
+  /* Trim to maximum */
+  while (historyList.children.length > MAX_HISTORY) {
+    historyList.removeChild(historyList.lastChild);
+  }
 }
 
 
@@ -117,6 +229,7 @@ socket.on("processing", (data) => {
   setState("processing");
   promptPreview.textContent  = `"${data.prompt}"`;
   feedbackPrompt.textContent = data.prompt;
+  startTimer();
 });
 
 /**
@@ -125,6 +238,8 @@ socket.on("processing", (data) => {
  * Mirrors the reference's detection handler that populates the UI list.
  */
 socket.on("result", (data) => {
+  stopTimer();
+  addHistoryEntry(data);
   resultImg.onload = () => {
     promptBadge.textContent = `Prompt: ${data.prompt}`;
     feedbackPrompt.textContent = data.prompt;
@@ -139,6 +254,7 @@ socket.on("result", (data) => {
  * Shows an in-viewport error overlay with the message from Python.
  */
 socket.on("transform_error", (data) => {
+  stopTimer();
   errorMsg.textContent = data.message || "Inference failed — please try again.";
   setState("error");
   captureBtn.disabled = false;

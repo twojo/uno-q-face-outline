@@ -66,6 +66,12 @@
           <div class="sm-spinner"></div>
           <p class="sm-overlay-label">Transforming<span class="sm-dots"></span></p>
           <p class="sm-prompt-preview" id="sm-prompt-preview"></p>
+          <!-- Progress bar: JS animates from 0→100% over ~90s so the user
+               can see it moving rather than wonder if it has frozen -->
+          <div class="sm-progress-wrap">
+            <div class="sm-progress-bar" id="sm-progress-bar"></div>
+          </div>
+          <p class="sm-elapsed" id="sm-elapsed">0s elapsed</p>
         </div>
 
         <!-- Result overlay — visible while data-state="result" -->
@@ -107,6 +113,16 @@
         </button>
 
       </div><!-- /.sm-controls -->
+
+      <!-- ── History ledger — mirrors reference .recent-detections-section -->
+      <div class="sm-history-section">
+        <h2 class="sm-section-title">Recent transforms</h2>
+        <!-- Entries prepended by script.js when each result arrives.
+             Clicking any row restores that result image to the viewport. -->
+        <ul class="sm-history-list" id="sm-history-list">
+          <li class="sm-history-empty">No transforms yet — tap Capture to start</li>
+        </ul>
+      </div>
 
     </div><!-- /.sm-main -->
 
