@@ -275,8 +275,13 @@
                     statusText.innerText = `"${data.prompt}"`;
                     actionBtn.innerText = '\uD83C\uDFB2 Roll Again!';
                     modeBadge.style.display = 'inline-block';
-                    modeBadge.className = 'img2img';
-                    modeBadge.innerText = '✦ img2img — face preserved';
+                    if (data.mode === 'face-swap') {
+                        modeBadge.className = 'img2img';
+                        modeBadge.innerText = '✦ face-swap — identity preserved';
+                    } else {
+                        modeBadge.className = 'txt2img';
+                        modeBadge.innerText = '✦ text2img — no face detected';
+                    }
                     isDisplayingResult = true;
                 } else {
                     throw new Error(data.error || 'Generation failed.');
