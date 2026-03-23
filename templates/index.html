@@ -19,13 +19,12 @@
             padding: 1rem;
         }
 
-        .container {
-            position: relative;
+        /* Live camera view */
+        .camera-wrap {
             width: 100%;
-            max-width: 600px;
+            max-width: 560px;
         }
 
-        /* scaleX(-1) = true mirror effect */
         video {
             width: 100%;
             border-radius: 16px;
@@ -34,18 +33,45 @@
             display: block;
         }
 
-        #resultImg {
-            width: 100%;
-            border-radius: 16px;
+        /* Side-by-side result view */
+        .results-wrap {
             display: none;
-            border: 2px solid #00ffcc;
+            width: 100%;
+            max-width: 760px;
+            gap: 12px;
+            flex-direction: row;
         }
 
+        .result-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-label {
+            font-size: 13px;
+            color: #888;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .result-panel img {
+            width: 100%;
+            border-radius: 14px;
+            display: block;
+        }
+
+        #capturedImg { border: 2px solid #444; }
+        #resultImg   { border: 2px solid #00ffcc; }
+
+        /* Controls */
         .btn-container {
             text-align: center;
-            margin-top: 20px;
+            margin-top: 18px;
             width: 100%;
-            max-width: 600px;
+            max-width: 760px;
         }
 
         button {
@@ -57,12 +83,12 @@
             font-weight: bold;
             border-radius: 30px;
             cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0, 255, 204, 0.4);
+            box-shadow: 0 4px 15px rgba(0,255,204,0.4);
             transition: 0.2s;
             -webkit-tap-highlight-color: transparent;
         }
 
-        button:active { transform: scale(0.95); }
+        button:active  { transform: scale(0.95); }
 
         button:disabled {
             background: #555;
@@ -72,7 +98,7 @@
         }
 
         #statusText {
-            margin-top: 15px;
+            margin-top: 14px;
             font-size: 15px;
             color: #aaa;
             min-height: 20px;
@@ -88,10 +114,9 @@
             padding: 0 1rem;
         }
 
-        /* Loading bar shown while waiting for the AI */
         #progressWrap {
             width: 100%;
-            max-width: 600px;
+            max-width: 760px;
             height: 4px;
             background: #222;
             border-radius: 2px;
@@ -105,17 +130,28 @@
             width: 0%;
             background: linear-gradient(90deg, #00ffcc, #7c3aed);
             border-radius: 2px;
-            transition: width 90s linear;
+            transition: width 30s linear;
         }
     </style>
 </head>
 <body>
 
-    <div class="container">
+    <div class="camera-wrap" id="cameraWrap">
         <video id="video" autoplay playsinline muted></video>
-        <img id="resultImg" alt="AI result" />
-        <canvas id="canvas" style="display:none;"></canvas>
     </div>
+
+    <div class="results-wrap" id="resultsWrap">
+        <div class="result-panel">
+            <span class="panel-label">You</span>
+            <img id="capturedImg" alt="Captured photo" />
+        </div>
+        <div class="result-panel">
+            <span class="panel-label">AI Vision</span>
+            <img id="resultImg" alt="AI result" />
+        </div>
+    </div>
+
+    <canvas id="canvas" style="display:none;"></canvas>
 
     <div class="btn-container">
         <button id="actionBtn">&#9711; Capture</button>
@@ -125,18 +161,21 @@
     </div>
 
     <script>
-        const video       = document.getElementById('video');
-        const canvas      = document.getElementById('canvas');
-        const actionBtn   = document.getElementById('actionBtn');
-        const resultImg   = document.getElementById('resultImg');
-        const statusText  = document.getElementById('statusText');
+        const video        = document.getElementById('video');
+        const canvas       = document.getElementById('canvas');
+        const actionBtn    = document.getElementById('actionBtn');
+        const capturedImg  = document.getElementById('capturedImg');
+        const resultImg    = document.getElementById('resultImg');
+        const statusText   = document.getElementById('statusText');
         const errorOverlay = document.getElementById('errorOverlay');
         const progressWrap = document.getElementById('progressWrap');
         const progressBar  = document.getElementById('progressBar');
+        const cameraWrap   = document.getElementById('cameraWrap');
+        const resultsWrap  = document.getElementById('resultsWrap');
 
         let isDisplayingResult = false;
-        let elapsedInterval = null;
-        let elapsedSeconds = 0;
+        let elapsedInterval    = null;
+        let elapsedSeconds     = 0;
 
         // ── Camera init ────────────────────────────────────────────────
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
@@ -153,13 +192,13 @@
             progressBar.style.transition = 'none';
             progressBar.style.width = '0%';
             void progressBar.offsetWidth;
-            progressBar.style.transition = 'width 90s linear';
+            progressBar.style.transition = 'width 30s linear';
             progressBar.style.width = '100%';
 
             clearInterval(elapsedInterval);
             elapsedInterval = setInterval(() => {
                 elapsedSeconds++;
-                statusText.innerText = `Transforming… ${elapsedSeconds}s`;
+                statusText.innerText = `Generating\u2026 ${elapsedSeconds}s`;
             }, 1000);
         }
 
@@ -170,13 +209,12 @@
             progressBar.style.width = '0%';
         }
 
-        // ── Capture & transform ────────────────────────────────────────
+        // ── Capture & generate ─────────────────────────────────────────
         actionBtn.addEventListener('click', async () => {
 
-            // "Try Again" — return to live mirror
             if (isDisplayingResult) {
-                resultImg.style.display = 'none';
-                video.style.display = 'block';
+                resultsWrap.style.display = 'none';
+                cameraWrap.style.display  = 'block';
                 actionBtn.innerText = '\u25CE Capture';
                 statusText.innerText = '';
                 errorOverlay.style.display = 'none';
@@ -184,21 +222,23 @@
                 return;
             }
 
-            // Capture state
             actionBtn.disabled = true;
             errorOverlay.style.display = 'none';
-            statusText.innerText = 'Transforming\u2026 0s';
+            statusText.innerText = 'Generating\u2026 0s';
             startProgress();
 
-            // Draw frame to canvas, un-mirror so the AI gets natural orientation
+            // Freeze current frame as "your photo" (un-mirror for natural orientation)
             const ctx = canvas.getContext('2d');
             canvas.width  = video.videoWidth  || 640;
             canvas.height = video.videoHeight || 480;
             ctx.translate(canvas.width, 0);
             ctx.scale(-1, 1);
             ctx.drawImage(video, 0, 0);
+            capturedImg.src = canvas.toDataURL('image/jpeg', 0.8);
 
-            const imageB64 = canvas.toDataURL('image/jpeg', 0.8);
+            // Switch layout: hide camera, show side-by-side
+            cameraWrap.style.display  = 'none';
+            resultsWrap.style.display = 'flex';
 
             try {
                 const controller = new AbortController();
@@ -207,7 +247,7 @@
                 const response = await fetch('/transform', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: imageB64 }),
+                    body: JSON.stringify({}),
                     signal: controller.signal
                 });
 
@@ -216,9 +256,7 @@
 
                 if (data.success) {
                     stopProgress();
-                    video.style.display = 'none';
                     resultImg.src = data.image;
-                    resultImg.style.display = 'block';
                     statusText.innerText = `"${data.prompt}"`;
                     actionBtn.innerText = '\u21BA Try Again';
                     isDisplayingResult = true;
@@ -228,6 +266,8 @@
 
             } catch (err) {
                 stopProgress();
+                cameraWrap.style.display  = 'block';
+                resultsWrap.style.display = 'none';
                 errorOverlay.innerText = err.name === 'AbortError'
                     ? 'Request timed out — the model may be loading, try again.'
                     : err.message;
