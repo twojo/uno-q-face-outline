@@ -1,7 +1,41 @@
 """
 AI Mirror Booth — fal.ai InstantID Backend (Identity-Preserving Smart Mirror)
-Designed for Arduino Uno Q (QRB2210) deployment.
-Single-step identity-preserving face transformation via InstantID.
+
+DEPLOYMENT TARGETS
+──────────────────
+This project supports two deployment targets:
+
+  1. REPLIT (current)
+     Entry point : app.py        ← YOU ARE HERE (Flask HTTP, for Replit hosting)
+     Shim folder : arduino/      ← keep this; only used by main.py on Replit
+     Run command : python app.py
+     Env vars    : FAL_KEY (required)
+
+  2. ARDUINO UNO Q (QRB2210)
+     Entry point : main.py       ← Bricks SDK version (WebSocket via Socket.IO)
+     Shim folder : DELETE arduino/ before flashing (real SDK is pre-installed)
+     Run command : deployed via Arduino IDE / Bricks toolchain
+     Env vars    : FAL_KEY (set in device env or .env file)
+
+  3. FREE ALTERNATIVE (no paid API)
+     Entry point : main_free.py  ← Uses Hugging Face instruct-pix2pix (free tier)
+     Env vars    : HF_TOKEN (free Hugging Face token)
+
+SWITCHING TO UNO Q
+──────────────────
+  1. Delete the entire arduino/ folder (rm -rf arduino/)
+  2. Use main.py as your entry point instead of app.py
+  3. The real Arduino Bricks SDK provides: from arduino.app_bricks.web_ui import WebUI
+  4. Set FAL_KEY in the device environment
+  5. main.py uses Socket.IO events instead of HTTP POST /transform
+
+TUNING KNOBS
+────────────
+  - ip_adapter_scale      : 0.8  (raise to 0.9 if face doesn't match)
+  - controlnet_cond_scale : 0.8  (raise to 0.9 for stronger face structure)
+  - guidance_scale        : 7.5  (raise for more prompt adherence, lower for more creativity)
+  - num_inference_steps   : 30   (raise to 40-50 for higher quality, slower generation)
+  - enhance_face_region   : True (keeps face detail sharp)
 """
 
 import os

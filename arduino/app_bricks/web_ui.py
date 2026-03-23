@@ -1,3 +1,7 @@
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  REPLIT SHIM — DELETE THIS ENTIRE arduino/ FOLDER BEFORE UNO Q DEPLOY  ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+#
 # Replit compatibility shim for arduino.app_bricks.web_ui.WebUI
 #
 # Mirrors the official Bricks API exactly:
@@ -9,11 +13,11 @@
 # On the Uno Q the real WebUI class (from the pre-installed arduino package)
 # handles TLS, mDNS advertising, the QR-code pairing flow, and iframe
 # video streaming.  This shim replaces all of that with Flask + Flask-SocketIO
-# so the same app.py runs unchanged on Replit for prototyping.
+# so the same main.py runs unchanged on Replit for prototyping.
 #
 # Threading note: Flask-SocketIO with async_mode="threading" gives every
 # incoming Socket.IO event its own OS thread, so long-running handlers
-# (e.g. a 30-90 s Hugging Face inference call) never block the event loop.
+# (e.g. a 30-90 s fal.ai inference call) never block the event loop.
 
 import os
 import threading

@@ -35,21 +35,44 @@ Single-step identity-preserving transformation via **InstantID** (`fal-ai/instan
 
 | File | Purpose |
 |------|---------|
-| `app.py` | Flask backend — /transform pipeline (InstantID, random theme) |
-| `templates/index.html` | Full photo booth UI — camera, countdown, reveal, gallery |
+| `app.py` | Flask HTTP backend for Replit (POST /transform) |
+| `main.py` | Bricks SDK backend for Arduino Uno Q (Socket.IO events) |
+| `main_free.py` | Free alternative using Hugging Face (no paid API key) |
+| `templates/index.html` | Full photo booth UI — camera, face mesh, countdown, reveal, gallery |
+| `arduino/` | Replit shim folder — mimics Arduino Bricks SDK for prototyping |
+| `arduino/app_bricks/web_ui.py` | Shim for WebUI (Flask-SocketIO on Replit) |
+| `arduino/app_utils.py` | Shim for App.run() |
 
 ### Dependencies
 
-- Python: `flask`, `requests`, `Pillow`, `fal-client`
+- Python: `flask`, `flask-socketio`, `requests`, `Pillow`, `fal-client`
 - **Workflow**: "Smart Mirror" — `python3 app.py` on `PORT` (default 8000)
-- **Secret**: `FAL_KEY` — fal.ai API key
+- **Secret**: `FAL_KEY` — fal.ai API key (paid); or `HF_TOKEN` for free version
+
+### Deployment Targets
+
+| Target | Entry Point | Env Var | Notes |
+|--------|-------------|---------|-------|
+| Replit | `app.py` | `FAL_KEY` | Flask HTTP, keep `arduino/` folder |
+| Uno Q | `main.py` | `FAL_KEY` | Bricks SDK, DELETE `arduino/` folder |
+| Free | `main_free.py` | `HF_TOKEN` | Hugging Face instruct-pix2pix |
 
 ### Deploying to the Uno Q
 
-1. Copy `app.py` and `templates/index.html`
-2. `pip install flask requests Pillow fal-client`
-3. `export FAL_KEY="your-key"`
-4. `python3 app.py`
+1. Copy entire project to Uno Q filesystem
+2. `rm -rf arduino/` (real Bricks SDK is pre-installed on device)
+3. `pip install requests Pillow fal-client`
+4. `export FAL_KEY="your-key"`
+5. `python main.py` (NOT app.py)
+6. Real SDK handles: TLS, mDNS, QR-code pairing, iframe video streaming
+
+### Tuning Knobs
+
+- `ip_adapter_scale`: 0.8 (raise to 0.9 if face doesn't match)
+- `controlnet_conditioning_scale`: 0.8 (raise to 0.9 for stronger face structure)
+- `guidance_scale`: 7.5 (raise for more prompt adherence)
+- `num_inference_steps`: 30 (raise to 40-50 for higher quality)
+- `enhance_face_region`: True
 
 ## Stack
 

@@ -1,15 +1,46 @@
 """
 AI Mirror Booth — Arduino Uno Q (QRB2210) entry point.
 
-Uses the Arduino Bricks SDK (WebUI + App.run()).
-On Replit the arduino/ shim folder replaces the real SDK so this file
-runs unchanged for prototyping — delete arduino/ before flashing to the device.
+DEPLOYMENT TARGETS
+──────────────────
+This project supports two deployment targets:
 
-Communication model
+  1. REPLIT
+     Entry point : app.py        ← Flask HTTP version for Replit hosting
+     Shim folder : arduino/      ← keep this; provides Bricks SDK compatibility
+
+  2. ARDUINO UNO Q (QRB2210) ← YOU ARE HERE
+     Entry point : main.py       ← Bricks SDK version (WebSocket via Socket.IO)
+     Shim folder : DELETE arduino/ before flashing (real SDK is pre-installed)
+     Run command : deployed via Arduino IDE / Bricks toolchain
+     Env vars    : FAL_KEY (set in device env or .env file)
+
+  3. FREE ALTERNATIVE (no paid API)
+     Entry point : main_free.py  ← Uses Hugging Face instruct-pix2pix (free tier)
+     Env vars    : HF_TOKEN (free Hugging Face token)
+
+SWITCHING TO UNO Q — STEP BY STEP
+──────────────────────────────────
+  1. Copy this entire project to the Uno Q filesystem
+  2. Delete the arduino/ shim folder:  rm -rf arduino/
+     (The real Bricks SDK is pre-installed on the Uno Q at the system level)
+  3. Set FAL_KEY in the device environment or a .env file
+  4. Run:  python main.py
+  5. The real SDK handles: TLS, mDNS, QR-code pairing, iframe video streaming
+
+COMMUNICATION MODEL
 ───────────────────
-Browser → device : Socket.IO event  "transform"  { image: "data:image/jpeg;base64,..." }
-Device  → browser: Socket.IO event  "result"     { success, image?, prompt?, theme?, seed?, error? }
-Device  → browser: Socket.IO event  "status"     { message: str }   (progress updates)
+  Browser → device : Socket.IO event  "transform"  { image: "data:image/jpeg;base64,..." }
+  Device  → browser: Socket.IO event  "result"     { success, image?, prompt?, theme?, seed?, error? }
+  Device  → browser: Socket.IO event  "status"     { message: str }   (progress updates)
+
+TUNING KNOBS
+────────────
+  - ip_adapter_scale      : 0.8  (raise to 0.9 if face doesn't match)
+  - controlnet_cond_scale : 0.8  (raise to 0.9 for stronger face structure)
+  - guidance_scale        : 7.5  (raise for more prompt adherence, lower for more creativity)
+  - num_inference_steps   : 30   (raise to 40-50 for higher quality, slower generation)
+  - enhance_face_region   : True (keeps face detail sharp)
 """
 
 import os
