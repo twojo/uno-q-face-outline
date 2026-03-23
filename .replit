@@ -32,7 +32,7 @@ modules = ["nodejs-24", "python-3.11"]
 
   [agent]
   stack = "PNPM_WORKSPACE"
-  expertMode = true
+expertMode = true
 
   [postMerge]
   path = "scripts/post-merge.sh"
