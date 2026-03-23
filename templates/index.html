@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <title>Arduino Uno Q — Face Tracker</title>
+    <title>Wojo's Uno Q Face Outline Demo</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
@@ -208,8 +208,8 @@
         <img src="/static/qualcomm-logo.png" alt="Qualcomm" />
         <div class="header-div"></div>
         <div class="header-title">
-            <h1>Arduino Uno Q &mdash; Face Tracker</h1>
-            <span class="sub">Qualcomm QRB2210 &bull; 478-Point Facial Landmark Detection</span>
+            <h1>Wojo's Uno Q Face Outline Demo</h1>
+            <span class="sub">Replit 2026.03 &bull; Qualcomm QRB2210 &bull; 478-Point Landmark Detection</span>
         </div>
     </div>
 
@@ -249,6 +249,7 @@
             <option value="mesh">Mesh Only</option>
             <option value="dots">Dots Only</option>
             <option value="minimal">Minimal</option>
+            <option value="emojis">Outline + Emojis</option>
         </select>
     </div>
 
@@ -393,11 +394,12 @@
     ];
 
     const PRESETS = {
-        full:    { mesh:1, outline:1, eyes:1, brows:1, lips:1, iris:1, dots:1 },
-        outline: { mesh:0, outline:1, eyes:1, brows:1, lips:1, iris:1, dots:0 },
-        mesh:    { mesh:1, outline:0, eyes:0, brows:0, lips:0, iris:0, dots:0 },
-        dots:    { mesh:0, outline:0, eyes:0, brows:0, lips:0, iris:0, dots:1 },
-        minimal: { mesh:0, outline:1, eyes:0, brows:0, lips:0, iris:1, dots:0 },
+        full:    { mesh:1, outline:1, eyes:1, brows:1, lips:1, iris:1, dots:1, emojis:1 },
+        outline: { mesh:0, outline:1, eyes:1, brows:1, lips:1, iris:1, dots:0, emojis:1 },
+        mesh:    { mesh:1, outline:0, eyes:0, brows:0, lips:0, iris:0, dots:0, emojis:0 },
+        dots:    { mesh:0, outline:0, eyes:0, brows:0, lips:0, iris:0, dots:1, emojis:0 },
+        minimal: { mesh:0, outline:1, eyes:0, brows:0, lips:0, iris:1, dots:0, emojis:0 },
+        emojis:  { mesh:0, outline:1, eyes:0, brows:0, lips:1, iris:0, dots:0, emojis:1 },
     };
 
     let L = { ...PRESETS.full };
@@ -637,6 +639,7 @@
                     ctx.restore();
                 }
 
+                if (L.emojis) {
                 let smileScore = 0, angerScore = 0, surpriseScore = 0, browUpScore = 0;
                 if (res.faceBlendshapes && res.faceBlendshapes[i]) {
                     const bs = res.faceBlendshapes[i].categories;
@@ -687,6 +690,7 @@
                         }
                         ctx.restore();
                     }
+                }
                 }
             }
 
