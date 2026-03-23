@@ -5,9 +5,13 @@ version = "1.0.0"
 id = "smart-mirror-photo-booth"
 
 [[services]]
-localPort = 8000
+localPort = 8002
 name = "Smart Mirror"
 paths = ["/"]
+
+[services.env]
+PORT = "8002"
+CAPTURES_DIR = "/home/runner/workspace/captures"
 
 [services.development]
 run = "/home/runner/workspace/.pythonlibs/bin/python3 /home/runner/workspace/app.py"

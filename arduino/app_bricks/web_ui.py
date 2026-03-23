@@ -35,12 +35,14 @@ class WebUI:
         global _ui_instance
         _ui_instance = self
 
+        # Resolve paths relative to the workspace root, not this shim file.
+        # web_ui.py lives at arduino/app_bricks/web_ui.py so we go up 3 levels.
+        _root = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))))
         self._flask_app = Flask(
             __name__,
-            static_folder=os.path.join(os.path.dirname(os.path.dirname(
-                os.path.abspath(__file__))), "static"),
-            template_folder=os.path.join(os.path.dirname(os.path.dirname(
-                os.path.abspath(__file__))), "templates"),
+            static_folder=os.path.join(_root, "static"),
+            template_folder=os.path.join(_root, "templates"),
         )
         self._sio = SocketIO(
             self._flask_app,
@@ -105,7 +107,13 @@ class WebUI:
             self._sio.emit(event, data)
 
     def _run(self, port: int = 8000):
-        """Start the Flask-SocketIO development server (called by App.run())."""
+        """Start the Flask-SocketIO development server (called by App.run()).
+
+        Reads the PORT env var when set (Replit artifact system injects this)
+        so the shim can be wired as a proper artifact service without hardcoding
+        a port that conflicts with other workflows.
+        """
+        port = int(os.environ.get("PORT", port))
         self._sio.run(
             self._flask_app,
             host="0.0.0.0",
