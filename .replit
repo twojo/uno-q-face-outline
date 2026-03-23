@@ -2,18 +2,9 @@ modules = ["nodejs-24", "python-3.11"]
 
   [[artifacts]]
   id = "artifacts/smart-mirror"
-
-  [[artifacts]]
-  id = "artifacts/api-server"
-
-  [[artifacts]]
-  id = "artifacts/mockup-sandbox"
-
   [deployment]
   router = "application"
   deploymentTarget = "autoscale"
-  build = ["bash", "-c", "pip install flask flask-socketio Pillow fal-client requests"]
-  run = ["/home/runner/workspace/.pythonlibs/bin/python3", "/home/runner/workspace/app.py"]
 
   [workflows]
   runButton = "Project"
