@@ -1,0 +1,13 @@
+kind = "web"
+previewPath = "/"
+title = "Smart Mirror"
+version = "1.0.0"
+id = "smart-mirror-photo-booth"
+
+[[services]]
+localPort = 8000
+name = "Smart Mirror"
+paths = ["/"]
+
+[services.development]
+run = "/home/runner/workspace/.pythonlibs/bin/python3 /home/runner/workspace/app.py"
