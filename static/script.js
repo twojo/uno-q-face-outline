@@ -1,24 +1,18 @@
 /**
  * Smart Mirror AI Booth — Frontend Logic
- * Follows the Arduino Bricks communication pattern from the reference app:
+ * Follows the Arduino Bricks communication pattern from the official examples
+ * (image-classification, chatbot-cloud-llm, etc.):
  *
- *   socket.on("welcome", …)        ← server ready
+ *   socket.on("connect", …)        ← Socket.IO built-in; connection established
  *   socket.emit("capture", data)   → send frame to backend
  *   socket.on("processing", …)     ← prompt chosen, inference starting
  *   socket.on("result", …)         ← AI image ready
  *   socket.on("transform_error", …)← inference failed
+ *   socket.on("disconnect", …)     ← Socket.IO built-in; connection lost
  *
  * On the real Bricks SDK, WebUI handles the Socket.IO transport; the
  * event names and payload shapes here match app.py's ui.send_message /
  * ui.on_message calls exactly.
- *
- * Bricks widget porting notes:
- *   • Swap document.getElementById("sm-…") for
- *       root.querySelector("#sm-…")
- *     where root = the widget's shadow root or container element.
- *   • Socket.IO is provided by the Bricks runtime; replace
- *       const socket = io()
- *     with whatever handle the SDK exposes.
  */
 
 "use strict";
@@ -83,24 +77,34 @@ function setStatus(msg) {
 }
 
 
-/* ── Socket.IO wiring — mirrors reference app.js ───────────────────── */
+/* ── Socket.IO wiring — mirrors official Bricks app.js pattern ─────── */
 
 /**
- * io() with no arguments connects back to the page's own origin.
- * On the Uno Q the real WebUI serves the Socket.IO endpoint on the same
- * host/port, so this call is identical in both environments.
+ * Official Bricks pattern (from image-classification, chatbot-cloud-llm, etc.):
+ *   socket = io(`http://${window.location.host}`)
+ *
+ * Explicitly naming the host is required so the connection works correctly
+ * through Replit's reverse proxy and through the Uno Q's local network.
+ * Plain io() can fail in proxied environments because Socket.IO may
+ * choose a wrong base path when the origin is ambiguous.
  */
-const socket = io();
+const socket = io(`http://${window.location.host}`);
 
 /**
- * "welcome" — emitted by on_client_connect() in app.py immediately
- * after the browser connects.  Mirrors the reference's welcome handler
- * that sends camera status and pairing secret.
+ * "connect" — Socket.IO built-in event; fires when the WebSocket (or
+ * polling) connection to the server is established.
+ * Official Bricks pattern uses this instead of a custom "welcome" event.
+ * Mirrors image-classification/assets/app.js:
+ *   socket.on('connect', () => { errorContainer.style.display = 'none'; })
  */
-socket.on("welcome", (data) => {
+socket.on("connect", () => {
   setConnection("connected");
   setStatus("Server ready — tap Capture to transform");
   captureBtn.disabled = false;
+  // Hide any previous disconnect error
+  if (document.body.dataset.state === "error") {
+    setState("idle");
+  }
 });
 
 /**
