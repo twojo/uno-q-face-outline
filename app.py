@@ -1,5 +1,5 @@
 """
-AI Mirror Booth — fal.ai InstantID Backend
+AI Mirror Booth — fal.ai InstantID Backend (Identity-Preserving Smart Mirror)
 Designed for Arduino Uno Q (QRB2210) deployment.
 Single-step identity-preserving face transformation via InstantID.
 """
@@ -78,14 +78,14 @@ def preprocess_face(b64_data: str) -> str:
 # ── Prompts ──────────────────────────────────────────────────────────────────
 
 IDENTITY_PREFIX = (
-    "High-fidelity portrait of the exact person in the reference image, "
-    "preserving all facial features and skin details, "
+    "(photorealistic portrait of the exact person in the reference image:1.4), "
+    "highly detailed face, maintaining original facial features and structure, "
 )
 
 NEGATIVE_PROMPT = (
     "deformed face, generic features, different person, blurry, low quality, "
     "stylized illustration, cartoon, anime, 3d render, painting, sketch, "
-    "disfigured, bad anatomy, extra limbs, mutated hands"
+    "disfigured, bad anatomy, extra limbs, mutated hands, watermark, text"
 )
 
 THEMES = {
@@ -182,11 +182,12 @@ def transform():
                 "face_image_url": face_data_uri,
                 "prompt": prompt,
                 "negative_prompt": NEGATIVE_PROMPT,
-                "ip_adapter_scale": 0.95,
-                "controlnet_conditioning_scale": 0.90,
-                "num_inference_steps": 20,
-                "guidance_scale": 4.0,
+                "ip_adapter_scale": 0.8,
+                "controlnet_conditioning_scale": 0.8,
+                "num_inference_steps": 30,
+                "guidance_scale": 7.5,
                 "seed": seed,
+                "enhance_face_region": True,
             },
         )
 
@@ -240,7 +241,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     logger.info("Model: %s", FAL_MODEL)
-    logger.info("Settings: ip_adapter=0.95, controlnet=0.90, steps=20, guidance=4.0")
+    logger.info("Settings: ip_adapter=0.8, controlnet=0.8, steps=30, guidance=7.5, enhance_face=True")
 
     port = int(os.environ.get("PORT", 8000))
     logger.info("Starting AI Mirror Booth on port %d", port)

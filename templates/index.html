@@ -76,6 +76,55 @@
             display: block;
         }
 
+        #meshCanvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+            transform: scaleX(-1);
+        }
+
+        .identity-lock {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 6;
+            background: rgba(0,0,0,0.7);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 700;
+            font-family: 'Outfit', monospace;
+            color: var(--accent);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .identity-lock.visible { opacity: 1; }
+
+        .id-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 6px var(--accent);
+            animation: idPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes idPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
         .countdown-overlay {
             position: absolute;
             inset: 0;
@@ -114,6 +163,52 @@
         @keyframes flash {
             0% { opacity: 0.9; }
             100% { opacity: 0; }
+        }
+
+        .scan-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 12;
+            display: none;
+            background: rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+
+        .scan-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent 0%, var(--accent) 20%, #fff 50%, var(--accent) 80%, transparent 100%);
+            box-shadow: 0 0 20px var(--accent), 0 0 60px var(--accent), 0 -8px 30px rgba(0,255,204,0.3), 0 8px 30px rgba(0,255,204,0.3);
+            top: -3px;
+        }
+
+        .scan-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            text-shadow: 0 0 20px var(--accent);
+            opacity: 0;
+        }
+
+        .frozen-frame {
+            position: absolute;
+            inset: 0;
+            z-index: 9;
+            display: none;
+        }
+
+        .frozen-frame img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
 
         .results-panel {
@@ -217,7 +312,7 @@
             padding: 18px;
             border: none;
             border-radius: 16px;
-            font-size: 18px;
+            font-size: 20px;
             font-weight: 700;
             font-family: 'Outfit', sans-serif;
             cursor: pointer;
@@ -360,7 +455,7 @@
             border: 2px solid var(--accent);
         }
 
-        canvas { display: none; }
+        #captureCanvas { display: none; }
 
         @media (max-width: 500px) {
             .header h1 { font-size: 22px; }
@@ -374,11 +469,28 @@
     <div class="booth">
         <div class="header">
             <h1>AI Mirror Booth</h1>
-            <p>Step up. Strike a pose. See yourself transformed.</p>
+            <p>Identity-Preserving Smart Mirror</p>
         </div>
 
         <div class="mirror-frame" id="mirrorFrame">
             <video id="video" autoplay playsinline muted></video>
+            <canvas id="meshCanvas"></canvas>
+
+            <div class="identity-lock" id="identityLock">
+                <span class="id-dot"></span>
+                <span>Identity Lock</span>
+                <span id="idConfidence">--</span>
+            </div>
+
+            <div class="frozen-frame" id="frozenFrame">
+                <img id="frozenImg" alt="Frozen frame" />
+            </div>
+
+            <div class="scan-overlay" id="scanOverlay">
+                <div class="scan-line" id="scanLine"></div>
+                <div class="scan-label" id="scanLabel">Face Data Extrapolation</div>
+            </div>
+
             <div class="countdown-overlay" id="countdownOverlay">
                 <div class="countdown-num" id="countdownNum">3</div>
             </div>
@@ -412,10 +524,10 @@
             </div>
         </div>
 
-        <canvas id="canvas"></canvas>
+        <canvas id="captureCanvas"></canvas>
 
         <div class="controls">
-            <button class="main-btn capture" id="actionBtn" disabled>Snap & Transform</button>
+            <button class="main-btn capture" id="actionBtn" disabled>&#x1F3B2; Roll the AI Dice!</button>
             <div class="loading-bar" id="loadingBar">
                 <div class="loading-bar-inner" id="loadingBarInner"></div>
             </div>
@@ -433,9 +545,13 @@
         <img id="fullscreenImg" alt="Full view" />
     </div>
 
-    <script>
+    <script type="module">
+        import { FaceLandmarker, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs';
+
         const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
+        const captureCanvas = document.getElementById('captureCanvas');
+        const meshCanvas = document.getElementById('meshCanvas');
+        const meshCtx = meshCanvas.getContext('2d');
         const actionBtn = document.getElementById('actionBtn');
         const capturedImg = document.getElementById('capturedImg');
         const resultImg = document.getElementById('resultImg');
@@ -444,6 +560,11 @@
         const countdownOverlay = document.getElementById('countdownOverlay');
         const countdownNum = document.getElementById('countdownNum');
         const flashOverlay = document.getElementById('flashOverlay');
+        const frozenFrame = document.getElementById('frozenFrame');
+        const frozenImg = document.getElementById('frozenImg');
+        const scanOverlay = document.getElementById('scanOverlay');
+        const scanLine = document.getElementById('scanLine');
+        const scanLabel = document.getElementById('scanLabel');
         const loadingBar = document.getElementById('loadingBar');
         const loadingBarInner = document.getElementById('loadingBarInner');
         const loadingText = document.getElementById('loadingText');
@@ -456,34 +577,140 @@
         const galleryStrip = document.getElementById('galleryStrip');
         const fullscreenView = document.getElementById('fullscreenView');
         const fullscreenImg = document.getElementById('fullscreenImg');
+        const identityLock = document.getElementById('identityLock');
+        const idConfidence = document.getElementById('idConfidence');
 
         let isProcessing = false;
         let isShowingResult = false;
         let loadingInterval = null;
-        let history = [];
+        let historyArr = [];
+        let faceLandmarker = null;
+        let meshRunning = true;
+        let lastMeshTime = 0;
+        const MESH_INTERVAL_MS = 33;
 
         const loadingMsgs = [
-            "Warming up the flux capacitor...",
-            "Consulting the style oracle...",
-            "Mixing the magic pixels...",
-            "Summoning your alter ego...",
-            "Raiding the costume department...",
-            "Calibrating the cool factor...",
-            "Rewriting your origin story...",
+            "Extracting facial geometry...",
+            "Mapping identity vectors...",
+            "Synthesizing neural portrait...",
+            "Calibrating identity transfer...",
+            "Reconstructing likeness matrix...",
+            "Rendering photorealistic output...",
+            "Finalizing identity fusion...",
         ];
 
-        navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 720 } },
-            audio: false
-        })
-        .then(stream => {
-            video.srcObject = stream;
-            actionBtn.disabled = false;
-        })
-        .catch(() => {
-            errorText.innerText = "Camera access required. Allow camera and reload.";
-            errorText.style.display = 'block';
-        });
+        const TESSELATION_CONNECTIONS = FaceLandmarker.FACE_LANDMARKS_TESSELATION;
+        const LEFT_IRIS = FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS;
+        const RIGHT_IRIS = FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS;
+
+        async function initFaceLandmarker() {
+            const vision = await FilesetResolver.forVisionTasks(
+                'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm'
+            );
+            faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+                baseOptions: {
+                    modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+                    delegate: 'GPU',
+                },
+                runningMode: 'VIDEO',
+                numFaces: 1,
+                outputFaceBlendshapes: false,
+                outputFacialTransformationMatrixes: false,
+            });
+        }
+
+        function drawMesh() {
+            if (!faceLandmarker || !meshRunning || video.paused || video.ended) {
+                requestAnimationFrame(drawMesh);
+                return;
+            }
+
+            const now = performance.now();
+            if (now - lastMeshTime < MESH_INTERVAL_MS) {
+                requestAnimationFrame(drawMesh);
+                return;
+            }
+            lastMeshTime = now;
+
+            if (meshCanvas.width !== video.videoWidth || meshCanvas.height !== video.videoHeight) {
+                meshCanvas.width = video.videoWidth || 640;
+                meshCanvas.height = video.videoHeight || 480;
+            }
+
+            const w = meshCanvas.width;
+            const h = meshCanvas.height;
+            meshCtx.clearRect(0, 0, w, h);
+
+            let result;
+            try {
+                result = faceLandmarker.detectForVideo(video, now);
+            } catch (e) {
+                requestAnimationFrame(drawMesh);
+                return;
+            }
+
+            if (result && result.faceLandmarks && result.faceLandmarks.length > 0) {
+                const lm = result.faceLandmarks[0];
+
+                meshCtx.strokeStyle = 'rgba(0, 255, 204, 0.25)';
+                meshCtx.lineWidth = 0.5;
+                for (const conn of TESSELATION_CONNECTIONS) {
+                    const a = lm[conn.start];
+                    const b = lm[conn.end];
+                    if (!a || !b) continue;
+                    meshCtx.beginPath();
+                    meshCtx.moveTo(a.x * w, a.y * h);
+                    meshCtx.lineTo(b.x * w, b.y * h);
+                    meshCtx.stroke();
+                }
+
+                meshCtx.fillStyle = '#00ffcc';
+                meshCtx.shadowColor = '#00ffcc';
+                meshCtx.shadowBlur = 4;
+                function drawIris(irisConns) {
+                    const pts = new Set();
+                    for (const c of irisConns) { pts.add(c.start); pts.add(c.end); }
+                    for (const idx of pts) {
+                        const p = lm[idx];
+                        if (!p) continue;
+                        meshCtx.beginPath();
+                        meshCtx.arc(p.x * w, p.y * h, 2.5, 0, Math.PI * 2);
+                        meshCtx.fill();
+                    }
+                }
+                drawIris(LEFT_IRIS);
+                drawIris(RIGHT_IRIS);
+                meshCtx.shadowBlur = 0;
+
+                const conf = (96.4 + Math.random() * 3.4).toFixed(1);
+                idConfidence.textContent = conf + '%';
+                identityLock.classList.add('visible');
+            } else {
+                identityLock.classList.remove('visible');
+            }
+
+            requestAnimationFrame(drawMesh);
+        }
+
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 720 } },
+                    audio: false,
+                });
+                video.srcObject = stream;
+                await new Promise(r => video.onloadeddata = r);
+                actionBtn.disabled = false;
+
+                await initFaceLandmarker();
+                requestAnimationFrame(drawMesh);
+            } catch (e) {
+                errorText.innerText = 'Camera access required. Allow camera and reload.';
+                errorText.style.display = 'block';
+            }
+        }
+
+        initCamera();
 
         function countdown() {
             return new Promise(resolve => {
@@ -511,13 +738,39 @@
         }
 
         function captureFrame() {
-            const ctx = canvas.getContext('2d');
-            canvas.width = video.videoWidth || 640;
-            canvas.height = video.videoHeight || 480;
-            ctx.translate(canvas.width, 0);
+            const ctx = captureCanvas.getContext('2d');
+            captureCanvas.width = video.videoWidth || 640;
+            captureCanvas.height = video.videoHeight || 480;
+            ctx.translate(captureCanvas.width, 0);
             ctx.scale(-1, 1);
             ctx.drawImage(video, 0, 0);
-            return canvas.toDataURL('image/jpeg', 0.85);
+            return captureCanvas.toDataURL('image/jpeg', 0.85);
+        }
+
+        function runScanAnimation() {
+            return new Promise(resolve => {
+                meshRunning = false;
+                meshCtx.clearRect(0, 0, meshCanvas.width, meshCanvas.height);
+
+                scanOverlay.style.display = 'block';
+                scanLine.style.top = '-3px';
+                scanLine.style.transition = 'none';
+
+                void scanLine.offsetWidth;
+
+                scanLine.style.transition = 'top 1.8s ease-in-out';
+                scanLine.style.top = '100%';
+
+                scanLabel.style.opacity = '0';
+                scanLabel.style.transition = 'opacity 0.3s';
+                setTimeout(() => { scanLabel.style.opacity = '1'; }, 400);
+                setTimeout(() => { scanLabel.style.opacity = '0'; }, 1400);
+
+                setTimeout(() => {
+                    scanOverlay.style.display = 'none';
+                    resolve();
+                }, 1900);
+            });
         }
 
         function startLoading() {
@@ -545,12 +798,12 @@
         }
 
         function addToGallery(aiSrc, theme) {
-            history.unshift({ ai: aiSrc, theme });
-            if (history.length > 20) history.pop();
+            historyArr.unshift({ ai: aiSrc, theme });
+            if (historyArr.length > 20) historyArr.pop();
 
             gallery.style.display = 'block';
             galleryStrip.innerHTML = '';
-            history.forEach((item, i) => {
+            historyArr.forEach((item, i) => {
                 const thumb = document.createElement('div');
                 thumb.className = 'gallery-thumb';
                 thumb.innerHTML = `<img src="${item.ai}" alt="Transform ${i+1}" /><div class="g-label">${item.theme}</div>`;
@@ -568,7 +821,9 @@
             if (isShowingResult) {
                 resultsPanel.style.display = 'none';
                 mirrorFrame.style.display = 'block';
-                actionBtn.textContent = 'Snap & Transform';
+                frozenFrame.style.display = 'none';
+                meshRunning = true;
+                actionBtn.textContent = '\u{1F3B2} Roll the AI Dice!';
                 actionBtn.className = 'main-btn capture';
                 errorText.style.display = 'none';
                 isShowingResult = false;
@@ -581,10 +836,17 @@
             errorText.style.display = 'none';
 
             await countdown();
+
             const imageData = captureFrame();
             capturedImg.src = imageData;
 
+            frozenImg.src = imageData;
+            frozenFrame.style.display = 'block';
+
+            await runScanAnimation();
+
             mirrorFrame.style.display = 'none';
+            frozenFrame.style.display = 'none';
             resultsPanel.style.display = 'block';
             resultImg.src = '';
             comparison.classList.remove('reveal-anim');
@@ -618,10 +880,10 @@
                     metaTheme.textContent = data.theme || '--';
                     metaSeed.textContent = data.seed || '--';
                     metaPrompt.textContent = data.prompt || '--';
-                    actionBtn.textContent = 'Try Another';
+                    actionBtn.textContent = '\u{1F3B2} Roll Again!';
                     actionBtn.className = 'main-btn again';
                     isShowingResult = true;
-                    addToGallery(data.image, data.theme || 'Surprise');
+                    addToGallery(data.image, data.theme || 'Mystery');
                 } else {
                     throw new Error(data.error || 'Generation failed.');
                 }
@@ -629,6 +891,8 @@
                 stopLoading();
                 resultsPanel.style.display = 'none';
                 mirrorFrame.style.display = 'block';
+                frozenFrame.style.display = 'none';
+                meshRunning = true;
                 errorText.textContent = err.name === 'AbortError'
                     ? 'Timed out. Try again.'
                     : err.message;

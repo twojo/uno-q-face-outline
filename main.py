@@ -86,8 +86,8 @@ def preprocess_face(b64_data: str) -> str:
 # ── Prompts ───────────────────────────────────────────────────────────────────
 
 IDENTITY_PREFIX = (
-    "RAW photo, sharp focus, photorealistic portrait of the exact same person "
-    "from the reference photo with identical facial features, "
+    "(photorealistic portrait of the exact person in the reference image:1.4), "
+    "highly detailed face, maintaining original facial features and structure, "
 )
 
 NEGATIVE_PROMPT = (
@@ -201,11 +201,12 @@ def on_transform(sid: str, data):
                 "face_image_url":              face_data_uri,
                 "prompt":                      prompt,
                 "negative_prompt":             NEGATIVE_PROMPT,
-                "ip_adapter_scale":            0.85,
-                "controlnet_conditioning_scale": 0.90,
+                "ip_adapter_scale":            0.8,
+                "controlnet_conditioning_scale": 0.8,
                 "num_inference_steps":         30,
                 "guidance_scale":              7.5,
                 "seed":                        seed,
+                "enhance_face_region":         True,
             },
         )
 
@@ -262,7 +263,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     logger.info("Model        : %s", FAL_MODEL)
-    logger.info("Settings     : ip_adapter=0.85  controlnet=0.90  steps=30  guidance=7.5")
+    logger.info("Settings     : ip_adapter=0.8  controlnet=0.8  steps=30  guidance=7.5  enhance_face=True")
     logger.info("Themes       : %s", ", ".join(THEMES.keys()))
 
     App.run()
