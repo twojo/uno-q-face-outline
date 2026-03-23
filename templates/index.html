@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <title>Face Tracker</title>
+    <title>Arduino Uno Q — Face Tracker</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
 
@@ -11,6 +11,7 @@
 
         :root {
             --accent: #00ffcc;
+            --teal: #00979d;
             --bg: #0a0a0f;
             --card: #111118;
             --border: #222230;
@@ -35,35 +36,56 @@
         }
 
         .header {
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
             margin-bottom: 16px;
         }
 
-        .header h1 {
-            font-size: 28px;
+        .arduino-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .arduino-logo svg {
+            flex-shrink: 0;
+        }
+
+        .header-text h1 {
+            font-size: 24px;
             font-weight: 900;
             letter-spacing: -0.5px;
-            background: linear-gradient(135deg, #fff, var(--accent));
+            line-height: 1.1;
+        }
+
+        .header-text h1 .brand-arduino {
+            color: var(--teal);
+        }
+
+        .header-text h1 .brand-q {
+            background: linear-gradient(135deg, var(--accent), var(--teal));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
-        .header p {
-            font-size: 13px;
+        .header-text p {
+            font-size: 12px;
             color: var(--muted);
-            margin-top: 4px;
             font-weight: 300;
+            letter-spacing: 0.05em;
         }
 
         .mirror-frame {
             position: relative;
             width: 100%;
-            max-width: 640px;
-            border-radius: 24px;
+            max-width: 720px;
+            border-radius: 20px;
             overflow: hidden;
             border: 2px solid var(--border);
             background: #000;
-            box-shadow: 0 0 60px rgba(0,255,204,0.05);
+            box-shadow: 0 0 80px rgba(0,151,157,0.08), 0 0 40px rgba(0,255,204,0.04);
             transition: border-color 0.5s ease;
         }
 
@@ -84,143 +106,190 @@
             pointer-events: none;
         }
 
-        .hud-overlay {
+        .edge-panel {
             position: absolute;
-            top: 16px;
-            left: 16px;
             z-index: 5;
             font-family: 'JetBrains Mono', monospace;
-            background: rgba(0,0,0,0.7);
-            padding: 10px 14px;
-            border-left: 3px solid var(--accent);
+            background: rgba(0,0,0,0.65);
             backdrop-filter: blur(6px);
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.3s, border-color 0.5s;
-            border-radius: 0 8px 8px 0;
-            min-width: 180px;
         }
 
-        .hud-overlay.visible { opacity: 1; }
+        .edge-panel.visible { opacity: 1; }
+
+        .panel-tl {
+            top: 0;
+            left: 0;
+            padding: 10px 14px 10px 12px;
+            border-right: 1px solid rgba(255,255,255,0.06);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            border-radius: 0 0 12px 0;
+        }
+
+        .panel-tr {
+            top: 0;
+            right: 0;
+            padding: 10px 12px 10px 14px;
+            border-left: 1px solid rgba(255,255,255,0.06);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            border-radius: 0 0 0 12px;
+            text-align: right;
+        }
+
+        .panel-bl {
+            bottom: 0;
+            left: 0;
+            padding: 10px 14px 10px 12px;
+            border-right: 1px solid rgba(255,255,255,0.06);
+            border-top: 1px solid rgba(255,255,255,0.06);
+            border-radius: 0 12px 0 0;
+        }
+
+        .panel-br {
+            bottom: 0;
+            right: 0;
+            padding: 10px 12px 10px 14px;
+            border-left: 1px solid rgba(255,255,255,0.06);
+            border-top: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px 0 0 0;
+            text-align: right;
+        }
+
+        .panel-logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(0,151,157,0.3);
+        }
+
+        .panel-logo-text {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--teal);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .panel-logo-sub {
+            font-size: 8px;
+            color: var(--muted);
+            letter-spacing: 0.05em;
+        }
 
         .hud-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 4px;
+            margin-bottom: 3px;
+            gap: 12px;
         }
 
         .hud-row:last-child { margin-bottom: 0; }
 
         .hud-label {
-            font-size: 9px;
-            color: #888;
+            font-size: 8px;
+            color: #666;
             text-transform: uppercase;
             letter-spacing: 0.1em;
         }
 
         .hud-value {
             color: var(--accent);
-            font-size: 13px;
+            font-size: 11px;
             font-weight: 700;
             transition: color 0.4s;
         }
 
-        .stats-overlay {
-            position: absolute;
-            top: 16px;
-            right: 16px;
-            z-index: 5;
-            font-family: 'JetBrains Mono', monospace;
-            background: rgba(0,0,0,0.7);
-            padding: 10px 14px;
-            backdrop-filter: blur(6px);
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.3s;
-            border-radius: 8px 0 0 8px;
-            border-right: 3px solid var(--accent);
-            min-width: 150px;
-        }
+        .hud-value.teal { color: var(--teal); }
 
-        .stats-overlay.visible { opacity: 1; }
+        .hud-divider {
+            height: 1px;
+            background: rgba(255,255,255,0.06);
+            margin: 5px 0;
+        }
 
         .expression-bar-container {
             position: absolute;
-            bottom: 16px;
-            left: 16px;
-            right: 16px;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 55%;
+            max-width: 360px;
             z-index: 5;
             font-family: 'JetBrains Mono', monospace;
             background: rgba(0,0,0,0.7);
-            padding: 12px 14px;
+            padding: 10px 12px;
             backdrop-filter: blur(6px);
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.3s;
-            border-radius: 12px;
-            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            border: 1px solid rgba(0,151,157,0.2);
         }
 
         .expression-bar-container.visible { opacity: 1; }
 
         .expression-bar-title {
-            font-size: 9px;
-            color: #888;
+            font-size: 8px;
+            color: #666;
             text-transform: uppercase;
             letter-spacing: 0.1em;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
 
         .expression-bar-row {
             display: flex;
             align-items: center;
-            margin-bottom: 5px;
-            gap: 8px;
+            margin-bottom: 4px;
+            gap: 6px;
         }
 
         .expression-bar-row:last-child { margin-bottom: 0; }
 
         .bar-label {
-            font-size: 9px;
-            color: #aaa;
-            width: 80px;
+            font-size: 8px;
+            color: #999;
+            width: 70px;
             flex-shrink: 0;
             text-transform: uppercase;
         }
 
         .bar-track {
             flex: 1;
-            height: 6px;
-            background: rgba(255,255,255,0.08);
-            border-radius: 3px;
+            height: 4px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 2px;
             overflow: hidden;
         }
 
         .bar-fill {
             height: 100%;
-            border-radius: 3px;
+            border-radius: 2px;
             transition: width 0.15s ease-out, background 0.3s;
             width: 0%;
         }
 
         .bar-val {
-            font-size: 10px;
+            font-size: 9px;
             font-weight: 700;
-            width: 36px;
+            width: 32px;
             text-align: right;
             flex-shrink: 0;
             transition: color 0.3s;
         }
 
         .controls {
-            margin-top: 20px;
+            margin-top: 16px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
             width: 100%;
-            max-width: 640px;
+            max-width: 720px;
         }
 
         .controls-row {
@@ -259,7 +328,7 @@
 
         .styled-select select:hover,
         .styled-select select:focus {
-            border-color: var(--accent);
+            border-color: var(--teal);
         }
 
         .styled-select::after {
@@ -296,24 +365,72 @@
             display: none;
         }
 
-        @media (max-width: 500px) {
-            .header h1 { font-size: 22px; }
-            .mirror-frame { max-width: 100%; border-radius: 16px; }
+        .corner-bracket {
+            position: absolute;
+            z-index: 4;
+            width: 24px;
+            height: 24px;
+            pointer-events: none;
+            transition: border-color 0.5s;
+        }
+
+        .corner-bracket.tl { top: 6px; left: 6px; border-top: 2px solid var(--teal); border-left: 2px solid var(--teal); }
+        .corner-bracket.tr { top: 6px; right: 6px; border-top: 2px solid var(--teal); border-right: 2px solid var(--teal); }
+        .corner-bracket.bl { bottom: 6px; left: 6px; border-bottom: 2px solid var(--teal); border-left: 2px solid var(--teal); }
+        .corner-bracket.br { bottom: 6px; right: 6px; border-bottom: 2px solid var(--teal); border-right: 2px solid var(--teal); }
+
+        @media (max-width: 600px) {
+            .header-text h1 { font-size: 20px; }
+            .mirror-frame { max-width: 100%; border-radius: 14px; }
+            .expression-bar-container { width: 80%; bottom: 40px; }
+            .edge-panel { font-size: 0.9em; }
         }
     </style>
 </head>
 <body>
     <div class="booth">
         <div class="header">
-            <h1>Face Tracker</h1>
-            <p>Real-time Expression Analysis</p>
+            <div class="arduino-logo">
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="1" y="1" width="38" height="38" rx="8" stroke="#00979d" stroke-width="2" fill="rgba(0,151,157,0.08)"/>
+                    <circle cx="13" cy="20" r="7" stroke="#00979d" stroke-width="1.8" fill="none"/>
+                    <line x1="9" y1="20" x2="17" y2="20" stroke="#00979d" stroke-width="1.5"/>
+                    <line x1="13" y1="16" x2="13" y2="24" stroke="#00979d" stroke-width="1.5"/>
+                    <circle cx="27" cy="20" r="7" stroke="#00979d" stroke-width="1.8" fill="none"/>
+                    <line x1="23" y1="20" x2="31" y2="20" stroke="#00979d" stroke-width="1.5"/>
+                    <rect x="16" y="8" width="8" height="3" rx="1" fill="#00979d" opacity="0.5"/>
+                    <rect x="16" y="29" width="8" height="3" rx="1" fill="#00979d" opacity="0.5"/>
+                </svg>
+            </div>
+            <div class="header-text">
+                <h1><span class="brand-arduino">Arduino Uno</span> <span class="brand-q">Q</span></h1>
+                <p>Face Tracker &middot; Real-time Expression Analysis</p>
+            </div>
         </div>
 
         <div class="mirror-frame" id="mirrorFrame">
             <video id="webcam" autoplay playsinline muted></video>
             <canvas id="meshCanvas"></canvas>
 
-            <div class="hud-overlay" id="hudOverlay">
+            <div class="corner-bracket tl"></div>
+            <div class="corner-bracket tr"></div>
+            <div class="corner-bracket bl"></div>
+            <div class="corner-bracket br"></div>
+
+            <div class="edge-panel panel-tl visible" id="panelTL">
+                <div class="panel-logo">
+                    <svg width="16" height="16" viewBox="0 0 40 40" fill="none">
+                        <circle cx="13" cy="20" r="7" stroke="#00979d" stroke-width="2.5" fill="none"/>
+                        <line x1="9" y1="20" x2="17" y2="20" stroke="#00979d" stroke-width="2"/>
+                        <line x1="13" y1="16" x2="13" y2="24" stroke="#00979d" stroke-width="2"/>
+                        <circle cx="27" cy="20" r="7" stroke="#00979d" stroke-width="2.5" fill="none"/>
+                        <line x1="23" y1="20" x2="31" y2="20" stroke="#00979d" stroke-width="2"/>
+                    </svg>
+                    <div>
+                        <div class="panel-logo-text">UNO Q</div>
+                        <div class="panel-logo-sub">QRB2210</div>
+                    </div>
+                </div>
                 <div class="hud-row">
                     <span class="hud-label">Expression</span>
                     <span id="expressionLabel" class="hud-value">SCANNING...</span>
@@ -328,15 +445,30 @@
                 </div>
             </div>
 
-            <div class="stats-overlay" id="statsOverlay">
+            <div class="edge-panel panel-tr" id="panelTR">
                 <div class="hud-row">
                     <span class="hud-label">FPS</span>
-                    <span id="fpsValue" class="hud-value">--</span>
+                    <span id="fpsValue" class="hud-value teal">--</span>
+                </div>
+                <div class="hud-row">
+                    <span class="hud-label">Delegate</span>
+                    <span id="delegateType" class="hud-value teal">--</span>
+                </div>
+                <div class="hud-row">
+                    <span class="hud-label">Resolution</span>
+                    <span id="resValue" class="hud-value teal">--</span>
                 </div>
                 <div class="hud-row">
                     <span class="hud-label">Landmarks</span>
-                    <span id="landmarkCount" class="hud-value">--</span>
+                    <span id="landmarkCount" class="hud-value teal">--</span>
                 </div>
+                <div class="hud-row">
+                    <span class="hud-label">Latency</span>
+                    <span id="latencyValue" class="hud-value teal">--</span>
+                </div>
+            </div>
+
+            <div class="edge-panel panel-bl" id="panelBL">
                 <div class="hud-row">
                     <span class="hud-label">Head Yaw</span>
                     <span id="headYaw" class="hud-value">--</span>
@@ -345,10 +477,47 @@
                     <span class="hud-label">Head Pitch</span>
                     <span id="headPitch" class="hud-value">--</span>
                 </div>
+                <div class="hud-divider"></div>
+                <div class="hud-row">
+                    <span class="hud-label">Eye Dist</span>
+                    <span id="eyeDistance" class="hud-value">--</span>
+                </div>
+                <div class="hud-row">
+                    <span class="hud-label">Face Area</span>
+                    <span id="faceArea" class="hud-value">--</span>
+                </div>
+                <div class="hud-row">
+                    <span class="hud-label">Nose Pos</span>
+                    <span id="nosePos" class="hud-value">--</span>
+                </div>
+            </div>
+
+            <div class="edge-panel panel-br" id="panelBR">
+                <div class="hud-row">
+                    <span class="hud-label">Uptime</span>
+                    <span id="uptimeValue" class="hud-value teal">00:00</span>
+                </div>
+                <div class="hud-row">
+                    <span class="hud-label">Frames</span>
+                    <span id="totalFrames" class="hud-value teal">0</span>
+                </div>
+                <div class="hud-divider"></div>
+                <div class="hud-row">
+                    <span class="hud-label">L-Eye</span>
+                    <span id="leftEyeOpen" class="hud-value teal">--</span>
+                </div>
+                <div class="hud-row">
+                    <span class="hud-label">R-Eye</span>
+                    <span id="rightEyeOpen" class="hud-value teal">--</span>
+                </div>
+                <div class="hud-row">
+                    <span class="hud-label">Mouth</span>
+                    <span id="mouthOpen" class="hud-value teal">--</span>
+                </div>
             </div>
 
             <div class="expression-bar-container" id="expressionBars">
-                <div class="expression-bar-title">Blendshape Analysis (Primary Face)</div>
+                <div class="expression-bar-title">Blendshape Analysis</div>
                 <div class="expression-bar-row">
                     <span class="bar-label">Smile</span>
                     <div class="bar-track"><div class="bar-fill" id="barSmile"></div></div>
@@ -406,20 +575,34 @@
     const video = document.getElementById("webcam");
     const meshCanvas = document.getElementById("meshCanvas");
     const meshCtx = meshCanvas.getContext("2d");
-    const hudOverlay = document.getElementById("hudOverlay");
-    const statsOverlay = document.getElementById("statsOverlay");
     const expressionBars = document.getElementById("expressionBars");
     const expressionLabel = document.getElementById("expressionLabel");
     const confidenceEl = document.getElementById("confidence");
     const faceCountEl = document.getElementById("faceCount");
     const fpsValue = document.getElementById("fpsValue");
+    const delegateType = document.getElementById("delegateType");
+    const resValue = document.getElementById("resValue");
     const landmarkCount = document.getElementById("landmarkCount");
+    const latencyValue = document.getElementById("latencyValue");
     const headYaw = document.getElementById("headYaw");
     const headPitch = document.getElementById("headPitch");
+    const eyeDistance = document.getElementById("eyeDistance");
+    const faceArea = document.getElementById("faceArea");
+    const nosePos = document.getElementById("nosePos");
+    const uptimeValue = document.getElementById("uptimeValue");
+    const totalFramesEl = document.getElementById("totalFrames");
+    const leftEyeOpen = document.getElementById("leftEyeOpen");
+    const rightEyeOpen = document.getElementById("rightEyeOpen");
+    const mouthOpen = document.getElementById("mouthOpen");
     const statusText = document.getElementById("statusText");
     const errorText = document.getElementById("errorText");
     const mirrorFrame = document.getElementById("mirrorFrame");
     const overlaySelect = document.getElementById("overlaySelect");
+    const panelTR = document.getElementById("panelTR");
+    const panelBL = document.getElementById("panelBL");
+    const panelBR = document.getElementById("panelBR");
+
+    const cornerBrackets = document.querySelectorAll(".corner-bracket");
 
     const barSmile = document.getElementById("barSmile");
     const barBrowUp = document.getElementById("barBrowUp");
@@ -437,6 +620,7 @@
     let faceLandmarker = null;
     let drawingUtils = null;
     let meshLoopRunning = false;
+    let usedDelegate = "CPU";
 
     const OVERLAY_PRESETS = {
         full:    { mesh: true,  outline: true,  eyes: true,  brows: true,  lips: true,  iris: true,  dots: true },
@@ -470,6 +654,8 @@
     let frameCount = 0;
     let lastFpsTime = performance.now();
     let currentFps = 0;
+    let totalFrameCount = 0;
+    const sessionStart = performance.now();
 
     function getBlendshapeValue(blendshapes, name) {
         if (!blendshapes || !blendshapes[0] || !blendshapes[0].categories) return 0;
@@ -481,12 +667,16 @@
         const smile = (getBlendshapeValue(blendshapes, "mouthSmileLeft") + getBlendshapeValue(blendshapes, "mouthSmileRight")) / 2;
         const browUp = (getBlendshapeValue(blendshapes, "browInnerUp") + getBlendshapeValue(blendshapes, "browOuterUpLeft") + getBlendshapeValue(blendshapes, "browOuterUpRight")) / 3;
         const browDown = (getBlendshapeValue(blendshapes, "browDownLeft") + getBlendshapeValue(blendshapes, "browDownRight")) / 2;
-        const jawOpen = getBlendshapeValue(blendshapes, "jawOpen");
+        const jawOpenVal = getBlendshapeValue(blendshapes, "jawOpen");
         const blinkL = getBlendshapeValue(blendshapes, "eyeBlinkLeft");
         const blinkR = getBlendshapeValue(blendshapes, "eyeBlinkRight");
         const blink = (blinkL + blinkR) / 2;
         const pucker = getBlendshapeValue(blendshapes, "mouthPucker");
         const mouthFrown = (getBlendshapeValue(blendshapes, "mouthFrownLeft") + getBlendshapeValue(blendshapes, "mouthFrownRight")) / 2;
+
+        leftEyeOpen.textContent = Math.round((1 - blinkL) * 100) + "%";
+        rightEyeOpen.textContent = Math.round((1 - blinkR) * 100) + "%";
+        mouthOpen.textContent = Math.round(jawOpenVal * 100) + "%";
 
         let expr = EXPRESSION_COLORS.neutral;
         let conf = 0.3;
@@ -498,18 +688,18 @@
         } else if (pucker > 0.5) {
             expr = EXPRESSION_COLORS.kiss;
             conf = 0.5 + pucker * 0.5;
-        } else if (smile > 0.5 && jawOpen > 0.3) {
+        } else if (smile > 0.5 && jawOpenVal > 0.3) {
             expr = EXPRESSION_COLORS.surprised;
-            conf = 0.5 + (smile + jawOpen) * 0.25;
+            conf = 0.5 + (smile + jawOpenVal) * 0.25;
         } else if (smile > 0.35) {
             expr = EXPRESSION_COLORS.happy;
             conf = 0.4 + smile * 0.6;
-        } else if (browUp > 0.35 && jawOpen > 0.25) {
+        } else if (browUp > 0.35 && jawOpenVal > 0.25) {
             expr = EXPRESSION_COLORS.surprised;
-            conf = 0.4 + (browUp + jawOpen) * 0.3;
-        } else if (jawOpen > 0.5) {
+            conf = 0.4 + (browUp + jawOpenVal) * 0.3;
+        } else if (jawOpenVal > 0.5) {
             expr = EXPRESSION_COLORS.jawOpen;
-            conf = 0.5 + jawOpen * 0.5;
+            conf = 0.5 + jawOpenVal * 0.5;
         } else if (browDown > 0.35 && mouthFrown > 0.2) {
             expr = EXPRESSION_COLORS.angry;
             conf = 0.4 + (browDown + mouthFrown) * 0.3;
@@ -522,14 +712,13 @@
         }
 
         expressionConfidence = Math.min(conf, 1);
-
         currentExpression = expr;
         smoothedExpression = lerpColor(smoothedExpression, expr, 0.15);
 
         updateBar(barSmile, valSmile, smile);
         updateBar(barBrowUp, valBrowUp, browUp);
         updateBar(barBrowDown, valBrowDown, browDown);
-        updateBar(barJaw, valJaw, jawOpen);
+        updateBar(barJaw, valJaw, jawOpenVal);
         updateBar(barBlink, valBlink, blink);
         updateBar(barPucker, valPucker, pucker);
 
@@ -577,6 +766,42 @@
         return { yaw, pitch };
     }
 
+    function computeFaceGeometry(landmarks, vw, vh) {
+        const leftEye = landmarks[468];
+        const rightEye = landmarks[473];
+        const eyeDist = Math.sqrt(
+            Math.pow((rightEye.x - leftEye.x) * vw, 2) +
+            Math.pow((rightEye.y - leftEye.y) * vh, 2)
+        );
+
+        const oval = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL;
+        let minX = 1, maxX = 0, minY = 1, maxY = 0;
+        for (const conn of oval) {
+            const p1 = landmarks[conn.start];
+            const p2 = landmarks[conn.end];
+            minX = Math.min(minX, p1.x, p2.x);
+            maxX = Math.max(maxX, p1.x, p2.x);
+            minY = Math.min(minY, p1.y, p2.y);
+            maxY = Math.max(maxY, p1.y, p2.y);
+        }
+        const areaW = (maxX - minX) * vw;
+        const areaH = (maxY - minY) * vh;
+        const area = areaW * areaH;
+
+        const noseTip = landmarks[1];
+        const nx = Math.round(noseTip.x * vw);
+        const ny = Math.round(noseTip.y * vh);
+
+        return { eyeDist: Math.round(eyeDist), area: Math.round(area), noseX: nx, noseY: ny };
+    }
+
+    function formatUptime(ms) {
+        const totalSec = Math.floor(ms / 1000);
+        const m = Math.floor(totalSec / 60);
+        const s = totalSec % 60;
+        return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+    }
+
     async function initFaceMesh() {
         try {
             statusText.textContent = "Loading face detection model...";
@@ -596,15 +821,17 @@
 
             try {
                 faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, options);
+                usedDelegate = "GPU";
             } catch (gpuErr) {
                 console.warn("GPU delegate failed, falling back to CPU:", gpuErr);
                 options.baseOptions.delegate = "CPU";
                 faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, options);
+                usedDelegate = "CPU";
             }
 
+            delegateType.textContent = usedDelegate;
             drawingUtils = new DrawingUtils(meshCtx);
             statusText.textContent = "Model loaded. Starting camera...";
-            console.log("FaceLandmarker ready with blendshapes");
             return true;
         } catch (err) {
             console.error("MediaPipe init failed:", err);
@@ -623,6 +850,7 @@
             });
             video.srcObject = stream;
             await new Promise((resolve) => { video.onloadeddata = resolve; });
+            resValue.textContent = video.videoWidth + "x" + video.videoHeight;
             statusText.textContent = "";
             startMeshLoop();
         } catch (e) {
@@ -651,16 +879,19 @@
         meshCanvas.width = vw;
         meshCanvas.height = vh;
 
+        const t0 = performance.now();
         let results;
         try {
-            results = faceLandmarker.detectForVideo(video, performance.now());
+            results = faceLandmarker.detectForVideo(video, t0);
         } catch (e) {
             requestAnimationFrame(predictWebcam);
             return;
         }
+        const inferenceMs = performance.now() - t0;
 
         meshCtx.clearRect(0, 0, vw, vh);
 
+        totalFrameCount++;
         frameCount++;
         const now = performance.now();
         if (now - lastFpsTime >= 1000) {
@@ -669,6 +900,10 @@
             lastFpsTime = now;
             fpsValue.textContent = currentFps;
         }
+
+        latencyValue.textContent = Math.round(inferenceMs) + "ms";
+        uptimeValue.textContent = formatUptime(now - sessionStart);
+        totalFramesEl.textContent = totalFrameCount.toLocaleString();
 
         const hasFaces = results && results.faceLandmarks && results.faceLandmarks.length > 0;
 
@@ -690,9 +925,16 @@
             headYaw.textContent = (pose.yaw > 0 ? "+" : "") + pose.yaw + "\u00B0";
             headPitch.textContent = (pose.pitch > 0 ? "+" : "") + pose.pitch + "\u00B0";
 
-            mirrorFrame.style.borderColor = expressionHSL(0.6);
-            hudOverlay.style.borderLeftColor = expressionHSL(1);
-            statsOverlay.style.borderRightColor = expressionHSL(1);
+            const geo = computeFaceGeometry(primaryLandmarks, vw, vh);
+            eyeDistance.textContent = geo.eyeDist + "px";
+            faceArea.textContent = (geo.area / 1000).toFixed(1) + "k";
+            nosePos.textContent = geo.noseX + "," + geo.noseY;
+
+            mirrorFrame.style.borderColor = expressionHSL(0.5);
+
+            cornerBrackets.forEach(b => {
+                b.style.borderColor = expressionHSL(0.7);
+            });
 
             for (let fi = 0; fi < numFaces; fi++) {
                 const lm = results.faceLandmarks[fi];
@@ -701,53 +943,46 @@
                     drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_TESSELATION,
                         { color: expressionHSL(0.18), lineWidth: 0.5 });
                 }
-
                 if (layers.outline) {
                     drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,
                         { color: expressionHSL(0.9), lineWidth: 2.5 });
                 }
-
                 if (layers.eyes) {
                     drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE,
                         { color: expressionHSL(0.95), lineWidth: 1.5 });
                     drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,
                         { color: expressionHSL(0.95), lineWidth: 1.5 });
                 }
-
                 if (layers.brows) {
                     drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW,
                         { color: expressionHSL(0.8), lineWidth: 2 });
                     drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW,
                         { color: expressionHSL(0.8), lineWidth: 2 });
                 }
-
                 if (layers.lips) {
                     drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LIPS,
                         { color: expressionHSL(0.95), lineWidth: 2 });
                 }
-
                 if (layers.iris) {
                     drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS,
                         { color: expressionHSL(1), lineWidth: 2.5 });
                     drawingUtils.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS,
                         { color: expressionHSL(1), lineWidth: 2.5 });
                 }
-
                 if (layers.dots) {
                     const dotColor = expressionHSL(0.6);
                     for (let i = 0; i < lm.length; i++) {
-                        const x = lm[i].x * vw;
-                        const y = lm[i].y * vh;
                         meshCtx.fillStyle = dotColor;
                         meshCtx.beginPath();
-                        meshCtx.arc(x, y, 1, 0, Math.PI * 2);
+                        meshCtx.arc(lm[i].x * vw, lm[i].y * vh, 1, 0, Math.PI * 2);
                         meshCtx.fill();
                     }
                 }
             }
 
-            hudOverlay.classList.add("visible");
-            statsOverlay.classList.add("visible");
+            panelTR.classList.add("visible");
+            panelBL.classList.add("visible");
+            panelBR.classList.add("visible");
             expressionBars.classList.add("visible");
         } else {
             expressionLabel.textContent = "NO FACE";
@@ -757,10 +992,20 @@
             landmarkCount.textContent = "--";
             headYaw.textContent = "--";
             headPitch.textContent = "--";
-            hudOverlay.classList.add("visible");
-            statsOverlay.classList.remove("visible");
+            eyeDistance.textContent = "--";
+            faceArea.textContent = "--";
+            nosePos.textContent = "--";
+            leftEyeOpen.textContent = "--";
+            rightEyeOpen.textContent = "--";
+            mouthOpen.textContent = "--";
+            panelBL.classList.remove("visible");
             expressionBars.classList.remove("visible");
             mirrorFrame.style.borderColor = "var(--border)";
+            cornerBrackets.forEach(b => {
+                b.style.borderColor = "var(--teal)";
+            });
+            panelTR.classList.add("visible");
+            panelBR.classList.add("visible");
         }
 
         requestAnimationFrame(predictWebcam);
