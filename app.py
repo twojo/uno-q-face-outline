@@ -31,11 +31,10 @@ SWITCHING TO UNO Q
 
 TUNING KNOBS
 ────────────
-  - ip_adapter_scale      : 0.8  (raise to 0.9 if face doesn't match)
-  - controlnet_cond_scale : 0.8  (raise to 0.9 for stronger face structure)
-  - guidance_scale        : 7.5  (raise for more prompt adherence, lower for more creativity)
-  - num_inference_steps   : 30   (raise to 40-50 for higher quality, slower generation)
-  - enhance_face_region   : True (keeps face detail sharp)
+  - ip_adapter_scale      : 0.85 (high fidelity to YOUR face; raise to 0.9 if still generic)
+  - controlnet_cond_scale : 0.8  (respects the POSE; raise to 0.9 for stronger structure)
+  - guidance_scale        : 5.0  (lower = better blending with identity; raise for more prompt adherence)
+  - enhance_face_region   : True (keeps eyes/mouth sharp)
 """
 
 import os
@@ -216,10 +215,9 @@ def transform():
                 "face_image_url": face_data_uri,
                 "prompt": prompt,
                 "negative_prompt": NEGATIVE_PROMPT,
-                "ip_adapter_scale": 0.8,
+                "ip_adapter_scale": 0.85,
                 "controlnet_conditioning_scale": 0.8,
-                "num_inference_steps": 30,
-                "guidance_scale": 7.5,
+                "guidance_scale": 5.0,
                 "seed": seed,
                 "enhance_face_region": True,
             },
@@ -275,7 +273,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     logger.info("Model: %s", FAL_MODEL)
-    logger.info("Settings: ip_adapter=0.8, controlnet=0.8, steps=30, guidance=7.5, enhance_face=True")
+    logger.info("Settings: ip_adapter=0.85, controlnet=0.8, guidance=5.0, enhance_face=True")
 
     port = int(os.environ.get("PORT", 8000))
     logger.info("Starting AI Mirror Booth on port %d", port)

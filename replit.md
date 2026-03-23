@@ -68,11 +68,10 @@ Single-step identity-preserving transformation via **InstantID** (`fal-ai/instan
 
 ### Tuning Knobs
 
-- `ip_adapter_scale`: 0.8 (raise to 0.9 if face doesn't match)
-- `controlnet_conditioning_scale`: 0.8 (raise to 0.9 for stronger face structure)
-- `guidance_scale`: 7.5 (raise for more prompt adherence)
-- `num_inference_steps`: 30 (raise to 40-50 for higher quality)
-- `enhance_face_region`: True
+- `ip_adapter_scale`: 0.85 (high fidelity to YOUR face; raise to 0.9 if still generic)
+- `controlnet_conditioning_scale`: 0.8 (respects the POSE; raise to 0.9 for stronger structure)
+- `guidance_scale`: 5.0 (lower = better blending with identity; raise for more prompt adherence)
+- `enhance_face_region`: True (keeps eyes/mouth sharp)
 
 ## Stack
 
