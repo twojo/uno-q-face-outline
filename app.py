@@ -239,7 +239,6 @@ if __name__ == "__main__":
         logger.critical("FAL_KEY not set. Export FAL_KEY and retry.")
         sys.exit(1)
 
-    logger.info("FAL_KEY loaded (length=%d)", len(fal_key))
     logger.info("Model: %s", FAL_MODEL)
     logger.info("Settings: ip_adapter=0.95, controlnet=0.90, steps=20, guidance=4.0")
 
