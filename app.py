@@ -9,7 +9,7 @@ from flask import Flask, render_template, request, jsonify
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
 HF_API_TOKEN = os.environ.get("HF_TOKEN")
-API_URL = "https://api-inference.huggingface.co/models/timbrooks/instruct-pix2pix"
+API_URL = "https://router.huggingface.co/hf-inference/models/timbrooks/instruct-pix2pix"
 
 PROMPTS = [
     "Turn this person into a scuba diver swimming in a coral reef",
@@ -35,23 +35,22 @@ def transform():
     prompt = random.choice(PROMPTS)
 
     try:
-        payload = {
-            "inputs": image_b64,
-            "parameters": {
-                "prompt": prompt,
-                "num_inference_steps": 20,
-                "image_guidance_scale": 1.5,
-            }
-        }
+        # Router expects binary image body; prompt passed as query param
+        image_bytes = base64.b64decode(image_b64)
         response = requests.post(
             API_URL,
-            headers={"Authorization": f"Bearer {HF_API_TOKEN}"},
-            json=payload,
+            headers={
+                "Authorization": f"Bearer {HF_API_TOKEN}",
+                "Content-Type": "image/jpeg",
+                "x-prompt": prompt,
+            },
+            params={"prompt": prompt},
+            data=image_bytes,
             timeout=120,
         )
 
         print(f"HF status: {response.status_code}")
-        print(f"HF response: {response.text[:300]}")
+        print(f"HF response: {response.text[:500]}")
 
         if response.status_code == 200:
             result_b64 = base64.b64encode(response.content).decode("utf-8")
