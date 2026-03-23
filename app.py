@@ -105,15 +105,26 @@ def transform():
 
         print(f"InstantID result type: {type(result)}, value: {str(result)[:200]}")
 
-        # Result is a single image — could be a file path, dict, or URL
+        # InstantID returns a tuple: (filepath, metadata_dict)
+        if isinstance(result, (tuple, list)):
+            result = result[0]
+
         out_bytes = _read_result(result)
         if out_bytes is None:
             return jsonify({"success": False, "error": f"Unrecognised result format: {result}"})
 
+        # Detect MIME type from the file path
+        if isinstance(result, str) and result.endswith('.webp'):
+            mime = "image/webp"
+        elif isinstance(result, str) and result.endswith('.png'):
+            mime = "image/png"
+        else:
+            mime = "image/jpeg"
+
         result_b64 = base64.b64encode(out_bytes).decode("utf-8")
         return jsonify({
             "success": True,
-            "image":   f"data:image/jpeg;base64,{result_b64}",
+            "image":   f"data:{mime};base64,{result_b64}",
             "prompt":  prompt,
             "mode":    "img2img",
         })
