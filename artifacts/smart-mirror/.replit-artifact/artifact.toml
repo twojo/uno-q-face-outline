@@ -18,8 +18,11 @@ run = "/home/runner/workspace/.pythonlibs/bin/python3 /home/runner/workspace/app
 
 [services.production]
 
+[services.production.build]
+args = ["bash", "-c", "pip install flask flask-socketio Pillow fal-client requests"]
+
 [services.production.run]
-args = ["/home/runner/workspace/.pythonlibs/bin/python3", "/home/runner/workspace/app.py"]
+args = ["python3", "/home/runner/workspace/app.py"]
 
 [services.production.run.env]
 PORT = "8002"
