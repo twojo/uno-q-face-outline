@@ -1,140 +1,243 @@
-<!--
-  Smart Mirror AI Photo Booth — UI Template
-  Follows the Arduino Bricks HTML structure from the reference app
-  (mobile-video-generic-object-detection):
-
-    • <body data-*> attributes carry state; CSS shows/hides elements based on them
-    • Socket.IO loaded from static/libs/ — bundled for offline Uno Q use
-    • A single <script src="/static/script.js"> at the bottom
-    • No inline JS or CSS
-
-  On the real Bricks SDK the WebUI serves a widget's render() output.
-  This file maps 1-to-1 with that: the <body> becomes the widget root,
-  the same socket.io.min.js is served by the real WebUI, and script.js
-  calls socket.emit / socket.on using the same events as app.py.
--->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Smart Mirror</title>
-  <link rel="stylesheet" href="/static/style.css" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Smart Mirror Booth</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: #000;
+            color: #fff;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+
+        .container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+        }
+
+        /* scaleX(-1) = true mirror effect */
+        video {
+            width: 100%;
+            border-radius: 16px;
+            transform: scaleX(-1);
+            border: 2px solid #333;
+            display: block;
+        }
+
+        #resultImg {
+            width: 100%;
+            border-radius: 16px;
+            display: none;
+            border: 2px solid #00ffcc;
+        }
+
+        .btn-container {
+            text-align: center;
+            margin-top: 20px;
+            width: 100%;
+            max-width: 600px;
+        }
+
+        button {
+            background: #00ffcc;
+            color: #000;
+            border: none;
+            padding: 18px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 255, 204, 0.4);
+            transition: 0.2s;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        button:active { transform: scale(0.95); }
+
+        button:disabled {
+            background: #555;
+            color: #888;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        #statusText {
+            margin-top: 15px;
+            font-size: 15px;
+            color: #aaa;
+            min-height: 20px;
+            padding: 0 1rem;
+            line-height: 1.5;
+        }
+
+        #errorOverlay {
+            color: #ff4444;
+            font-weight: bold;
+            display: none;
+            margin-top: 10px;
+            padding: 0 1rem;
+        }
+
+        /* Loading bar shown while waiting for the AI */
+        #progressWrap {
+            width: 100%;
+            max-width: 600px;
+            height: 4px;
+            background: #222;
+            border-radius: 2px;
+            margin-top: 14px;
+            overflow: hidden;
+            display: none;
+        }
+
+        #progressBar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #00ffcc, #7c3aed);
+            border-radius: 2px;
+            transition: width 90s linear;
+        }
+    </style>
 </head>
+<body>
 
-<!--
-  data-state:
-    "idle"       live camera feed, Capture button active
-    "processing" loading overlay visible, button disabled
-    "result"     AI result image visible
-    "error"      error overlay visible
-
-  data-connection:
-    "disconnected"   (default) Socket.IO not yet connected
-    "connected"      server acknowledged with "welcome" event
--->
-<body data-state="idle" data-connection="disconnected">
-
-  <div class="sm-app">
-
-    <!-- ── Header — mirrors reference .header ──────────────────── -->
-    <div class="sm-header">
-      <h1 class="sm-title">Smart Mirror</h1>
-      <p class="sm-subtitle">Arduino Uno Q · AI Photo Booth</p>
+    <div class="container">
+        <video id="video" autoplay playsinline muted></video>
+        <img id="resultImg" alt="AI result" />
+        <canvas id="canvas" style="display:none;"></canvas>
     </div>
 
-    <!-- ── Status bar — mirrors reference .subheader ───────────── -->
-    <div class="sm-subheader">
-      <span class="sm-status-dot" id="sm-status-dot"></span>
-      <span class="sm-status-text" id="sm-status-text">Connecting to server…</span>
+    <div class="btn-container">
+        <button id="actionBtn">&#9711; Capture</button>
+        <div id="progressWrap"><div id="progressBar"></div></div>
+        <div id="statusText"></div>
+        <div id="errorOverlay"></div>
     </div>
 
-    <!-- ── Main content ─────────────────────────────────────────── -->
-    <div class="sm-main">
+    <script>
+        const video       = document.getElementById('video');
+        const canvas      = document.getElementById('canvas');
+        const actionBtn   = document.getElementById('actionBtn');
+        const resultImg   = document.getElementById('resultImg');
+        const statusText  = document.getElementById('statusText');
+        const errorOverlay = document.getElementById('errorOverlay');
+        const progressWrap = document.getElementById('progressWrap');
+        const progressBar  = document.getElementById('progressBar');
 
-      <!-- Camera / result viewport — mirrors reference #video-container -->
-      <div class="sm-viewport" id="sm-viewport">
+        let isDisplayingResult = false;
+        let elapsedInterval = null;
+        let elapsedSeconds = 0;
 
-        <!-- Live camera feed (CSS mirror-flipped) -->
-        <video id="sm-video" autoplay playsinline muted></video>
+        // ── Camera init ────────────────────────────────────────────────
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
+            .then(stream => { video.srcObject = stream; })
+            .catch(() => {
+                errorOverlay.innerText = "Camera access required. Allow camera in your browser and reload.";
+                errorOverlay.style.display = 'block';
+            });
 
-        <!-- Canvas used only for frame capture — never displayed -->
-        <canvas id="sm-canvas" aria-hidden="true"></canvas>
+        // ── Progress helpers ───────────────────────────────────────────
+        function startProgress() {
+            elapsedSeconds = 0;
+            progressWrap.style.display = 'block';
+            progressBar.style.transition = 'none';
+            progressBar.style.width = '0%';
+            void progressBar.offsetWidth;
+            progressBar.style.transition = 'width 90s linear';
+            progressBar.style.width = '100%';
 
-        <!-- Loading overlay — visible while data-state="processing" -->
-        <div class="sm-overlay sm-overlay--loading" id="sm-overlay-loading" aria-live="polite">
-          <div class="sm-spinner"></div>
-          <p class="sm-overlay-label">Transforming<span class="sm-dots"></span></p>
-          <p class="sm-prompt-preview" id="sm-prompt-preview"></p>
-          <!-- Progress bar: JS animates from 0→100% over ~90s so the user
-               can see it moving rather than wonder if it has frozen -->
-          <div class="sm-progress-wrap">
-            <div class="sm-progress-bar" id="sm-progress-bar"></div>
-          </div>
-          <p class="sm-elapsed" id="sm-elapsed">0s elapsed</p>
-        </div>
+            clearInterval(elapsedInterval);
+            elapsedInterval = setInterval(() => {
+                elapsedSeconds++;
+                statusText.innerText = `Transforming… ${elapsedSeconds}s`;
+            }, 1000);
+        }
 
-        <!-- Result overlay — visible while data-state="result" -->
-        <div class="sm-overlay sm-overlay--result" id="sm-overlay-result">
-          <img id="sm-result-img" src="" alt="AI-transformed photo" />
-          <div class="sm-prompt-badge" id="sm-prompt-badge"></div>
-        </div>
+        function stopProgress() {
+            clearInterval(elapsedInterval);
+            progressWrap.style.display = 'none';
+            progressBar.style.transition = 'none';
+            progressBar.style.width = '0%';
+        }
 
-        <!-- Error overlay — visible while data-state="error" -->
-        <div class="sm-overlay sm-overlay--error" id="sm-overlay-error">
-          <span class="sm-error-icon">⚠</span>
-          <p class="sm-error-msg" id="sm-error-msg">Something went wrong.</p>
-          <button class="sm-btn sm-btn--retry" id="sm-retry-btn">Try Again</button>
-        </div>
+        // ── Capture & transform ────────────────────────────────────────
+        actionBtn.addEventListener('click', async () => {
 
-      </div><!-- /.sm-viewport -->
+            // "Try Again" — return to live mirror
+            if (isDisplayingResult) {
+                resultImg.style.display = 'none';
+                video.style.display = 'block';
+                actionBtn.innerText = '\u25CE Capture';
+                statusText.innerText = '';
+                errorOverlay.style.display = 'none';
+                isDisplayingResult = false;
+                return;
+            }
 
-      <!-- ── Right column — mirrors reference .right-column ──── -->
-      <div class="sm-controls">
+            // Capture state
+            actionBtn.disabled = true;
+            errorOverlay.style.display = 'none';
+            statusText.innerText = 'Transforming\u2026 0s';
+            startProgress();
 
-        <!-- Capture button — mirrors reference's primary action -->
-        <button class="sm-btn sm-btn--capture" id="sm-capture-btn" disabled>
-          ◎ Capture &amp; Transform
-        </button>
+            // Draw frame to canvas, un-mirror so the AI gets natural orientation
+            const ctx = canvas.getContext('2d');
+            canvas.width  = video.videoWidth  || 640;
+            canvas.height = video.videoHeight || 480;
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, 0, 0);
 
-        <!-- Feedback section — mirrors reference #feedback-section -->
-        <div class="sm-feedback-section" id="sm-feedback-section">
-          <h2 class="sm-section-title">Last prompt</h2>
-          <div class="sm-feedback-content" id="sm-feedback-content">
-            <p class="sm-feedback-prompt" id="sm-feedback-prompt">
-              Tap Capture to start
-            </p>
-          </div>
-        </div>
+            const imageB64 = canvas.toDataURL('image/jpeg', 0.8);
 
-        <!-- New photo button — shown only in result state -->
-        <button class="sm-btn sm-btn--secondary" id="sm-new-btn">
-          ↺ New Photo
-        </button>
+            try {
+                const controller = new AbortController();
+                const timeoutId  = setTimeout(() => controller.abort(), 120000);
 
-      </div><!-- /.sm-controls -->
+                const response = await fetch('/transform', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageB64 }),
+                    signal: controller.signal
+                });
 
-      <!-- ── History ledger — mirrors reference .recent-detections-section -->
-      <div class="sm-history-section">
-        <h2 class="sm-section-title">Recent transforms</h2>
-        <!-- Entries prepended by script.js when each result arrives.
-             Clicking any row restores that result image to the viewport. -->
-        <ul class="sm-history-list" id="sm-history-list">
-          <li class="sm-history-empty">No transforms yet — tap Capture to start</li>
-        </ul>
-      </div>
+                clearTimeout(timeoutId);
+                const data = await response.json();
 
-    </div><!-- /.sm-main -->
+                if (data.success) {
+                    stopProgress();
+                    video.style.display = 'none';
+                    resultImg.src = data.image;
+                    resultImg.style.display = 'block';
+                    statusText.innerText = `"${data.prompt}"`;
+                    actionBtn.innerText = '\u21BA Try Again';
+                    isDisplayingResult = true;
+                } else {
+                    throw new Error(data.error || 'Generation failed.');
+                }
 
-  </div><!-- /.sm-app -->
-
-  <!--
-    socket.io.min.js is bundled locally so the app works offline
-    on the Uno Q without an internet connection.
-    The real Bricks WebUI serves this same file from its own assets.
-  -->
-  <script src="/static/libs/socket.io.min.js"></script>
-  <script src="/static/script.js"></script>
+            } catch (err) {
+                stopProgress();
+                errorOverlay.innerText = err.name === 'AbortError'
+                    ? 'Request timed out — the model may be loading, try again.'
+                    : err.message;
+                errorOverlay.style.display = 'block';
+                statusText.innerText = '';
+            } finally {
+                actionBtn.disabled = false;
+            }
+        });
+    </script>
 
 </body>
 </html>
