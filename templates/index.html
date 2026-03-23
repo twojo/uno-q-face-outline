@@ -637,37 +637,56 @@
                     ctx.restore();
                 }
 
-                let smileScore = 0;
+                let smileScore = 0, angerScore = 0, surpriseScore = 0, browUpScore = 0;
                 if (res.faceBlendshapes && res.faceBlendshapes[i]) {
                     const bs = res.faceBlendshapes[i].categories;
                     for (const b of bs) {
-                        if (b.categoryName === "mouthSmileLeft" || b.categoryName === "mouthSmileRight") {
-                            smileScore = Math.max(smileScore, b.score);
+                        switch (b.categoryName) {
+                            case "mouthSmileLeft": case "mouthSmileRight":
+                                smileScore = Math.max(smileScore, b.score); break;
+                            case "browDownLeft": case "browDownRight":
+                                angerScore = Math.max(angerScore, b.score); break;
+                            case "jawOpen":
+                                surpriseScore = Math.max(surpriseScore, b.score); break;
+                            case "browOuterUpLeft": case "browOuterUpRight":
+                                browUpScore = Math.max(browUpScore, b.score); break;
                         }
                     }
+                    surpriseScore = Math.min(1, surpriseScore * 0.7 + browUpScore * 0.5);
                 }
-                const isSmiling = smileScore > 0.4;
+
+                const emojis = [
+                    { ch: "\uD83D\uDE00", on: smileScore > 0.4, glow: "rgba(255,220,50,0.9)" },
+                    { ch: "\uD83D\uDE20", on: angerScore > 0.45, glow: "rgba(255,60,60,0.9)" },
+                    { ch: "\uD83E\uDEE8", on: surpriseScore > 0.5, glow: "rgba(140,120,255,0.9)" },
+                    { ch: "\uD83E\uDEE1", on: browUpScore > 0.35, glow: "rgba(80,200,120,0.9)" },
+                ];
                 const chin = lm[152];
                 if (chin) {
-                    const emoX = (t ? t.x * vw : chin.x * vw);
-                    const emoY = chin.y * vh + 35;
-                    ctx.save();
-                    ctx.translate(emoX, emoY);
-                    ctx.scale(-1, 1);
-                    ctx.font = "36px sans-serif";
-                    ctx.textAlign = "center";
-                    ctx.textBaseline = "middle";
-                    if (isSmiling) {
-                        ctx.shadowColor = "rgba(255,220,50,0.9)";
-                        ctx.shadowBlur = 18;
-                        ctx.globalAlpha = 1;
-                        ctx.fillText("\uD83D\uDE00", 0, 0);
-                        ctx.shadowBlur = 0;
-                    } else {
-                        ctx.globalAlpha = 0.25;
-                        ctx.fillText("\uD83D\uDE00", 0, 0);
+                    const baseX = (t ? t.x * vw : chin.x * vw);
+                    const baseY = chin.y * vh + 35;
+                    const totalW = emojis.length * 36;
+                    const startX = baseX - totalW / 2 + 18;
+                    for (let ei = 0; ei < emojis.length; ei++) {
+                        const em = emojis[ei];
+                        ctx.save();
+                        ctx.translate(startX + ei * 36, baseY);
+                        ctx.scale(-1, 1);
+                        ctx.font = "28px sans-serif";
+                        ctx.textAlign = "center";
+                        ctx.textBaseline = "middle";
+                        if (em.on) {
+                            ctx.shadowColor = em.glow;
+                            ctx.shadowBlur = 16;
+                            ctx.globalAlpha = 1;
+                            ctx.fillText(em.ch, 0, 0);
+                            ctx.shadowBlur = 0;
+                        } else {
+                            ctx.globalAlpha = 0.12;
+                            ctx.fillText(em.ch, 0, 0);
+                        }
+                        ctx.restore();
                     }
-                    ctx.restore();
                 }
             }
 
