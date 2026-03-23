@@ -159,10 +159,17 @@ function addHistoryEntry(data) {
 
   const info = document.createElement("div");
   info.className = "sm-history-info";
-  info.innerHTML = `
-    <p class="sm-history-prompt">${data.prompt}</p>
-    <p class="sm-history-time">${timeStr}${elapsedStr}</p>
-  `;
+
+  const promptP = document.createElement("p");
+  promptP.className = "sm-history-prompt";
+  promptP.textContent = data.prompt;
+
+  const timeP = document.createElement("p");
+  timeP.className = "sm-history-time";
+  timeP.textContent = `${timeStr}${elapsedStr}`;
+
+  info.appendChild(promptP);
+  info.appendChild(timeP);
 
   li.appendChild(thumb);
   li.appendChild(info);
