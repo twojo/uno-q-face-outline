@@ -4,22 +4,54 @@
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
-## Smart Mirror AI Photo Booth
+## Smart Mirror AI Photo Booth (Arduino Bricks edition)
 
-A standalone Flask app lives at the root of the workspace. Prototype for Arduino Uno Q deployment.
+Standalone Flask + Socket.IO app at the workspace root. Prototype for Arduino Uno Q (QRB2210) deployment. Architecture is aligned with the official Arduino Bricks framework so `app.py` runs unchanged on the Uno Q.
 
-- **`app.py`** — Flask server with two routes:
-  - `GET /` — Serves the smart mirror UI (`templates/index.html`)
-  - `POST /transform` — Accepts base64 JPEG, randomly selects a prompt, calls `timbrooks/instruct-pix2pix` via HuggingFace `InferenceClient`, returns base64 JPEG + prompt string
-- **`templates/index.html`** — Full smart mirror UI:
-  - Live camera feed via `getUserMedia` (front-facing, mirrored)
-  - Capture button → posts frame to `/transform`
-  - Loading overlay with spinner while AI processes
-  - Displays AI-transformed result with prompt badge
-  - Reset button returns to live mirror
-- **Dependencies**: Flask, huggingface-hub, Pillow (installed into `.pythonlibs`)
-- **Workflow**: "Start application" runs `.pythonlibs/bin/python3 app.py` on port 8000
-- **Secrets**: `HF_TOKEN` — HuggingFace API token (stored as Replit secret)
+### Communication flow
+
+```
+Phone browser → socket.emit("capture") → handle_capture() → HuggingFace → socket.emit("result") → browser
+```
+
+### Key files
+
+| File | Purpose |
+|------|---------|
+| `app.py` | Bricks-style backend — `WebUI`, `App.run()`, event wiring |
+| `arduino/` | **Replit-only shim** — delete on Uno Q, real SDK takes over |
+| `arduino/app_bricks/web_ui.py` | `WebUI` shim (Flask-SocketIO) |
+| `arduino/app_utils.py` | `App.run()` shim |
+| `templates/index.html` | Socket.IO-based UI (no Flask `url_for`) |
+| `static/script.js` | `socket.on/emit` — mirrors Bricks event pattern |
+| `static/style.css` | State-driven via `body[data-state]` attribute selectors |
+| `static/libs/socket.io.min.js` | Bundled offline (no CDN needed on Uno Q) |
+| `captures/` | `original_YYYYMMDD_*.jpg` + `ai_YYYYMMDD_*.jpg` pairs |
+| `smart_mirror.log` | Rotating log (5 MB × 3 backups) |
+
+### Socket.IO events
+
+| Direction | Event | Payload |
+|-----------|-------|---------|
+| server → browser | `welcome` | `{status, prompts}` |
+| browser → server | `capture` | `{image: "<data-url>"}` |
+| server → browser | `processing` | `{prompt}` |
+| server → browser | `result` | `{image: "<data-url>", prompt}` |
+| server → browser | `transform_error` | `{message}` |
+
+### Dependencies
+
+- Python: `flask-socketio`, `huggingface_hub`, `Pillow` (in `.pythonlibs`)
+- JS: `socket.io.min.js` v4.7.2 (bundled in `static/libs/`)
+- **Workflow**: "Start application" — `python3 app.py` on `PORT` (default 8000)
+- **Secret**: `HF_TOKEN` — HuggingFace API token
+
+### Deploying to the Uno Q
+
+1. Copy all files **except** the `arduino/` folder (the real SDK is pre-installed).
+2. `pip install flask-socketio huggingface_hub Pillow`
+3. `export HF_TOKEN="hf_..."`
+4. `python3 app.py`
 
 ## Stack
 

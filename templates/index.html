@@ -1,174 +1,124 @@
+<!--
+  Smart Mirror AI Photo Booth — UI Template
+  Follows the Arduino Bricks HTML structure from the reference app
+  (mobile-video-generic-object-detection):
+
+    • <body data-*> attributes carry state; CSS shows/hides elements based on them
+    • Socket.IO loaded from static/libs/ — bundled for offline Uno Q use
+    • A single <script src="/static/script.js"> at the bottom
+    • No inline JS or CSS
+
+  On the real Bricks SDK the WebUI serves a widget's render() output.
+  This file maps 1-to-1 with that: the <body> becomes the widget root,
+  the same socket.io.min.js is served by the real WebUI, and script.js
+  calls socket.emit / socket.on using the same events as app.py.
+-->
 <!DOCTYPE html>
 <html lang="en">
-<!--
-  Smart Mirror AI Booth — Main Template
-  File: templates/index.html   (rendered by Flask's render_template())
-
-  Styles → static/style.css
-  Logic  → static/script.js
-
-  Arduino Bricks integration:
-  ───────────────────────────
-  To turn this into a Bricks Custom Widget, copy the contents of
-  <body> into your widget's render() output. Enqueue style.css and
-  script.js via register_scripts(). All IDs are prefixed "sm-" to
-  prevent conflicts with other widgets on the page.
--->
 <head>
   <meta charset="UTF-8" />
-  <!--
-    viewport: width=device-width keeps it crisp on Android.
-    user-scalable=no prevents accidental pinch-zoom during interaction.
-  -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Smart Mirror AI Booth</title>
-
-  <!--
-    Flask serves everything in ./static/ at the /static/ URL path.
-    url_for() generates the correct path whether the app is mounted
-    at / or a sub-path — important if you proxy it on the Uno Q.
-  -->
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <title>Smart Mirror</title>
+  <link rel="stylesheet" href="/static/style.css" />
 </head>
-<body>
 
 <!--
-  .smart-mirror-app is the Bricks widget root scope.
-  All CSS selectors and JS queries are relative to this element.
+  data-state:
+    "idle"       live camera feed, Capture button active
+    "processing" loading overlay visible, button disabled
+    "result"     AI result image visible
+    "error"      error overlay visible
+
+  data-connection:
+    "disconnected"   (default) Socket.IO not yet connected
+    "connected"      server acknowledged with "welcome" event
 -->
-<div class="smart-mirror-app">
+<body data-state="idle" data-connection="disconnected">
 
-  <!-- ── Header ───────────────────────────────────────────────── -->
-  <div class="sm-header">
-    <h1>⬡ Smart Mirror</h1>
-    <p>Arduino Uno Q · AI Photo Booth</p>
-  </div>
+  <div class="sm-app">
 
+    <!-- ── Header — mirrors reference .header ──────────────────── -->
+    <div class="sm-header">
+      <h1 class="sm-title">Smart Mirror</h1>
+      <p class="sm-subtitle">Arduino Uno Q · AI Photo Booth</p>
+    </div>
 
-  <!-- ── Mirror frame ─────────────────────────────────────────── -->
+    <!-- ── Status bar — mirrors reference .subheader ───────────── -->
+    <div class="sm-subheader">
+      <span class="sm-status-dot" id="sm-status-dot"></span>
+      <span class="sm-status-text" id="sm-status-text">Connecting to server…</span>
+    </div>
+
+    <!-- ── Main content ─────────────────────────────────────────── -->
+    <div class="sm-main">
+
+      <!-- Camera / result viewport — mirrors reference #video-container -->
+      <div class="sm-viewport" id="sm-viewport">
+
+        <!-- Live camera feed (CSS mirror-flipped) -->
+        <video id="sm-video" autoplay playsinline muted></video>
+
+        <!-- Canvas used only for frame capture — never displayed -->
+        <canvas id="sm-canvas" aria-hidden="true"></canvas>
+
+        <!-- Loading overlay — visible while data-state="processing" -->
+        <div class="sm-overlay sm-overlay--loading" id="sm-overlay-loading" aria-live="polite">
+          <div class="sm-spinner"></div>
+          <p class="sm-overlay-label">Transforming<span class="sm-dots"></span></p>
+          <p class="sm-prompt-preview" id="sm-prompt-preview"></p>
+        </div>
+
+        <!-- Result overlay — visible while data-state="result" -->
+        <div class="sm-overlay sm-overlay--result" id="sm-overlay-result">
+          <img id="sm-result-img" src="" alt="AI-transformed photo" />
+          <div class="sm-prompt-badge" id="sm-prompt-badge"></div>
+        </div>
+
+        <!-- Error overlay — visible while data-state="error" -->
+        <div class="sm-overlay sm-overlay--error" id="sm-overlay-error">
+          <span class="sm-error-icon">⚠</span>
+          <p class="sm-error-msg" id="sm-error-msg">Something went wrong.</p>
+          <button class="sm-btn sm-btn--retry" id="sm-retry-btn">Try Again</button>
+        </div>
+
+      </div><!-- /.sm-viewport -->
+
+      <!-- ── Right column — mirrors reference .right-column ──── -->
+      <div class="sm-controls">
+
+        <!-- Capture button — mirrors reference's primary action -->
+        <button class="sm-btn sm-btn--capture" id="sm-capture-btn" disabled>
+          ◎ Capture &amp; Transform
+        </button>
+
+        <!-- Feedback section — mirrors reference #feedback-section -->
+        <div class="sm-feedback-section" id="sm-feedback-section">
+          <h2 class="sm-section-title">Last prompt</h2>
+          <div class="sm-feedback-content" id="sm-feedback-content">
+            <p class="sm-feedback-prompt" id="sm-feedback-prompt">
+              Tap Capture to start
+            </p>
+          </div>
+        </div>
+
+        <!-- New photo button — shown only in result state -->
+        <button class="sm-btn sm-btn--secondary" id="sm-new-btn">
+          ↺ New Photo
+        </button>
+
+      </div><!-- /.sm-controls -->
+
+    </div><!-- /.sm-main -->
+
+  </div><!-- /.sm-app -->
+
   <!--
-    The frame contains:
-      • Live camera feed  (#sm-video)
-      • AI result image   (#sm-result-img)
-      • Loading overlay   (#sm-overlay-loading)
-      • Error overlay     (#sm-overlay-error)
-      • Prompt badge      (#sm-prompt-badge)
+    socket.io.min.js is bundled locally so the app works offline
+    on the Uno Q without an internet connection.
+    The real Bricks WebUI serves this same file from its own assets.
   -->
-  <div class="sm-mirror-frame">
-
-    <!--
-      Live camera feed.
-      - autoplay: starts as soon as srcObject is assigned in JS.
-      - playsinline: required on iOS/Android to prevent fullscreen.
-      - muted: required by browsers to allow autoplay.
-      - The CSS mirror flip (scaleX -1) is in style.css.
-    -->
-    <video id="sm-video" autoplay playsinline muted></video>
-
-    <!--
-      AI result image — hidden until a transform succeeds.
-      Shown by script.js once the data-URL is loaded.
-    -->
-    <img id="sm-result-img" alt="AI-transformed photo" />
-
-
-    <!-- ── Loading overlay ──────────────────────────────────── -->
-    <!--
-      Shown while waiting for the /transform API response.
-      Hidden by default via .hidden in style.css.
-    -->
-    <div class="sm-overlay hidden" id="sm-overlay-loading">
-      <div class="sm-spinner"></div>
-
-      <!-- "Processing AI..." with animated trailing dots -->
-      <div class="sm-loading-label">
-        Processing AI<span class="sm-dots"></span>
-      </div>
-
-      <!-- Sub-text updated by JS to reflect the current stage -->
-      <div class="sm-loading-sub" id="sm-loading-sub">
-        Sending frame to Hugging Face…
-      </div>
-    </div>
-
-
-    <!-- ── Error overlay ─────────────────────────────────────── -->
-    <!--
-      Shown on camera permission denial, API errors, or timeouts.
-      The error message and Try Again behaviour are set in script.js.
-    -->
-    <div class="sm-overlay hidden" id="sm-overlay-error">
-      <div class="sm-error-icon">⚠️</div>
-      <div class="sm-error-msg" id="sm-error-msg">Something went wrong.</div>
-      <!--
-        onclick is assigned dynamically in script.js so the button can
-        either reload the page (camera errors) or reset the UI (API errors).
-      -->
-      <button class="sm-btn-try-again" id="sm-btn-try-again">Try Again</button>
-    </div>
-
-
-    <!-- ── Prompt badge ──────────────────────────────────────── -->
-    <!--
-      Appears at the bottom of the frame after a successful transform.
-      Shows the randomly-chosen prompt so the user knows what the AI did.
-      Hidden by default; shown and populated by script.js.
-    -->
-    <div class="sm-prompt-badge" id="sm-prompt-badge">
-      <strong>Prompt:</strong> <span id="sm-prompt-text"></span>
-    </div>
-
-  </div>
-  <!-- /mirror-frame -->
-
-
-  <!-- ── Controls ─────────────────────────────────────────────── -->
-  <div class="sm-controls">
-
-    <!--
-      Large circular shutter button.
-      - Disabled on load; enabled once camera is ready.
-      - Styled as a camera shutter ring in style.css.
-      - aria-label provides accessibility context (no visible text).
-    -->
-    <button id="sm-btn-capture" disabled aria-label="Capture photo"></button>
-
-    <!-- Text label below the shutter button, updated by JS -->
-    <span class="sm-capture-label" id="sm-capture-label">Capture</span>
-
-    <!--
-      Secondary action — hidden until a result is shown.
-      Resets the UI back to the live mirror view.
-    -->
-    <button id="sm-btn-reset">↺ New Photo</button>
-
-  </div>
-
-
-  <!-- ── Status bar ───────────────────────────────────────────── -->
-  <!--
-    One-line status shown below the controls.
-    Updated by setStatus() in script.js.
-    A pulsing dot is prepended when the camera is live.
-  -->
-  <div class="sm-status-bar" id="sm-status-bar">Starting camera…</div>
-
-</div>
-<!-- /smart-mirror-app -->
-
-
-<!--
-  Hidden canvas — used by script.js to grab and un-flip video frames.
-  Never rendered; dimensions are set programmatically.
--->
-<canvas id="sm-canvas"></canvas>
-
-<!--
-  Load script.js last so all DOM elements are available.
-  In Bricks, enqueue this via wp_enqueue_script() with
-  $in_footer = true and the page as a dependency.
--->
-<script src="{{ url_for('static', filename='script.js') }}"></script>
+  <script src="/static/libs/socket.io.min.js"></script>
+  <script src="/static/script.js"></script>
 
 </body>
 </html>
