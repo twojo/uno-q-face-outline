@@ -600,34 +600,8 @@
                     }
                     ctx.stroke();
                 }
-                if (L.outline && FaceLandmarker.FACE_LANDMARKS_FACE_OVAL) {
-                    var cx = 0, cy = 0, oc = 0;
-                    var ovalConns = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL;
-                    var ovalIdxSet = new Set();
-                    for (var oi = 0; oi < ovalConns.length; oi++) {
-                        var oc1 = ovalConns[oi];
-                        ovalIdxSet.add(Array.isArray(oc1) ? oc1[0] : oc1.start);
-                        ovalIdxSet.add(Array.isArray(oc1) ? oc1[1] : oc1.end);
-                    }
-                    ovalIdxSet.forEach(function(idx) { if (lm[idx]) { cx += lm[idx].x; cy += lm[idx].y; oc++; } });
-                    if (oc > 0) { cx /= oc; cy /= oc; }
-                    var SCALE = 1.15;
-                    ctx.strokeStyle = clr.edge;
-                    ctx.lineWidth = 5;
-                    ctx.beginPath();
-                    for (var oi2 = 0; oi2 < ovalConns.length; oi2++) {
-                        var c2 = ovalConns[oi2];
-                        var si2 = Array.isArray(c2) ? c2[0] : c2.start;
-                        var ei2 = Array.isArray(c2) ? c2[1] : c2.end;
-                        var a2 = lm[si2], b2 = lm[ei2];
-                        if (!a2 || !b2) continue;
-                        var ax = cx + (a2.x - cx) * SCALE, ay = cy + (a2.y - cy) * SCALE;
-                        var bx = cx + (b2.x - cx) * SCALE, by = cy + (b2.y - cy) * SCALE;
-                        ctx.moveTo(ax * vw, ay * vh);
-                        ctx.lineTo(bx * vw, by * vh);
-                    }
-                    ctx.stroke();
-                }
+                if (L.outline && FaceLandmarker.FACE_LANDMARKS_FACE_OVAL)
+                    drawConns(FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, clr.edge, 5);
                 let eyeBlinkL_v = 0, eyeBlinkR_v = 0;
                 if (res.faceBlendshapes && res.faceBlendshapes[i]) {
                     for (const b of res.faceBlendshapes[i].categories) {
