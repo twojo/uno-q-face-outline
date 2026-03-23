@@ -135,11 +135,6 @@ def index():
     return render_template("index.html")
 
 
-@app.route("/themes", methods=["GET"])
-def get_themes():
-    return jsonify({"themes": list(THEMES.keys())})
-
-
 @app.route("/transform", methods=["POST"])
 def transform():
     ip = request.remote_addr or "unknown"
@@ -168,12 +163,8 @@ def transform():
     except Exception as pp_err:
         logger.warning("Pre-processing failed, using raw: %s", pp_err)
 
-    theme_name = data.get("theme")
-    if theme_name and theme_name in THEMES:
-        prompt = random.choice(THEMES[theme_name])
-    else:
-        theme_name = random.choice(list(THEMES.keys()))
-        prompt = random.choice(THEMES[theme_name])
+    theme_name = random.choice(list(THEMES.keys()))
+    prompt = random.choice(THEMES[theme_name])
 
     seed = random.randint(0, 999999)
     face_data_uri = f"data:image/jpeg;base64,{image_b64}"
@@ -191,10 +182,10 @@ def transform():
                 "face_image_url": face_data_uri,
                 "prompt": prompt,
                 "negative_prompt": NEGATIVE_PROMPT,
-                "ip_adapter_scale": 0.85,
-                "controlnet_conditioning_scale": 0.80,
-                "num_inference_steps": 30,
-                "guidance_scale": 5.0,
+                "ip_adapter_scale": 0.95,
+                "controlnet_conditioning_scale": 0.90,
+                "num_inference_steps": 20,
+                "guidance_scale": 4.0,
                 "seed": seed,
             },
         )
@@ -250,7 +241,7 @@ if __name__ == "__main__":
 
     logger.info("FAL_KEY loaded (length=%d)", len(fal_key))
     logger.info("Model: %s", FAL_MODEL)
-    logger.info("Settings: ip_adapter=0.85, controlnet=0.80, steps=30, guidance=5.0")
+    logger.info("Settings: ip_adapter=0.95, controlnet=0.90, steps=20, guidance=4.0")
 
     port = int(os.environ.get("PORT", 8000))
     logger.info("Starting AI Mirror Booth on port %d", port)

@@ -212,34 +212,6 @@
             max-width: 480px;
         }
 
-        .theme-selector {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            justify-content: center;
-        }
-
-        .theme-pill {
-            padding: 6px 14px;
-            border-radius: 20px;
-            border: 1px solid var(--border);
-            background: var(--card);
-            color: var(--muted);
-            font-size: 12px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-family: 'Outfit', sans-serif;
-        }
-
-        .theme-pill:hover { border-color: var(--accent); color: var(--text); }
-
-        .theme-pill.active {
-            background: var(--accent-dim);
-            border-color: var(--accent);
-            color: var(--accent);
-        }
-
         .main-btn {
             width: 100%;
             padding: 18px;
@@ -443,8 +415,7 @@
         <canvas id="canvas"></canvas>
 
         <div class="controls">
-            <div class="theme-selector" id="themeSelector"></div>
-            <button class="main-btn capture" id="actionBtn">Snap & Transform</button>
+            <button class="main-btn capture" id="actionBtn" disabled>Snap & Transform</button>
             <div class="loading-bar" id="loadingBar">
                 <div class="loading-bar-inner" id="loadingBarInner"></div>
             </div>
@@ -477,7 +448,6 @@
         const loadingBarInner = document.getElementById('loadingBarInner');
         const loadingText = document.getElementById('loadingText');
         const errorText = document.getElementById('errorText');
-        const themeSelector = document.getElementById('themeSelector');
         const comparison = document.getElementById('comparison');
         const metaTheme = document.getElementById('metaTheme');
         const metaSeed = document.getElementById('metaSeed');
@@ -487,13 +457,12 @@
         const fullscreenView = document.getElementById('fullscreenView');
         const fullscreenImg = document.getElementById('fullscreenImg');
 
-        let selectedTheme = null;
         let isProcessing = false;
         let isShowingResult = false;
         let loadingInterval = null;
         let history = [];
 
-        let loadingMsgs = [
+        const loadingMsgs = [
             "Warming up the flux capacitor...",
             "Consulting the style oracle...",
             "Mixing the magic pixels...",
@@ -507,41 +476,14 @@
             video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 720 } },
             audio: false
         })
-        .then(stream => { video.srcObject = stream; })
+        .then(stream => {
+            video.srcObject = stream;
+            actionBtn.disabled = false;
+        })
         .catch(() => {
             errorText.innerText = "Camera access required. Allow camera and reload.";
             errorText.style.display = 'block';
-            actionBtn.disabled = true;
         });
-
-        function buildThemeUI(themes) {
-            themeSelector.innerHTML = '';
-            const randomPill = document.createElement('button');
-            randomPill.className = 'theme-pill active';
-            randomPill.textContent = 'Surprise Me';
-            randomPill.onclick = () => selectTheme(null, randomPill);
-            themeSelector.appendChild(randomPill);
-
-            themes.forEach(t => {
-                const pill = document.createElement('button');
-                pill.className = 'theme-pill';
-                pill.textContent = t;
-                pill.onclick = () => selectTheme(t, pill);
-                themeSelector.appendChild(pill);
-            });
-        }
-
-        buildThemeUI(['Time Traveler','Action Hero','Fantasy Realm','Explorer','Pop Culture','Wild Card']);
-
-        fetch('/themes').then(r => r.json()).then(data => {
-            if (data.themes && data.themes.length) buildThemeUI(data.themes);
-        }).catch(() => {});
-
-        function selectTheme(theme, pill) {
-            selectedTheme = theme;
-            document.querySelectorAll('.theme-pill').forEach(p => p.classList.remove('active'));
-            pill.classList.add('active');
-        }
 
         function countdown() {
             return new Promise(resolve => {
@@ -653,13 +595,10 @@
                 const controller = new AbortController();
                 const timeout = setTimeout(() => controller.abort(), 120000);
 
-                const body = { image: imageData };
-                if (selectedTheme) body.theme = selectedTheme;
-
                 const response = await fetch('/transform', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body),
+                    body: JSON.stringify({ image: imageData }),
                     signal: controller.signal,
                 });
                 clearTimeout(timeout);
@@ -676,7 +615,7 @@
                     stopLoading();
                     resultImg.src = data.image;
                     comparison.classList.add('reveal-anim');
-                    metaTheme.textContent = data.theme || 'Surprise';
+                    metaTheme.textContent = data.theme || '--';
                     metaSeed.textContent = data.seed || '--';
                     metaPrompt.textContent = data.prompt || '--';
                     actionBtn.textContent = 'Try Another';

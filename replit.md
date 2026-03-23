@@ -10,30 +10,32 @@ Standalone Flask app at the workspace root. Prototype for Arduino Uno Q (QRB2210
 
 ### Architecture
 
-Single-step identity-preserving transformation via **InstantID** (`fal-ai/instant-id`):
+Single-step identity-preserving transformation via **InstantID** (`fal-ai/instantid`):
 - Takes webcam capture as `face_image_url` reference
-- `ip_adapter_scale=0.85` for high identity fidelity
-- `controlnet_conditioning_scale=0.80` for facial structure preservation
-- 30 inference steps, guidance_scale=5.0
+- `ip_adapter_scale=0.95` for maximum identity fidelity
+- `controlnet_conditioning_scale=0.90` for strong facial structure preservation
+- 20 inference steps (fast), guidance_scale=4.0
 - Identity-anchored prompts: every prompt starts with "High-fidelity portrait of the exact person in the reference image"
 - Strict negative prompt blocks generic/deformed/stylized output
 - Rotating file logger: `mirror_debug.log` (5 MB x 3 backups)
 
 ### Features
 
+- Single "Snap & Transform" button — no theme selection, always random
 - 3-2-1 countdown with camera flash effect
-- 6 themed categories: Time Traveler, Action Hero, Fantasy Realm, Explorer, Pop Culture, Wild Card
-- "Surprise Me" mode picks a random theme
+- 6 themed prompt pools internally: Time Traveler, Action Hero, Fantasy Realm, Explorer, Pop Culture, Wild Card
 - Side-by-side before/after reveal with animation
+- Result metadata: theme, seed, prompt displayed
 - Scrollable gallery strip of past transformations
 - Fullscreen view on gallery thumbnail tap
 - Rotating fun loading messages during generation
+- Robust JSON parse error handling
 
 ### Key Files
 
 | File | Purpose |
 |------|---------|
-| `app.py` | Flask backend — /themes endpoint, /transform pipeline (FLUX + face-swap) |
+| `app.py` | Flask backend — /transform pipeline (InstantID, random theme) |
 | `templates/index.html` | Full photo booth UI — camera, countdown, reveal, gallery |
 
 ### Dependencies
