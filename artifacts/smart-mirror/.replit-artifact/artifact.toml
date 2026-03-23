@@ -11,7 +11,6 @@ paths = ["/"]
 
 [services.env]
 PORT = "8002"
-CAPTURES_DIR = "/home/runner/workspace/captures"
 
 [services.development]
 run = "/home/runner/workspace/.pythonlibs/bin/python3 /home/runner/workspace/app.py"
@@ -22,11 +21,10 @@ run = "/home/runner/workspace/.pythonlibs/bin/python3 /home/runner/workspace/app
 args = ["bash", "-c", "pip install flask flask-socketio Pillow fal-client requests"]
 
 [services.production.run]
-args = ["bash", "/home/runner/workspace/scripts/start-mirror-prod.sh"]
+args = ["/home/runner/workspace/.pythonlibs/bin/python3", "/home/runner/workspace/app.py"]
 
 [services.production.run.env]
 PORT = "8002"
-CAPTURES_DIR = "/home/runner/workspace/captures"
 
 [services.production.health.startup]
 path = "/"
