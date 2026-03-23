@@ -474,9 +474,7 @@
         </div>
 
         <div class="controls">
-            <button class="main-btn capture" id="actionBtn" disabled>&#x1F3B2; Roll the AI Dice!</button>
-            <button class="main-btn capture" id="uploadBtn" style="display:none;">&#x1F4F7; Upload a Photo Instead</button>
-            <input type="file" id="fileInput" accept="image/*" style="display:none;" />
+            <button class="main-btn capture" id="actionBtn">&#x1F3B2; Roll the AI Dice!</button>
             <div class="loading-bar" id="loadingBar">
                 <div class="loading-bar-inner" id="loadingBarInner"></div>
             </div>
@@ -532,6 +530,7 @@
     let isShowingResult = false;
     let loadingInterval = null;
     let historyArr = [];
+    let cameraReady = false;
 
     const loadingMsgs = [
         "Extracting facial geometry...",
@@ -590,11 +589,10 @@
             await new Promise((resolve) => {
                 video.onloadeddata = resolve;
             });
-            actionBtn.disabled = false;
+            cameraReady = true;
             if (meshAvailable) startMeshLoop();
         } catch (e) {
-            errorText.innerText = "Camera access required. Allow camera and reload.";
-            errorText.style.display = "block";
+            cameraReady = false;
         }
     }
 
@@ -781,6 +779,13 @@
         }
 
         if (isProcessing) return;
+
+        if (!cameraReady) {
+            errorText.textContent = "Camera not available. Open this page in a new browser tab for camera access.";
+            errorText.style.display = "block";
+            return;
+        }
+
         isProcessing = true;
         actionBtn.disabled = true;
         errorText.style.display = "none";
