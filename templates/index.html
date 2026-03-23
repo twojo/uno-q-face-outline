@@ -166,7 +166,7 @@
     <canvas id="canvas" style="display:none;"></canvas>
 
     <div class="btn-container">
-        <button id="actionBtn">&#9711; Capture</button>
+        <button id="actionBtn">&#127922; Roll the AI Dice!</button>
         <div id="progressWrap"><div id="progressBar"></div></div>
         <div id="statusText"></div>
         <div id="modeBadge" style="display:none;"></div>
@@ -212,7 +212,7 @@
             clearInterval(elapsedInterval);
             elapsedInterval = setInterval(() => {
                 elapsedSeconds++;
-                statusText.innerText = `Generating\u2026 ${elapsedSeconds}s`;
+                statusText.innerText = `Rolling the dice\u2026 ${elapsedSeconds}s`;
             }, 1000);
         }
 
@@ -229,7 +229,7 @@
             if (isDisplayingResult) {
                 resultsWrap.style.display = 'none';
                 cameraWrap.style.display  = 'block';
-                actionBtn.innerText = '\u25CE Capture';
+                actionBtn.innerText = '\uD83C\uDFB2 Roll the AI Dice!';
                 statusText.innerText = '';
                 errorOverlay.style.display = 'none';
                 modeBadge.style.display = 'none';
@@ -239,7 +239,7 @@
 
             actionBtn.disabled = true;
             errorOverlay.style.display = 'none';
-            statusText.innerText = 'Generating\u2026 0s';
+            statusText.innerText = 'Rolling the dice\u2026 0s';
             startProgress();
 
             // Freeze current frame as "your photo" (un-mirror for natural orientation)
@@ -273,7 +273,7 @@
                     stopProgress();
                     resultImg.src = data.image;
                     statusText.innerText = `"${data.prompt}"`;
-                    actionBtn.innerText = '\u21BA Try Again';
+                    actionBtn.innerText = '\uD83C\uDFB2 Roll Again!';
                     modeBadge.style.display = 'inline-block';
                     modeBadge.className = 'img2img';
                     modeBadge.innerText = '✦ img2img — face preserved';

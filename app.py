@@ -16,55 +16,25 @@ HF_API_TOKEN = os.environ.get("HF_TOKEN")
 SPACE = "InstantX/InstantID"
 
 NEGATIVE_PROMPT = (
+    "illustration, painting, cartoon, anime, 3d render, sketch, drawing, "
     "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, "
     "extra digit, fewer digits, cropped, worst quality, low quality, "
-    "deformed, blurry, ugly, duplicate, morbid, mutilated"
+    "deformed, blurry, ugly, duplicate, morbid, mutilated, disfigured"
 )
 
-# Each theme pairs a prompt with a matching InstantID style template.
-# Available styles: (No style) | Watercolor | Film Noir | Neon |
-#                   Jungle | Mars | Vibrant Color | Snow | Line art
-THEMES = [
-    {
-        "prompt": "a fearless Viking warrior with braided beard and horned helmet, epic battle scene, dramatic sky",
-        "style":  "(No style)",
-    },
-    {
-        "prompt": "a steampunk cyborg inventor with copper gears, glowing goggles and mechanical arms",
-        "style":  "(No style)",
-    },
-    {
-        "prompt": "a Royal Guard in full ceremonial red uniform, standing outside a grand palace",
-        "style":  "Film Noir",
-    },
-    {
-        "prompt": "a medieval knight in gleaming full plate armour holding a sword, dramatic fantasy lighting",
-        "style":  "(No style)",
-    },
-    {
-        "prompt": "an astronaut in a space suit floating above Earth, stars and cosmos in the background",
-        "style":  "Neon",
-    },
-    {
-        "prompt": "a pirate captain with tricorn hat and eye patch on a tall ship at golden sunset",
-        "style":  "Film Noir",
-    },
-    {
-        "prompt": "a portrait in bold expressive swirling oil painting style, rich colourful brushstrokes",
-        "style":  "Watercolor",
-    },
-    {
-        "prompt": "a wise ancient wizard in flowing robes surrounded by magical glowing spell books",
-        "style":  "(No style)",
-    },
-    {
-        "prompt": "a samurai warrior in ornate feudal Japanese armour, cherry blossoms falling",
-        "style":  "Line art",
-    },
-    {
-        "prompt": "a sci-fi explorer in a sleek neon-lit cyberpunk city, futuristic glowing suit",
-        "style":  "Neon",
-    },
+STYLE = "(No style)"
+
+PROMPTS = [
+    "A high-resolution photograph of the person as a fearless Viking warrior with braided beard and horned helmet on a snowy battlefield, cinematic lighting, 8k, shot on 35mm lens",
+    "A high-resolution photograph of the person as a steampunk inventor wearing copper goggles and a leather vest surrounded by brass machinery, cinematic lighting, 8k, shot on 35mm lens",
+    "A high-resolution photograph of the person as a Royal Guard in full ceremonial red uniform standing outside Buckingham Palace, cinematic lighting, 8k, shot on 35mm lens",
+    "A high-resolution photograph of the person as a medieval knight in gleaming full plate armour holding a broadsword, cinematic lighting, 8k, shot on 35mm lens",
+    "A high-resolution photograph of the person as an astronaut in a NASA space suit on the lunar surface with Earth in the sky, cinematic lighting, 8k, shot on 35mm lens",
+    "A high-resolution photograph of the person as a pirate captain with a tricorn hat on the deck of a tall ship at golden hour, cinematic lighting, 8k, shot on 35mm lens",
+    "A high-resolution photograph of the person as a wise wizard in dark flowing robes holding a glowing staff in an ancient library, cinematic lighting, 8k, shot on 35mm lens",
+    "A high-resolution photograph of the person as a samurai warrior in ornate feudal Japanese armour with cherry blossoms falling, cinematic lighting, 8k, shot on 35mm lens",
+    "A high-resolution photograph of the person as a deep-sea scuba diver in a wetsuit surrounded by tropical fish on a coral reef, cinematic lighting, 8k, shot on 35mm lens",
+    "A high-resolution photograph of the person as a fighter pilot wearing an aviator helmet sitting in a jet cockpit, cinematic lighting, 8k, shot on 35mm lens",
 ]
 
 @app.route('/')
@@ -79,9 +49,7 @@ def transform():
     if not image_b64:
         return jsonify({"success": False, "error": "No image received."})
 
-    theme  = random.choice(THEMES)
-    prompt = theme["prompt"]
-    style  = theme["style"]
+    prompt = random.choice(PROMPTS)
 
     image_bytes = base64.b64decode(image_b64)
     tmp = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
@@ -96,7 +64,7 @@ def transform():
             None,                   # pose reference image (optional)
             prompt,                 # prompt
             NEGATIVE_PROMPT,        # negative prompt
-            style,                  # style template
+            STYLE,                  # style template — always "(No style)" for photorealism
             30,                     # num inference steps  (1-100)
             0.8,                    # IdentityNet strength (0-1.5)  — face fidelity
             0.8,                    # Image adapter strength (0-1.5) — detail fidelity
