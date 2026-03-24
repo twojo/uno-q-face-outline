@@ -165,6 +165,41 @@
         }
         .buy-link:hover { background: rgba(96,165,250,0.1); border-color: #60a5fa; }
 
+        .device-toggle {
+            display: flex;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .device-btn {
+            padding: 5px 14px;
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            background: transparent;
+            color: var(--muted);
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .device-btn.active {
+            background: var(--blue);
+            color: #fff;
+        }
+        .device-btn:not(.active):hover {
+            background: rgba(255,255,255,0.05);
+            color: var(--text);
+        }
+        .device-info {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            color: var(--muted);
+            text-align: center;
+            margin-top: 4px;
+        }
+
         .diag {
             margin-top: 14px;
             width: 100%;
@@ -220,7 +255,7 @@
         <div class="header-div"></div>
         <div class="header-title">
             <h1>Wojo's Uno Q Face Outline Demo</h1>
-            <span class="sub">Replit 2026.03 &bull; Qualcomm QRB2210 &bull; 478-Point Landmark Detection</span>
+            <span class="sub">Replit 2026.03 &bull; Qualcomm QRB2210 &bull; Cortex-A53 @ 1.4GHz &bull; 478-Point Landmark Detection</span>
         </div>
     </div>
 
@@ -262,7 +297,11 @@
             <option value="minimal">Minimal</option>
             <option value="emojis">Outline + Emojis</option>
         </select>
-        <a href="https://store.arduino.cc/collections/arduino-days-promo/products/uno-q-4gb" target="_blank" rel="noopener" class="buy-link">Get the Uno Q 4GB &rarr;</a>
+        <div class="device-toggle">
+            <button class="device-btn active" id="btnUnoQ" onclick="setDevice('unoq')">Uno Q</button>
+            <button class="device-btn" id="btnVentuno" onclick="setDevice('ventuno')">Ventuno</button>
+        </div>
+        <a href="https://store.arduino.cc/collections/arduino-days-promo/products/uno-q-4gb" target="_blank" rel="noopener" class="buy-link" id="buyLink">Get the Uno Q 4GB &rarr;</a>
     </div>
 
     <div class="diag" id="diagPanel">
@@ -417,6 +456,50 @@
     let L = { ...PRESETS.full };
     presetEl.onchange = () => { L = { ...PRESETS[presetEl.value] }; };
 
+    const DEVICES = {
+        unoq: {
+            name: "Uno Q",
+            chip: "Qualcomm QRB2210",
+            cpu: "Cortex-A53 @ 1.4GHz",
+            ram: "4GB",
+            skipFrames: 2,
+            extraDelay: 35,
+            maxFaces: 2
+        },
+        ventuno: {
+            name: "Ventuno",
+            chip: "Qualcomm QCS6490",
+            cpu: "Kryo 670 @ 2.7GHz",
+            ram: "8GB",
+            skipFrames: 0,
+            extraDelay: 0,
+            maxFaces: 4
+        }
+    };
+    let currentDevice = 'unoq';
+    let frameSkipCounter = 0;
+    let lastThrottleEnd = 0;
+
+    const DEVICE_LINKS = {
+        unoq: 'https://store.arduino.cc/collections/arduino-days-promo/products/uno-q-4gb',
+        ventuno: 'https://store.arduino.cc/products/ventuno'
+    };
+
+    window.setDevice = function(dev) {
+        if (!DEVICES[dev]) return;
+        currentDevice = dev;
+        document.getElementById('btnUnoQ').className = 'device-btn' + (dev === 'unoq' ? ' active' : '');
+        document.getElementById('btnVentuno').className = 'device-btn' + (dev === 'ventuno' ? ' active' : '');
+        const d = DEVICES[dev];
+        document.querySelector('.sub').textContent =
+            'Replit 2026.03 \u2022 ' + d.chip + ' \u2022 ' + d.cpu + ' \u2022 478-Point Landmark Detection';
+        var buyEl = document.getElementById('buyLink');
+        buyEl.textContent = 'Get the ' + d.name + ' \u2192';
+        buyEl.href = DEVICE_LINKS[dev];
+        frameSkipCounter = 0;
+        lastThrottleEnd = 0;
+    };
+
     let cW = cvs.width, cH = cvs.height;
     let fpsCnt = 0, fpsT = 0, fps = 0, total = 0;
     const startTime = performance.now();
@@ -494,6 +577,15 @@
         if (cam.currentTime === lastVideoTime) return;
         lastVideoTime = cam.currentTime;
 
+        const dev = DEVICES[currentDevice];
+
+        frameSkipCounter++;
+        if (dev.skipFrames > 0 && (frameSkipCounter % (dev.skipFrames + 1)) !== 0) {
+            total++;
+            fpsCnt++;
+            return;
+        }
+
         const vw = cam.videoWidth, vh = cam.videoHeight;
         if (cW !== vw || cH !== vh) {
             cvs.width = vw;
@@ -503,6 +595,11 @@
         }
 
         const nowMs = performance.now();
+
+        if (dev.extraDelay > 0 && lastThrottleEnd > 0) {
+            const elapsed = nowMs - lastThrottleEnd;
+            if (elapsed < dev.extraDelay) return;
+        }
 
         const before = performance.now();
         let res;
@@ -516,6 +613,7 @@
             return;
         }
         latMs = performance.now() - before;
+        lastThrottleEnd = performance.now();
 
         ctx.clearRect(0, 0, vw, vh);
         total++;
@@ -523,7 +621,8 @@
         const now = performance.now();
         if (now - fpsT >= 1000) { fps = Math.round(fpsCnt * 1000 / (now - fpsT)); fpsCnt = 0; fpsT = now; }
 
-        const faces = res && res.faceLandmarks ? res.faceLandmarks : [];
+        let faces = res && res.faceLandmarks ? res.faceLandmarks : [];
+        if (faces.length > dev.maxFaces) faces = faces.slice(0, dev.maxFaces);
         nFaces = faces.length;
 
         if (nFaces > maxFacesEverSeen) maxFacesEverSeen = nFaces;
@@ -756,6 +855,7 @@
             document.getElementById("hPts").textContent = nFaces > 0 ? (478 * nFaces).toLocaleString() : "--";
             document.getElementById("hFps").textContent = fps;
             document.getElementById("hLat").textContent = Math.round(latMs) + "ms";
+            document.getElementById("hDel").textContent = DEVICES[currentDevice].name + " / CPU";
             document.getElementById("hUp").textContent = fmtUptime(now - startTime);
             document.getElementById("hFrames").textContent = total.toLocaleString();
 
