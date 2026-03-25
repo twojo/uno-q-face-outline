@@ -1,33 +1,58 @@
-# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+# Dependencies
+node_modules/
+.pythonlibs/
+__pycache__/
+*.pyc
 
-# compiled output
-dist
-tmp
-out-tsc
+# Build output
+dist/
+tmp/
+out-tsc/
 *.tsbuildinfo
-.expo
-.expo-shared
+.expo/
+.expo-shared/
 
-# dependencies
-node_modules
+# Replit-specific
+.cache/
+.local/
+.upm/
+.config/
+.replit
+.replitignore
+replit.md
+.agents/
+
+# AI / debug logs
+mirror_debug.log
+smart_mirror.log
+*.log
+
+# Attached assets (uploaded screenshots, not app code)
+attached_assets/
+
+# Lock files (regenerated per environment)
+uv.lock
 
 # IDEs and editors
-/.idea
+.idea/
 .project
 .classpath
 .c9/
 *.launch
 .settings/
 *.sublime-workspace
-
-# IDE - VSCode
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+.cursor/
 
-# misc
+# System files
+.DS_Store
+Thumbs.db
+
+# Misc
 /.sass-cache
 /connect.lock
 /coverage
@@ -36,14 +61,3 @@ npm-debug.log
 yarn-error.log
 testem.log
 /typings
-
-# System Files
-.DS_Store
-Thumbs.db
-
-.cursor/rules/nx-rules.mdc
-.github/instructions/nx.instructions.md
-
-# Replit
-.cache/
-.local/
