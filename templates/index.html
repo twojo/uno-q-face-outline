@@ -85,10 +85,11 @@
             width: 100%;
             max-width: 860px;
             display: flex;
+            align-items: center;
             gap: 0;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 9px;
+            font-size: 11px;
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 6px;
@@ -97,13 +98,17 @@
 
         .spec-chip {
             flex: 1;
-            text-align: center;
-            padding: 5px 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 4px 6px;
             border-right: 1px solid var(--border);
+            white-space: nowrap;
         }
         .spec-chip:last-child { border-right: none; }
-        .spec-chip .spec-k { color: var(--muted); font-size: 7px; text-transform: uppercase; letter-spacing: 0.08em; }
-        .spec-chip .spec-v { color: var(--text); font-weight: 500; font-size: 9px; }
+        .spec-chip .spec-k { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .spec-chip .spec-v { color: var(--text); font-weight: 500; font-size: 11px; }
 
         .viewport {
             position: relative;
@@ -304,7 +309,7 @@
         <div class="header-div"></div>
         <div class="header-title">
             <h1>Wojo's Uno Q Face Outline Demo</h1>
-            <span class="sub">Replit 2026.03 &bull; 478-Point Landmark Detection &bull; MediaPipe Face Landmarker</span>
+            <span class="sub">Replit 2026.03</span>
         </div>
         <div class="header-links">
             <a href="https://store.arduino.cc/collections/arduino-days-promo/products/uno-q-4gb" target="_blank" rel="noopener" class="header-link" id="buyLink">Get Uno Q 4GB</a>
@@ -314,12 +319,12 @@
     </div>
 
     <div class="specs-bar" id="specsBar">
-        <div class="spec-chip"><div class="spec-k">SoC</div><div class="spec-v" id="specSoc">QRB2210</div></div>
-        <div class="spec-chip"><div class="spec-k">CPU</div><div class="spec-v" id="specCpu">Cortex-A53 1.4GHz</div></div>
-        <div class="spec-chip"><div class="spec-k">MCU</div><div class="spec-v" id="specMcu">STM32H747</div></div>
-        <div class="spec-chip"><div class="spec-k">RAM</div><div class="spec-v" id="specRam">4GB</div></div>
-        <div class="spec-chip"><div class="spec-k">Max Faces</div><div class="spec-v" id="specFaces">2</div></div>
-        <div class="spec-chip"><div class="spec-k">Delegate</div><div class="spec-v" id="specDel">CPU</div></div>
+        <div class="spec-chip"><span class="spec-k">SoC</span> <span class="spec-v" id="specSoc">QRB2210</span></div>
+        <div class="spec-chip"><span class="spec-k">CPU</span> <span class="spec-v" id="specCpu">Cortex-A53 1.4GHz</span></div>
+        <div class="spec-chip"><span class="spec-k">MCU</span> <span class="spec-v" id="specMcu">STM32H747</span></div>
+        <div class="spec-chip"><span class="spec-k">RAM</span> <span class="spec-v" id="specRam">4GB</span></div>
+        <div class="spec-chip"><span class="spec-k">Faces</span> <span class="spec-v" id="specFaces">2</span></div>
+        <div class="spec-chip"><span class="spec-k">Del</span> <span class="spec-v" id="specDel">CPU</span></div>
     </div>
 
     <div class="viewport">
@@ -554,7 +559,7 @@
         ventuno: {
             soc: 'QCS6490', cpu: 'Kryo 670 2.7GHz', mcu: 'STM32H747', ram: '8GB',
             buyText: 'Ventuno Info',
-            buyLink: 'https://blog.qualcomm.com/innovation/arduino-ventuno-announcement'
+            buyLink: 'https://www.arduino.cc/product-ventuno-q'
         }
     };
 
