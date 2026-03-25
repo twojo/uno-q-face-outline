@@ -349,6 +349,8 @@
             <div class="hud-row"><span class="hud-k">Pitch</span><span class="hud-v" id="hPitch">--</span></div>
             <div class="hud-row"><span class="hud-k">Blink L</span><span class="hud-v" id="hBlinkL">--</span></div>
             <div class="hud-row"><span class="hud-k">Blink R</span><span class="hud-v" id="hBlinkR">--</span></div>
+            <div class="hud-row" id="hPupilRowL" style="display:none"><span class="hud-k" style="color:#ff4040">Pupil L</span><span class="hud-v" id="hPupilL" style="color:#ff4040">--</span></div>
+            <div class="hud-row" id="hPupilRowR" style="display:none"><span class="hud-k" style="color:#ff4040">Pupil R</span><span class="hud-v" id="hPupilR" style="color:#ff4040">--</span></div>
         </div>
 
         <div class="hud hud-br on" id="hudBR">
@@ -577,6 +579,8 @@
         var buyEl = document.getElementById('buyLink');
         buyEl.textContent = s.buyText;
         buyEl.href = s.buyLink;
+        document.getElementById('hPupilRowL').style.display = dev === 'ventuno' ? '' : 'none';
+        document.getElementById('hPupilRowR').style.display = dev === 'ventuno' ? '' : 'none';
         frameSkipCounter = 0;
         lastThrottleEnd = 0;
     };
@@ -588,6 +592,51 @@
     let lastVideoTime = -1;
     let latMs = 0, nFaces = 0, yaw = 0, pitch = 0;
     let hudBlinkL = 0, hudBlinkR = 0;
+    let hudPupilL = 0, hudPupilR = 0;
+
+    function measureIris(lm, centerIdx, edgeIndices, vw, vh) {
+        var c = lm[centerIdx];
+        if (!c) return null;
+        var totalR = 0, cnt = 0;
+        for (var ei = 0; ei < edgeIndices.length; ei++) {
+            var e = lm[edgeIndices[ei]];
+            if (!e) continue;
+            var dx = (e.x - c.x) * vw, dy = (e.y - c.y) * vh;
+            totalR += Math.sqrt(dx * dx + dy * dy);
+            cnt++;
+        }
+        if (cnt === 0) return null;
+        var avgR = totalR / cnt;
+        var diamPx = avgR * 2;
+        var diamMm = (diamPx / vw) * 280;
+        return { cx: c.x * vw, cy: c.y * vh, r: avgR, diamPx: diamPx, diamMm: diamMm };
+    }
+
+    function drawPupilOverlay(ctx, iris, label) {
+        if (!iris) return;
+        ctx.strokeStyle = "rgba(255,40,40,0.9)";
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.arc(iris.cx, iris.cy, iris.r, 0, 6.283);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(iris.cx - iris.r - 4, iris.cy);
+        ctx.lineTo(iris.cx + iris.r + 4, iris.cy);
+        ctx.strokeStyle = "rgba(255,40,40,0.5)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.save();
+        ctx.translate(iris.cx, iris.cy + iris.r + 12);
+        ctx.scale(-1, 1);
+        ctx.font = "600 10px 'JetBrains Mono', monospace";
+        ctx.fillStyle = "rgba(255,40,40,0.95)";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillText(label + " ~" + iris.diamMm.toFixed(1) + "mm", 0, 0);
+        ctx.restore();
+    }
 
     let trackedFaces = [];
     let nextFaceId = 1;
@@ -706,6 +755,7 @@
         let faces = res && res.faceLandmarks ? res.faceLandmarks : [];
         if (faces.length > dev.maxFaces) faces = faces.slice(0, dev.maxFaces);
         nFaces = faces.length;
+        if (nFaces === 0) { hudPupilL = 0; hudPupilR = 0; hudBlinkL = 0; hudBlinkR = 0; }
 
         if (nFaces > maxFacesEverSeen) maxFacesEverSeen = nFaces;
 
@@ -808,6 +858,17 @@
                 if (L.iris) {
                     if (FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, clr.iris, 4.5);
                     if (FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS, clr.iris, 4.5);
+
+                    if (currentDevice === 'ventuno') {
+                        var irisR = measureIris(lm, 468, [469, 470, 471, 472], vw, vh);
+                        var irisL = measureIris(lm, 473, [474, 475, 476, 477], vw, vh);
+                        drawPupilOverlay(ctx, irisR, "R");
+                        drawPupilOverlay(ctx, irisL, "L");
+                        if (i === 0) {
+                            hudPupilL = irisL ? irisL.diamMm : 0;
+                            hudPupilR = irisR ? irisR.diamMm : 0;
+                        }
+                    }
                 }
 
                 if (L.dots) {
@@ -945,6 +1006,10 @@
             document.getElementById("hDetects").textContent = totalDetectCalls.toLocaleString();
             document.getElementById("hBlinkL").textContent = hudBlinkL.toFixed(2);
             document.getElementById("hBlinkR").textContent = hudBlinkR.toFixed(2);
+            if (currentDevice === 'ventuno') {
+                document.getElementById("hPupilL").textContent = hudPupilL > 0 ? "~" + hudPupilL.toFixed(1) + "mm" : "--";
+                document.getElementById("hPupilR").textContent = hudPupilR > 0 ? "~" + hudPupilR.toFixed(1) + "mm" : "--";
+            }
 
             let listHtml = "";
             for (const t of trackedFaces) {
