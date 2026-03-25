@@ -35,7 +35,9 @@
             display: flex;
             align-items: center;
             gap: 12px;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
+            width: 100%;
+            max-width: 860px;
         }
 
         .header img { height: 22px; opacity: 0.9; }
@@ -44,6 +46,7 @@
         .header-title {
             display: flex;
             flex-direction: column;
+            flex: 1;
         }
 
         .header-title h1 {
@@ -56,7 +59,51 @@
         .header-title .sub {
             font-size: 10px;
             color: var(--muted);
+            line-height: 1.4;
         }
+
+        .header-links {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .header-link {
+            font-size: 9px;
+            font-family: 'JetBrains Mono', monospace;
+            color: #60a5fa;
+            text-decoration: none;
+            padding: 3px 8px;
+            border: 1px solid rgba(96,165,250,0.25);
+            border-radius: 4px;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .header-link:hover { background: rgba(96,165,250,0.1); border-color: #60a5fa; }
+
+        .specs-bar {
+            width: 100%;
+            max-width: 860px;
+            display: flex;
+            gap: 0;
+            margin-bottom: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .spec-chip {
+            flex: 1;
+            text-align: center;
+            padding: 5px 4px;
+            border-right: 1px solid var(--border);
+        }
+        .spec-chip:last-child { border-right: none; }
+        .spec-chip .spec-k { color: var(--muted); font-size: 7px; text-transform: uppercase; letter-spacing: 0.08em; }
+        .spec-chip .spec-v { color: var(--text); font-weight: 500; font-size: 9px; }
 
         .viewport {
             position: relative;
@@ -141,63 +188,65 @@
 
         .controls select {
             appearance: none;
-            padding: 5px 28px 5px 10px;
+            padding: 8px 36px 8px 14px;
             border: 1px solid var(--border);
-            border-radius: 6px;
-            background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%239ca3af'/%3E%3C/svg%3E") no-repeat right 8px center;
+            border-radius: 8px;
+            background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7'%3E%3Cpath d='M0 0l6 7 6-7z' fill='%239ca3af'/%3E%3C/svg%3E") no-repeat right 10px center;
             color: var(--text);
             font-family: inherit;
-            font-size: 11px;
+            font-size: 13px;
             cursor: pointer;
             outline: none;
+            min-width: 200px;
         }
 
         .controls select:focus { border-color: var(--blue); }
-
-        .buy-link {
-            font-size: 11px;
-            color: #60a5fa;
-            text-decoration: none;
-            padding: 5px 12px;
-            border: 1px solid rgba(96,165,250,0.3);
-            border-radius: 6px;
-            transition: all 0.2s;
-        }
-        .buy-link:hover { background: rgba(96,165,250,0.1); border-color: #60a5fa; }
 
         .device-toggle {
             display: flex;
             background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 6px;
+            border-radius: 8px;
             overflow: hidden;
+            position: relative;
         }
         .device-btn {
-            padding: 5px 14px;
+            padding: 8px 18px;
             font-family: inherit;
-            font-size: 11px;
-            font-weight: 500;
+            font-size: 12px;
+            font-weight: 600;
             border: none;
             cursor: pointer;
             background: transparent;
             color: var(--muted);
-            transition: all 0.2s;
+            transition: all 0.25s;
             white-space: nowrap;
         }
-        .device-btn.active {
+        .device-btn.active-unoq {
             background: var(--blue);
             color: #fff;
         }
-        .device-btn:not(.active):hover {
+        .device-btn.active-ventuno {
+            background: linear-gradient(135deg, #059669, #10b981);
+            color: #fff;
+            text-shadow: 0 0 8px rgba(16,185,129,0.5);
+        }
+        .device-btn:not([class*="active"]):hover {
             background: rgba(255,255,255,0.05);
             color: var(--text);
         }
-        .device-info {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 9px;
-            color: var(--muted);
-            text-align: center;
-            margin-top: 4px;
+        .device-badge {
+            font-size: 7px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            padding: 1px 4px;
+            border-radius: 3px;
+            margin-left: 4px;
+            vertical-align: middle;
+        }
+        .badge-perf {
+            background: rgba(16,185,129,0.2);
+            color: #34d399;
         }
 
         .diag {
@@ -255,8 +304,22 @@
         <div class="header-div"></div>
         <div class="header-title">
             <h1>Wojo's Uno Q Face Outline Demo</h1>
-            <span class="sub">Replit 2026.03 &bull; Qualcomm QRB2210 &bull; Cortex-A53 @ 1.4GHz &bull; 478-Point Landmark Detection</span>
+            <span class="sub">Replit 2026.03 &bull; 478-Point Landmark Detection &bull; MediaPipe Face Landmarker</span>
         </div>
+        <div class="header-links">
+            <a href="https://store.arduino.cc/collections/arduino-days-promo/products/uno-q-4gb" target="_blank" rel="noopener" class="header-link" id="buyLink">Get Uno Q 4GB</a>
+            <a href="https://labs.arduino.cc/en/app-lab" target="_blank" rel="noopener" class="header-link">AppLab</a>
+            <a href="https://github.com/arduino/uno-r4-wifi-fwuploader-plugin" target="_blank" rel="noopener" class="header-link">GitHub</a>
+        </div>
+    </div>
+
+    <div class="specs-bar" id="specsBar">
+        <div class="spec-chip"><div class="spec-k">SoC</div><div class="spec-v" id="specSoc">QRB2210</div></div>
+        <div class="spec-chip"><div class="spec-k">CPU</div><div class="spec-v" id="specCpu">Cortex-A53 1.4GHz</div></div>
+        <div class="spec-chip"><div class="spec-k">MCU</div><div class="spec-v" id="specMcu">STM32H747</div></div>
+        <div class="spec-chip"><div class="spec-k">RAM</div><div class="spec-v" id="specRam">4GB</div></div>
+        <div class="spec-chip"><div class="spec-k">Max Faces</div><div class="spec-v" id="specFaces">2</div></div>
+        <div class="spec-chip"><div class="spec-k">Delegate</div><div class="spec-v" id="specDel">CPU</div></div>
     </div>
 
     <div class="viewport">
@@ -272,18 +335,21 @@
         <div class="hud hud-tr on" id="hudTR">
             <div class="hud-row"><span class="hud-k">FPS</span><span class="hud-v" id="hFps">--</span></div>
             <div class="hud-row"><span class="hud-k">Latency</span><span class="hud-v" id="hLat">--</span></div>
-            <div class="hud-row"><span class="hud-k">Delegate</span><span class="hud-v" id="hDel">--</span></div>
             <div class="hud-row"><span class="hud-k">Res</span><span class="hud-v" id="hRes">--</span></div>
+            <div class="hud-row"><span class="hud-k">Device</span><span class="hud-v" id="hDev">Uno Q</span></div>
         </div>
 
-        <div class="hud hud-bl" id="hudBL">
+        <div class="hud hud-bl on" id="hudBL">
             <div class="hud-row"><span class="hud-k">Yaw</span><span class="hud-v" id="hYaw">--</span></div>
             <div class="hud-row"><span class="hud-k">Pitch</span><span class="hud-v" id="hPitch">--</span></div>
+            <div class="hud-row"><span class="hud-k">Blink L</span><span class="hud-v" id="hBlinkL">--</span></div>
+            <div class="hud-row"><span class="hud-k">Blink R</span><span class="hud-v" id="hBlinkR">--</span></div>
         </div>
 
         <div class="hud hud-br on" id="hudBR">
             <div class="hud-row"><span class="hud-k">Uptime</span><span class="hud-v" id="hUp">00:00</span></div>
             <div class="hud-row"><span class="hud-k">Frames</span><span class="hud-v" id="hFrames">0</span></div>
+            <div class="hud-row"><span class="hud-k">Detect</span><span class="hud-v" id="hDetects">0</span></div>
         </div>
     </div>
 
@@ -298,13 +364,12 @@
             <option value="emojis">Outline + Emojis</option>
         </select>
         <div class="device-toggle">
-            <button class="device-btn active" id="btnUnoQ" onclick="setDevice('unoq')">Uno Q</button>
-            <button class="device-btn" id="btnVentuno" onclick="setDevice('ventuno')">Ventuno</button>
+            <button class="device-btn active-unoq" id="btnUnoQ" onclick="setDevice('unoq')">Uno Q</button>
+            <button class="device-btn" id="btnVentuno" onclick="setDevice('ventuno')">Ventuno <span class="device-badge badge-perf">3x faster</span></button>
         </div>
-        <a href="https://store.arduino.cc/collections/arduino-days-promo/products/uno-q-4gb" target="_blank" rel="noopener" class="buy-link" id="buyLink">Get the Uno Q 4GB &rarr;</a>
     </div>
 
-    <div class="diag" id="diagPanel">
+    <div class="diag" id="diagPanel" style="display:none">
         <div class="diag-title">System Diagnostics</div>
         <div class="diag-row" id="dWebGL"><span class="diag-dot dot-wait"></span><span class="diag-label">WebGL Support</span><span class="diag-detail" id="dWebGLInfo">checking...</span></div>
         <div class="diag-row" id="dImport"><span class="diag-dot dot-wait"></span><span class="diag-label">MediaPipe Import</span><span class="diag-detail" id="dImportInfo">waiting...</span></div>
@@ -391,7 +456,7 @@
         }
     }
 
-    document.getElementById("hDel").textContent = usedDelegate;
+    document.getElementById("specDel").textContent = usedDelegate;
 
     const tess = FaceLandmarker.FACE_LANDMARKS_TESSELATION;
     const oval = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL;
@@ -480,22 +545,33 @@
     let frameSkipCounter = 0;
     let lastThrottleEnd = 0;
 
-    const DEVICE_LINKS = {
-        unoq: 'https://store.arduino.cc/collections/arduino-days-promo/products/uno-q-4gb',
-        ventuno: 'https://store.arduino.cc/products/ventuno'
+    const DEVICE_SPECS = {
+        unoq: {
+            soc: 'QRB2210', cpu: 'Cortex-A53 1.4GHz', mcu: 'STM32H747', ram: '4GB',
+            buyText: 'Get Uno Q 4GB',
+            buyLink: 'https://store.arduino.cc/collections/arduino-days-promo/products/uno-q-4gb'
+        },
+        ventuno: {
+            soc: 'QCS6490', cpu: 'Kryo 670 2.7GHz', mcu: 'STM32H747', ram: '8GB',
+            buyText: 'Ventuno Info',
+            buyLink: 'https://blog.qualcomm.com/innovation/arduino-ventuno-announcement'
+        }
     };
 
     window.setDevice = function(dev) {
         if (!DEVICES[dev]) return;
         currentDevice = dev;
-        document.getElementById('btnUnoQ').className = 'device-btn' + (dev === 'unoq' ? ' active' : '');
-        document.getElementById('btnVentuno').className = 'device-btn' + (dev === 'ventuno' ? ' active' : '');
-        const d = DEVICES[dev];
-        document.querySelector('.sub').textContent =
-            'Replit 2026.03 \u2022 ' + d.chip + ' \u2022 ' + d.cpu + ' \u2022 478-Point Landmark Detection';
+        document.getElementById('btnUnoQ').className = 'device-btn' + (dev === 'unoq' ? ' active-unoq' : '');
+        document.getElementById('btnVentuno').className = 'device-btn' + (dev === 'ventuno' ? ' active-ventuno' : '');
+        var d = DEVICES[dev], s = DEVICE_SPECS[dev];
+        document.getElementById('specSoc').textContent = s.soc;
+        document.getElementById('specCpu').textContent = s.cpu;
+        document.getElementById('specMcu').textContent = s.mcu;
+        document.getElementById('specRam').textContent = s.ram;
+        document.getElementById('specFaces').textContent = d.maxFaces;
         var buyEl = document.getElementById('buyLink');
-        buyEl.textContent = 'Get the ' + d.name + ' \u2192';
-        buyEl.href = DEVICE_LINKS[dev];
+        buyEl.textContent = s.buyText;
+        buyEl.href = s.buyLink;
         frameSkipCounter = 0;
         lastThrottleEnd = 0;
     };
@@ -506,6 +582,7 @@
     let lastHud = 0;
     let lastVideoTime = -1;
     let latMs = 0, nFaces = 0, yaw = 0, pitch = 0;
+    let hudBlinkL = 0, hudBlinkR = 0;
 
     let trackedFaces = [];
     let nextFaceId = 1;
@@ -702,11 +779,13 @@
                 if (L.outline && FaceLandmarker.FACE_LANDMARKS_FACE_OVAL)
                     drawConns(FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, clr.edge, 5);
                 let eyeBlinkL_v = 0, eyeBlinkR_v = 0;
+                if (i === 0) { hudBlinkL = 0; hudBlinkR = 0; }
                 if (res.faceBlendshapes && res.faceBlendshapes[i]) {
                     for (const b of res.faceBlendshapes[i].categories) {
                         if (b.categoryName === "eyeBlinkLeft") eyeBlinkL_v = b.score;
                         if (b.categoryName === "eyeBlinkRight") eyeBlinkR_v = b.score;
                     }
+                    if (i === 0) { hudBlinkL = eyeBlinkL_v; hudBlinkR = eyeBlinkR_v; }
                 }
                 const BLINK_TH = 0.45;
                 const blinkColorL = eyeBlinkL_v > BLINK_TH ? "rgba(255,60,100,1)" : clr.feat;
@@ -849,15 +928,18 @@
             setDiag("dCanvas", "fail", "RENDER ERROR #" + renderErrors + ": " + (e.message || e).slice(0, 100));
         }
 
-        if (now - lastHud >= 2000) {
+        if (now - lastHud >= 500) {
             lastHud = now;
             document.getElementById("hFaces").textContent = nFaces + (nFaces === 1 ? " face" : " faces");
             document.getElementById("hPts").textContent = nFaces > 0 ? (478 * nFaces).toLocaleString() : "--";
             document.getElementById("hFps").textContent = fps;
             document.getElementById("hLat").textContent = Math.round(latMs) + "ms";
-            document.getElementById("hDel").textContent = DEVICES[currentDevice].name + " / CPU";
+            document.getElementById("hDev").textContent = DEVICES[currentDevice].name;
             document.getElementById("hUp").textContent = fmtUptime(now - startTime);
             document.getElementById("hFrames").textContent = total.toLocaleString();
+            document.getElementById("hDetects").textContent = totalDetectCalls.toLocaleString();
+            document.getElementById("hBlinkL").textContent = hudBlinkL.toFixed(2);
+            document.getElementById("hBlinkR").textContent = hudBlinkR.toFixed(2);
 
             let listHtml = "";
             for (const t of trackedFaces) {

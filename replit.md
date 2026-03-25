@@ -13,9 +13,9 @@ Standalone Flask app at the workspace root. Real-time face tracking using MediaP
 Pure client-side face detection using **MediaPipe Face Landmarker** (v0.10.3):
 - 478 facial landmarks tracked per face in real-time
 - Supports up to 4 simultaneous faces with persistent ID tracking
-- GPU delegate with CPU fallback
+- CPU delegate (primary, reliable) with GPU fallback
 - All processing happens in the browser — backend only serves the HTML page
-- Blendshapes disabled (detection-only, no expression analysis)
+- Blendshapes enabled for expression detection and blink tracking
 
 ### Features
 
@@ -29,9 +29,17 @@ Pure client-side face detection using **MediaPipe Face Landmarker** (v0.10.3):
 - Each face gets a unique color (blue, orange, green, purple) for easy identification
 - Floating label above each face showing "Face N · duration"
 - Head pose estimation (yaw/pitch) for primary face
-- 5 overlay presets: Full Mesh+Features (default), Outline+Features, Mesh Only, Dots Only, Minimal
-- HUD panels: face count, FPS, latency, delegate, resolution, yaw/pitch, uptime, frame count — updated every 2 seconds
+- 6 overlay presets: Full Mesh+Features (default), Outline+Features, Mesh Only, Dots Only, Minimal, Outline+Emojis
+- 8 emoji expression indicators per face (smile, anger, surprise, brow raise, wink, pucker, squint, frown)
+- Eye blink detection with hot pink flash on blink (threshold 0.45)
+- **Device simulation toggle**: Uno Q (QRB2210, throttled) vs Ventuno (QCS6490, full speed 3x faster)
+  - Uno Q: frame skipping (every 2/3 frames), 35ms throttle delay, max 2 faces
+  - Ventuno: no throttling, full speed, max 4 faces
+- Specs bar showing SoC, CPU, MCU (STM32H747), RAM, max faces, delegate — updates per device
+- HUD panels: face count, FPS, latency, resolution, device, yaw/pitch, blink L/R, uptime, frame count, detect count — updated every 500ms
+- Header links: buy link (Uno Q store / Ventuno announcement), Arduino AppLab, GitHub
 - Qualcomm branding with logo in header and professional dark UI
+- System diagnostics panel (hidden by default, kept for debugging)
 
 ### Key Files
 
