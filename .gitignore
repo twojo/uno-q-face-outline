@@ -21,6 +21,25 @@ out-tsc/
 .replitignore
 replit.md
 .agents/
+.npmrc
+artifacts/
+scripts/
+lib/
+captures/
+arduino/
+
+# Replit runtime files (not needed for App Lab)
+app.py
+templates/
+static/
+main.py
+main_free.py
+pyproject.toml
+pnpm-lock.yaml
+pnpm-workspace.yaml
+package.json
+tsconfig.json
+tsconfig.base.json
 
 # AI / debug logs
 mirror_debug.log
