@@ -1,28 +1,87 @@
 /*
  * Wojo's Uno Q Face Outline Demo — STM32 MCU Sketch
  *
- * Initializes the Bridge between the STM32H747 microcontroller
- * and the Linux MPU (Qualcomm QRB2210) running the Python container.
+ * Runs on the STM32U585 microcontroller (MCU side).
+ * Communicates with the Linux MPU (Qualcomm QRB2210) via
+ * the Arduino Router Bridge for RPC-based messaging.
  *
- * The Bridge library enables serial communication so the MCU
- * can send sensor telemetry to the Python application.
+ * Bridge RPC functions registered:
+ *   face_detected(json)  — called when faces are visible
+ *   no_face()            — called when no faces detected
+ *   set_device_mode(str) — switches between uno_q / ventuno
+ *
+ * Bridge RPC calls made:
+ *   mcu_ready()          — sent once after setup completes
+ *   sensor_data(json)    — periodic ambient sensor readings
  */
 
-#include <Bridge.h>
+#include <Arduino_RouterBridge.h>
+
+#define STATUS_LED LED_BUILTIN
+#define SENSOR_INTERVAL_MS 1000
+
+bool facePresent = false;
+String deviceMode = "uno_q";
+unsigned long lastSensorRead = 0;
+
+// ── Bridge RPC handlers (called from Python main.py) ─────────────
+
+void onFaceDetected(const String& payload) {
+    facePresent = true;
+    digitalWrite(STATUS_LED, HIGH);
+    Serial.print("[MCU] Face detected: ");
+    Serial.println(payload);
+}
+
+void onNoFace() {
+    facePresent = false;
+    digitalWrite(STATUS_LED, LOW);
+}
+
+void onSetDeviceMode(const String& mode) {
+    deviceMode = mode;
+    Serial.print("[MCU] Device mode: ");
+    Serial.println(deviceMode);
+}
+
+// ── Sensor reading (example: ambient light via A0) ───────────────
+
+void readAndSendSensors() {
+    int lightLevel = analogRead(A0);
+
+    String json = "{\"light\":";
+    json += lightLevel;
+    json += ",\"mode\":\"";
+    json += deviceMode;
+    json += "\",\"face\":";
+    json += facePresent ? "true" : "false";
+    json += "}";
+
+    Bridge.call("sensor_data", json);
+}
+
+// ── Setup & Loop ─────────────────────────────────────────────────
 
 void setup() {
-    Bridge.begin();
     Serial.begin(115200);
-    while (!Serial) {
-        ;
-    }
-    Serial.println("Uno Q Face Demo — MCU bridge ready");
+    pinMode(STATUS_LED, OUTPUT);
+    digitalWrite(STATUS_LED, LOW);
+
+    Bridge.begin();
+    Bridge.on("face_detected", onFaceDetected);
+    Bridge.on("no_face", onNoFace);
+    Bridge.on("set_device_mode", onSetDeviceMode);
+
+    Serial.println("[MCU] Wojo's Uno Q Face Demo — bridge ready");
+    Bridge.call("mcu_ready");
 }
 
 void loop() {
-    // Bridge communication is handled by the Python container.
-    // This loop is available for future MCU-side sensor reads
-    // (e.g., ambient light, proximity, IMU) that can be forwarded
-    // to the web frontend via Bridge.
-    delay(100);
+    Bridge.update();
+
+    unsigned long now = millis();
+    if (now - lastSensorRead >= SENSOR_INTERVAL_MS) {
+        lastSensorRead = now;
+        readAndSendSensors();
+    }
 }

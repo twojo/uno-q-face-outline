@@ -1,0 +1,9 @@
+profiles:
+  uno_q:
+    notes: "Arduino Uno Q — STM32U585 MCU profile"
+    fqbn: "STMicroelectronics:stm32:GenU5:pnum=ARDUINO_UNO_R4_Q"
+    platforms:
+      - platform: "STMicroelectronics:stm32 (2.8.1)"
+        platform_index_url: "https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json"
+    libraries:
+      - Arduino_RouterBridge

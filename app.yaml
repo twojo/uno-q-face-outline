@@ -1,22 +1,20 @@
-name: wojos-uno-q-face-demo
-version: 1.0.0
+name: Wojo's Uno Q Face Outline Demo
 description: >
   Real-time face tracking demo for Arduino Uno Q (Qualcomm QRB2210).
   478-point MediaPipe Face Landmarker with expression detection,
   blink tracking, pupil diameter measurement, and device simulation
   (Uno Q vs Ventuno).
 author: Wojo
-board: arduino-uno-q
+icon: "\U0001F916"
+ports: []
 
-entry_points:
-  python: python/main.py
-  sketch: sketch/sketch.ino
+bricks:
+  - arduino:web_ui: {}
 
-webui:
-  root: assets
-  index: index.html
-
-dependencies:
-  python: []
-  arduino:
-    - Bridge
+sketch:
+  fqbn: "STMicroelectronics:stm32:GenU5:pnum=ARDUINO_UNO_R4_Q"
+  platforms:
+    - platform: "STMicroelectronics:stm32 (2.8.1)"
+      platform_index_url: "https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json"
+  libraries:
+    - Arduino_RouterBridge
