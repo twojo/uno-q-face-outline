@@ -3,7 +3,8 @@ description: >
   Real-time face tracking demo for Arduino Uno Q (Qualcomm QRB2210).
   478-point MediaPipe Face Landmarker with expression detection,
   blink tracking, pupil diameter measurement, and device simulation
-  (Uno Q vs Ventuno).
+  (Uno Q vs Ventuno). LED matrix shows IP address on boot and
+  face/expression bitmaps during tracking.
 author: Wojo
 icon: "\U0001F916"
 ports: []
@@ -18,3 +19,5 @@ sketch:
       platform_index_url: "https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json"
   libraries:
     - Arduino_RouterBridge
+    - Arduino_LED_Matrix
+    - ArduinoGraphics

@@ -7,3 +7,5 @@ profiles:
         platform_index_url: "https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json"
     libraries:
       - Arduino_RouterBridge
+      - Arduino_LED_Matrix
+      - ArduinoGraphics

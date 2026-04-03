@@ -8,16 +8,23 @@ the Bridge to communicate with the STM32 MCU sketch.
 Bricks used:
   - arduino:web_ui   → serves assets/index.html, WebSocket messaging
   - Bridge           → RPC calls to/from the MCU (sketch.ino)
+
+On boot:
+  1. Gets the device IP address
+  2. Scrolls the IP on the 12x8 LED matrix via Bridge
+  3. Serves the WebUI frontend
+  4. Listens for face telemetry from the browser
+  5. Forwards face state to MCU for LED matrix display
 """
 
-from arduino.app_utils import App, Bridge
+from arduino.app_utils import *
 from arduino.app_bricks.web_ui import WebUI
 import json
+import socket
 import time
+import threading
 
-app = App()
 ui = WebUI()
-bridge = Bridge()
 
 FACE_STATE = {
     "faces_detected": 0,
@@ -30,7 +37,37 @@ FACE_STATE = {
     "device_mode": "uno_q"
 }
 
-# ── WebSocket Handlers ────────────────────────────────────────────
+last_face_state = False
+
+# ── Utility ──────────────────────────────────────────────────────
+
+def get_ip_address():
+    """Get the device's primary network IP address."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "No IP"
+
+# ── Startup: scroll IP on LED matrix ─────────────────────────────
+
+def startup_sequence():
+    """Run on boot — scroll the IP address across the LED matrix."""
+    time.sleep(2)
+    ip = get_ip_address()
+    print(f"[App] Device IP: {ip}")
+    print(f"[App] Scrolling IP on LED matrix...")
+    Bridge.call("scroll_text", f"  IP: {ip}  ")
+    time.sleep(8)
+    Bridge.call("scroll_text", "  Face Demo Ready  ")
+
+startup_thread = threading.Thread(target=startup_sequence, daemon=True)
+startup_thread.start()
+
+# ── WebSocket Handlers ───────────────────────────────────────────
 
 @ui.on_connect
 def on_browser_connect(sid):
@@ -45,6 +82,7 @@ def on_face_data(sid, data):
     The frontend sends a JSON payload every 500ms with:
       { faces, blinks, expression, pupilL, pupilR, yaw, pitch }
     """
+    global last_face_state
     try:
         payload = json.loads(data) if isinstance(data, str) else data
 
@@ -56,13 +94,26 @@ def on_face_data(sid, data):
         FACE_STATE["yaw"] = payload.get("yaw", 0.0)
         FACE_STATE["pitch"] = payload.get("pitch", 0.0)
 
-        if FACE_STATE["faces_detected"] > 0:
-            bridge.call("face_detected", json.dumps({
-                "count": FACE_STATE["faces_detected"],
-                "expr": FACE_STATE["expression"]
-            }))
-        else:
-            bridge.call("no_face")
+        face_now = FACE_STATE["faces_detected"] > 0
+
+        if face_now and not last_face_state:
+            Bridge.call("flash_face", 3)
+            expr = FACE_STATE["expression"]
+            if expr != "neutral":
+                time.sleep(0.5)
+                Bridge.call("show_expression", expr)
+
+        elif face_now:
+            expr = FACE_STATE["expression"]
+            if expr != "neutral":
+                Bridge.call("show_expression", expr)
+            else:
+                Bridge.call("show_face")
+
+        elif not face_now and last_face_state:
+            Bridge.call("show_no_face")
+
+        last_face_state = face_now
 
     except Exception as e:
         print(f"[WebUI] face_data error: {e}")
@@ -71,14 +122,14 @@ def on_face_data(sid, data):
 def on_device_switch(sid, data):
     """
     User toggled between Uno Q and Ventuno in the frontend.
-    Forward the mode to the MCU so it can adjust LED/sensor behavior.
+    Forward the mode to the MCU so it can adjust LED behavior.
     """
     try:
         payload = json.loads(data) if isinstance(data, str) else data
         mode = payload.get("device", "uno_q")
         FACE_STATE["device_mode"] = mode
         print(f"[WebUI] Device mode switched to: {mode}")
-        bridge.call("set_device_mode", mode)
+        Bridge.call("set_device_mode", mode)
     except Exception as e:
         print(f"[WebUI] device_switch error: {e}")
 
@@ -95,22 +146,7 @@ def on_capture_snapshot(sid, data):
         "timestamp": timestamp
     }))
 
-# ── Bridge callbacks (MCU → MPU) ─────────────────────────────────
-
-@bridge.on("mcu_ready")
-def on_mcu_ready():
-    """MCU finished initialization and is ready for RPC calls."""
-    print("[Bridge] MCU reports ready")
-
-@bridge.on("sensor_data")
-def on_sensor_data(data):
-    """
-    MCU sends ambient sensor readings (light, proximity, IMU).
-    Forward to any connected browser clients.
-    """
-    ui.send_message("sensor_update", data)
-
-# ── Serve the WebUI ───────────────────────────────────────────────
+# ── Serve the WebUI ──────────────────────────────────────────────
 
 ui.serve("./assets/index.html")
 
