@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Wojo's Uno Q Face Outline Demo</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #111827;
+            --surface: #1f2937;
+            --border: #374151;
+            --text: #f9fafb;
+            --text-secondary: #d1d5db;
+            --muted: #9ca3af;
+            --panel: rgba(17,24,39,0.88);
+            --blue: #3253dc;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 12px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+            width: 100%;
+            max-width: 860px;
+        }
+
+        .header img { height: 22px; opacity: 0.9; }
+        .header-div { width: 1px; height: 22px; background: var(--border); }
+
+        .header-title {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        .header-title h1 {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+            line-height: 1.2;
+        }
+
+        .header-title .sub {
+            font-size: 10px;
+            color: var(--muted);
+            line-height: 1.4;
+        }
+
+        .header-links {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .header-link {
+            font-size: 9px;
+            font-family: 'JetBrains Mono', monospace;
+            color: #60a5fa;
+            text-decoration: none;
+            padding: 3px 8px;
+            border: 1px solid rgba(96,165,250,0.25);
+            border-radius: 4px;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .header-link:hover { background: rgba(96,165,250,0.1); border-color: #60a5fa; }
+
+        .specs-bar {
+            width: 100%;
+            max-width: 860px;
+            display: flex;
+            align-items: center;
+            gap: 0;
+            margin-bottom: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .spec-chip {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 4px 6px;
+            border-right: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        .spec-chip:last-child { border-right: none; }
+        .spec-chip .spec-k { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .spec-chip .spec-v { color: var(--text); font-weight: 500; font-size: 11px; }
+
+        .viewport {
+            position: relative;
+            width: 100%;
+            max-width: 860px;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            background: #000;
+        }
+
+        .viewport video {
+            display: block;
+            width: 100%;
+            transform: scaleX(-1);
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            transform: scaleX(-1);
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .hud {
+            position: absolute;
+            z-index: 4;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            background: rgba(0,0,0,0.35);
+            padding: 4px 6px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .hud.on { opacity: 1; }
+
+        .hud-tl { top: 0; left: 0; border-radius: 0 0 6px 0; }
+        .hud-tr { top: 0; right: 0; border-radius: 0 0 0 6px; text-align: right; }
+        .hud-bl { bottom: 0; left: 0; border-radius: 0 6px 0 0; }
+        .hud-br { bottom: 0; right: 0; border-radius: 6px 0 0 0; text-align: right; }
+
+        .hud-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            line-height: 1.55;
+        }
+
+        .hud-k { color: #9ca3af; text-transform: uppercase; letter-spacing: 0.06em; font-size: 8px; font-weight: 500; }
+        .hud-v { color: #f3f4f6; font-weight: 500; }
+
+        .face-list {
+            margin-top: 3px;
+            padding-top: 3px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .face-entry {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            line-height: 1.55;
+        }
+
+        .face-id { font-size: 8px; font-weight: 500; }
+        .face-time { color: #d1d5db; font-size: 9px; font-weight: 500; }
+
+        .controls {
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .controls label { font-size: 11px; color: var(--text-secondary); }
+
+        .controls select {
+            appearance: none;
+            padding: 8px 36px 8px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7'%3E%3Cpath d='M0 0l6 7 6-7z' fill='%239ca3af'/%3E%3C/svg%3E") no-repeat right 10px center;
+            color: var(--text);
+            font-family: inherit;
+            font-size: 13px;
+            cursor: pointer;
+            outline: none;
+            min-width: 200px;
+        }
+
+        .controls select:focus { border-color: var(--blue); }
+
+        .device-toggle {
+            display: flex;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+        }
+        .device-btn {
+            padding: 8px 18px;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            background: transparent;
+            color: var(--muted);
+            transition: all 0.25s;
+            white-space: nowrap;
+        }
+        .device-btn.active-unoq {
+            background: var(--blue);
+            color: #fff;
+        }
+        .device-btn.active-ventuno {
+            background: linear-gradient(135deg, #059669, #10b981);
+            color: #fff;
+            text-shadow: 0 0 8px rgba(16,185,129,0.5);
+        }
+        .device-btn:not([class*="active"]):hover {
+            background: rgba(255,255,255,0.05);
+            color: var(--text);
+        }
+        .device-badge {
+            font-size: 7px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            padding: 1px 4px;
+            border-radius: 3px;
+            margin-left: 4px;
+            vertical-align: middle;
+        }
+        .badge-perf {
+            background: rgba(16,185,129,0.2);
+            color: #34d399;
+        }
+
+        .diag {
+            margin-top: 14px;
+            width: 100%;
+            max-width: 860px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+        }
+
+        .diag-title {
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+
+        .diag-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 3px 0;
+            color: var(--text-secondary);
+        }
+
+        .diag-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .dot-wait { background: #6b7280; }
+        .dot-ok { background: #22c55e; }
+        .dot-fail { background: #ef4444; }
+        .dot-warn { background: #f59e0b; }
+
+        .diag-label { flex: 1; }
+        .diag-detail { color: #9ca3af; font-size: 10px; }
+
+        @media (max-width: 600px) {
+            .viewport { border-radius: 8px; }
+            .header-title h1 { font-size: 13px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="qualcomm-logo.png" alt="Qualcomm" />
+        <div class="header-div"></div>
+        <div class="header-title">
+            <h1>Wojo's Uno Q Face Outline Demo</h1>
+            <span class="sub">Replit 2026.03</span>
+        </div>
+        <div class="header-links">
+            <a href="https://store.arduino.cc/collections/arduino-days-promo/products/uno-q-4gb" target="_blank" rel="noopener" class="header-link" id="buyLink">Get Uno Q 4GB</a>
+            <a href="https://docs.arduino.cc/software/app-lab/" target="_blank" rel="noopener" class="header-link">AppLab</a>
+            <a href="https://github.com/arduino/arduino-app-lab" target="_blank" rel="noopener" class="header-link">GitHub</a>
+        </div>
+    </div>
+
+    <div class="specs-bar" id="specsBar">
+        <div class="spec-chip"><span class="spec-k">SoC</span> <span class="spec-v" id="specSoc">QRB2210</span></div>
+        <div class="spec-chip"><span class="spec-k">CPU</span> <span class="spec-v" id="specCpu">Cortex-A53 1.4GHz</span></div>
+        <div class="spec-chip"><span class="spec-k">MCU</span> <span class="spec-v" id="specMcu">STM32H747</span></div>
+        <div class="spec-chip"><span class="spec-k">RAM</span> <span class="spec-v" id="specRam">4GB</span></div>
+        <div class="spec-chip"><span class="spec-k">Faces</span> <span class="spec-v" id="specFaces">2</span></div>
+        <div class="spec-chip"><span class="spec-k">Del</span> <span class="spec-v" id="specDel">CPU</span></div>
+    </div>
+
+    <div class="viewport">
+        <video id="cam" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+
+        <div class="hud hud-tl on" id="hudTL">
+            <div class="hud-row"><span class="hud-k">Tracking</span><span class="hud-v" id="hFaces">0 faces</span></div>
+            <div class="hud-row"><span class="hud-k">Points</span><span class="hud-v" id="hPts">--</span></div>
+            <div id="faceList" class="face-list"></div>
+        </div>
+
+        <div class="hud hud-tr on" id="hudTR">
+            <div class="hud-row"><span class="hud-k">FPS</span><span class="hud-v" id="hFps">--</span></div>
+            <div class="hud-row"><span class="hud-k">Latency</span><span class="hud-v" id="hLat">--</span></div>
+            <div class="hud-row"><span class="hud-k">Res</span><span class="hud-v" id="hRes">--</span></div>
+            <div class="hud-row"><span class="hud-k">Device</span><span class="hud-v" id="hDev">Uno Q</span></div>
+        </div>
+
+        <div class="hud hud-bl on" id="hudBL">
+            <div class="hud-row"><span class="hud-k">Yaw</span><span class="hud-v" id="hYaw">--</span></div>
+            <div class="hud-row"><span class="hud-k">Pitch</span><span class="hud-v" id="hPitch">--</span></div>
+            <div class="hud-row"><span class="hud-k">Blink L</span><span class="hud-v" id="hBlinkL">--</span></div>
+            <div class="hud-row"><span class="hud-k">Blink R</span><span class="hud-v" id="hBlinkR">--</span></div>
+            <div class="hud-row" id="hPupilRowL" style="display:none"><span class="hud-k" style="color:#ff4040">Pupil L</span><span class="hud-v" id="hPupilL" style="color:#ff4040">--</span></div>
+            <div class="hud-row" id="hPupilRowR" style="display:none"><span class="hud-k" style="color:#ff4040">Pupil R</span><span class="hud-v" id="hPupilR" style="color:#ff4040">--</span></div>
+        </div>
+
+        <div class="hud hud-br on" id="hudBR">
+            <div class="hud-row"><span class="hud-k">Uptime</span><span class="hud-v" id="hUp">00:00</span></div>
+            <div class="hud-row"><span class="hud-k">Frames</span><span class="hud-v" id="hFrames">0</span></div>
+            <div class="hud-row"><span class="hud-k">Detect</span><span class="hud-v" id="hDetects">0</span></div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <label>Overlay</label>
+        <select id="preset">
+            <option value="full" selected>Full Mesh + Features</option>
+            <option value="outline">Outline + Features</option>
+            <option value="mesh">Mesh Only</option>
+            <option value="dots">Dots Only</option>
+            <option value="minimal">Minimal</option>
+            <option value="emojis">Outline + Emojis</option>
+        </select>
+        <div class="device-toggle">
+            <button class="device-btn active-unoq" id="btnUnoQ" onclick="setDevice('unoq')">Uno Q</button>
+            <button class="device-btn" id="btnVentuno" onclick="setDevice('ventuno')">Ventuno</button>
+        </div>
+    </div>
+
+    <div class="diag" id="diagPanel" style="display:none">
+        <div class="diag-title">System Diagnostics</div>
+        <div class="diag-row" id="dWebGL"><span class="diag-dot dot-wait"></span><span class="diag-label">WebGL Support</span><span class="diag-detail" id="dWebGLInfo">checking...</span></div>
+        <div class="diag-row" id="dImport"><span class="diag-dot dot-wait"></span><span class="diag-label">MediaPipe Import</span><span class="diag-detail" id="dImportInfo">waiting...</span></div>
+        <div class="diag-row" id="dWasm"><span class="diag-dot dot-wait"></span><span class="diag-label">WASM Runtime</span><span class="diag-detail" id="dWasmInfo">waiting...</span></div>
+        <div class="diag-row" id="dModel"><span class="diag-dot dot-wait"></span><span class="diag-label">Face Landmarker Model</span><span class="diag-detail" id="dModelInfo">waiting...</span></div>
+        <div class="diag-row" id="dCamera"><span class="diag-dot dot-wait"></span><span class="diag-label">Camera Access</span><span class="diag-detail" id="dCameraInfo">waiting...</span></div>
+        <div class="diag-row" id="dDetect"><span class="diag-dot dot-wait"></span><span class="diag-label">Face Detection</span><span class="diag-detail" id="dDetectInfo">waiting...</span></div>
+        <div class="diag-row" id="dCanvas"><span class="diag-dot dot-wait"></span><span class="diag-label">Canvas Rendering</span><span class="diag-detail" id="dCanvasInfo">waiting...</span></div>
+    </div>
+
+<script type="module">
+    function setDiag(id, status, info) {
+        const row = document.getElementById(id);
+        const dot = row.querySelector(".diag-dot");
+        const detail = document.getElementById(id + "Info");
+        dot.className = "diag-dot dot-" + status;
+        detail.textContent = info;
+    }
+
+    const testCanvas = document.createElement("canvas");
+    const gl = testCanvas.getContext("webgl2") || testCanvas.getContext("webgl") || testCanvas.getContext("experimental-webgl");
+    if (gl) {
+        const renderer = gl.getParameter(gl.RENDERER);
+        setDiag("dWebGL", "ok", (gl.getParameter(gl.VERSION)) + " — " + renderer);
+    } else {
+        setDiag("dWebGL", "fail", "No WebGL — face detection requires a browser with WebGL");
+    }
+
+    let FaceLandmarker, FilesetResolver, DrawingUtils;
+    try {
+        const mp = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/+esm");
+        FaceLandmarker = mp.FaceLandmarker;
+        FilesetResolver = mp.FilesetResolver;
+        DrawingUtils = mp.DrawingUtils;
+        setDiag("dImport", "ok", "tasks-vision 0.10.3 loaded");
+    } catch (e) {
+        setDiag("dImport", "fail", e.message || String(e));
+        throw e;
+    }
+
+    let wasm;
+    try {
+        wasm = await FilesetResolver.forVisionTasks(
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+        );
+        setDiag("dWasm", "ok", "WASM fileset resolved");
+    } catch (e) {
+        setDiag("dWasm", "fail", e.message || String(e));
+        throw e;
+    }
+
+    let fl = null;
+    let usedDelegate = "none";
+
+    async function tryDelegate(delegate) {
+        const cfg = {
+            baseOptions: {
+                modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+                delegate: delegate
+            },
+            outputFaceBlendshapes: true,
+            runningMode: "VIDEO",
+            numFaces: 4,
+            minFaceDetectionConfidence: 0.3,
+            minFacePresenceConfidence: 0.3,
+            minTrackingConfidence: 0.3
+        };
+        return await FaceLandmarker.createFromOptions(wasm, cfg);
+    }
+
+    try {
+        fl = await tryDelegate("CPU");
+        usedDelegate = "CPU";
+        setDiag("dModel", "ok", "Loaded with CPU delegate (reliable)");
+    } catch (cpuErr) {
+        setDiag("dModel", "warn", "CPU failed: " + cpuErr.message.slice(0, 60) + "... trying GPU");
+        try {
+            fl = await tryDelegate("GPU");
+            usedDelegate = "GPU";
+            setDiag("dModel", "ok", "Loaded with GPU delegate (CPU unavailable)");
+        } catch (gpuErr) {
+            setDiag("dModel", "fail", "Both CPU and GPU failed: " + gpuErr.message.slice(0, 80));
+            throw gpuErr;
+        }
+    }
+
+    document.getElementById("specDel").textContent = usedDelegate;
+
+    const tess = FaceLandmarker.FACE_LANDMARKS_TESSELATION;
+    const oval = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL;
+    const tessType = tess ? (Array.isArray(tess[0]) ? "array-tuples" : (tess[0] && tess[0].start !== undefined ? "start-end-objects" : "unknown:" + JSON.stringify(tess[0]))) : "null";
+    console.log("[DIAG] TESSELATION type:", tessType, "length:", tess ? tess.length : 0, "OVAL length:", oval ? oval.length : 0);
+    console.log("[DIAG] Sample connection:", tess ? JSON.stringify(tess[0]) : "none");
+
+    const cam = document.getElementById("cam");
+    const cvs = document.getElementById("overlay");
+    const ctx = cvs.getContext("2d");
+    const presetEl = document.getElementById("preset");
+    const hudBL = document.getElementById("hudBL");
+    const faceListEl = document.getElementById("faceList");
+
+    let du = new DrawingUtils(ctx);
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: false
+        });
+        cam.srcObject = stream;
+        await new Promise(r => { cam.onloadeddata = r; });
+        await cam.play();
+        await new Promise(r => setTimeout(r, 200));
+        const vw = cam.videoWidth, vh = cam.videoHeight;
+        document.getElementById("hRes").textContent = vw + "\u00D7" + vh;
+        setDiag("dCamera", "ok", vw + "x" + vh + " — playing, currentTime=" + cam.currentTime.toFixed(2));
+    } catch (e) {
+        setDiag("dCamera", "fail", e.message || String(e));
+        throw e;
+    }
+
+    cvs.width = cam.videoWidth;
+    cvs.height = cam.videoHeight;
+    du = new DrawingUtils(ctx);
+
+    ctx.fillStyle = "rgba(0,255,0,0.3)";
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+    ctx.font = "bold 24px Inter";
+    ctx.fillStyle = "#00ff00";
+    ctx.textAlign = "center";
+    ctx.fillText("CANVAS OK — WAITING FOR FACE...", cvs.width / 2, cvs.height / 2);
+    setDiag("dCanvas", "ok", cvs.width + "x" + cvs.height + " — drawing test passed");
+
+    const FACE_COLORS = [
+        { mesh: "rgba(120,160,255,0.55)", edge: "rgba(90,160,255,0.95)",  feat: "rgba(100,180,255,1)", iris: "rgba(0,220,255,1)",  dot: "rgba(90,160,255,0.7)",  tag: "#7799ff" },
+        { mesh: "rgba(255,190,80,0.55)", edge: "rgba(255,190,70,0.95)", feat: "rgba(255,200,80,1)", iris: "rgba(255,220,90,1)",  dot: "rgba(255,190,70,0.7)", tag: "#ffbb44" },
+        { mesh: "rgba(100,240,170,0.55)", edge: "rgba(90,240,160,0.95)", feat: "rgba(100,250,180,1)", iris: "rgba(120,255,200,1)", dot: "rgba(90,240,160,0.7)", tag: "#66ee99" },
+        { mesh: "rgba(240,150,240,0.55)", edge: "rgba(240,140,240,0.95)", feat: "rgba(250,160,250,1)", iris: "rgba(255,170,255,1)", dot: "rgba(240,140,240,0.7)", tag: "#ee88ee" },
+    ];
+
+    const PRESETS = {
+        full:    { mesh:1, outline:1, eyes:1, brows:1, lips:1, iris:1, dots:1, emojis:1 },
+        outline: { mesh:0, outline:1, eyes:1, brows:1, lips:1, iris:1, dots:0, emojis:1 },
+        mesh:    { mesh:1, outline:0, eyes:0, brows:0, lips:0, iris:0, dots:0, emojis:0 },
+        dots:    { mesh:0, outline:0, eyes:0, brows:0, lips:0, iris:0, dots:1, emojis:0 },
+        minimal: { mesh:0, outline:1, eyes:0, brows:0, lips:0, iris:1, dots:0, emojis:0 },
+        emojis:  { mesh:0, outline:1, eyes:0, brows:0, lips:1, iris:0, dots:0, emojis:1 },
+    };
+
+    let L = { ...PRESETS.full };
+    presetEl.onchange = () => { L = { ...PRESETS[presetEl.value] }; };
+
+    const DEVICES = {
+        unoq: {
+            name: "Uno Q",
+            chip: "Qualcomm QRB2210",
+            cpu: "Cortex-A53 @ 1.4GHz",
+            ram: "4GB",
+            skipFrames: 2,
+            extraDelay: 35,
+            maxFaces: 2
+        },
+        ventuno: {
+            name: "Ventuno",
+            chip: "Qualcomm QCS6490",
+            cpu: "Kryo 670 @ 2.7GHz",
+            ram: "8GB",
+            skipFrames: 0,
+            extraDelay: 0,
+            maxFaces: 4
+        }
+    };
+    let currentDevice = 'unoq';
+    let frameSkipCounter = 0;
+    let lastThrottleEnd = 0;
+
+    const DEVICE_SPECS = {
+        unoq: {
+            soc: 'QRB2210', cpu: 'Cortex-A53 1.4GHz', mcu: 'STM32H747', ram: '4GB',
+            buyText: 'Get Uno Q 4GB',
+            buyLink: 'https://store.arduino.cc/collections/arduino-days-promo/products/uno-q-4gb'
+        },
+        ventuno: {
+            soc: 'QCS6490', cpu: 'Kryo 670 2.7GHz', mcu: 'STM32H747', ram: '8GB',
+            buyText: 'Ventuno Info',
+            buyLink: 'https://www.arduino.cc/product-ventuno-q'
+        }
+    };
+
+    window.setDevice = function(dev) {
+        if (!DEVICES[dev]) return;
+        currentDevice = dev;
+        document.getElementById('btnUnoQ').className = 'device-btn' + (dev === 'unoq' ? ' active-unoq' : '');
+        document.getElementById('btnVentuno').className = 'device-btn' + (dev === 'ventuno' ? ' active-ventuno' : '');
+        var d = DEVICES[dev], s = DEVICE_SPECS[dev];
+        document.getElementById('specSoc').textContent = s.soc;
+        document.getElementById('specCpu').textContent = s.cpu;
+        document.getElementById('specMcu').textContent = s.mcu;
+        document.getElementById('specRam').textContent = s.ram;
+        document.getElementById('specFaces').textContent = d.maxFaces;
+        var buyEl = document.getElementById('buyLink');
+        buyEl.textContent = s.buyText;
+        buyEl.href = s.buyLink;
+        document.getElementById('hPupilRowL').style.display = dev === 'ventuno' ? '' : 'none';
+        document.getElementById('hPupilRowR').style.display = dev === 'ventuno' ? '' : 'none';
+        frameSkipCounter = 0;
+        lastThrottleEnd = 0;
+    };
+
+    let cW = cvs.width, cH = cvs.height;
+    let fpsCnt = 0, fpsT = 0, fps = 0, total = 0;
+    const startTime = performance.now();
+    let lastHud = 0;
+    let lastVideoTime = -1;
+    let latMs = 0, nFaces = 0, yaw = 0, pitch = 0;
+    let hudBlinkL = 0, hudBlinkR = 0;
+    let hudPupilL = 0, hudPupilR = 0;
+
+    function measureIris(lm, centerIdx, edgeIndices, vw, vh) {
+        var c = lm[centerIdx];
+        if (!c) return null;
+        var totalR = 0, cnt = 0;
+        for (var ei = 0; ei < edgeIndices.length; ei++) {
+            var e = lm[edgeIndices[ei]];
+            if (!e) continue;
+            var dx = (e.x - c.x) * vw, dy = (e.y - c.y) * vh;
+            totalR += Math.sqrt(dx * dx + dy * dy);
+            cnt++;
+        }
+        if (cnt === 0) return null;
+        var avgR = totalR / cnt;
+        var diamPx = avgR * 2;
+        var diamMm = (diamPx / vw) * 280;
+        return { cx: c.x * vw, cy: c.y * vh, r: avgR, diamPx: diamPx, diamMm: diamMm };
+    }
+
+    function drawPupilOverlay(ctx, iris, label) {
+        if (!iris) return;
+        ctx.strokeStyle = "rgba(255,40,40,0.9)";
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.arc(iris.cx, iris.cy, iris.r, 0, 6.283);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(iris.cx - iris.r - 4, iris.cy);
+        ctx.lineTo(iris.cx + iris.r + 4, iris.cy);
+        ctx.strokeStyle = "rgba(255,40,40,0.5)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.save();
+        ctx.translate(iris.cx, iris.cy + iris.r + 12);
+        ctx.scale(-1, 1);
+        ctx.font = "600 10px 'JetBrains Mono', monospace";
+        ctx.fillStyle = "rgba(255,40,40,0.95)";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillText(label + " ~" + iris.diamMm.toFixed(1) + "mm", 0, 0);
+        ctx.restore();
+    }
+
+    let trackedFaces = [];
+    let nextFaceId = 1;
+    const TRACK_TTL = 800;
+    let detectErrors = 0;
+    let renderErrors = 0;
+    let totalDetectCalls = 0;
+    let maxFacesEverSeen = 0;
+    let firstFaceLogged = false;
+
+    function fmtTime(ms) {
+        const s = Math.floor(ms / 1000);
+        if (s < 60) return s + "s";
+        return Math.floor(s / 60) + "m " + (s % 60) + "s";
+    }
+
+    function fmtUptime(ms) {
+        const s = Math.floor(ms / 1000);
+        return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+    }
+
+    function faceCenter(lm) {
+        const nose = lm[1], lc = lm[234], rc = lm[454];
+        return { x: (lc.x + rc.x) / 2, y: nose.y, w: Math.abs(rc.x - lc.x) };
+    }
+
+    function matchFaces(newFaces, now) {
+        const centers = newFaces.map(lm => faceCenter(lm));
+        const usedTrack = new Set();
+        const usedNew = new Set();
+        const matched = new Array(centers.length).fill(null);
+
+        const pairs = [];
+        for (let i = 0; i < centers.length; i++) {
+            for (let j = 0; j < trackedFaces.length; j++) {
+                const c = centers[i], t = trackedFaces[j];
+                const threshold = Math.max(t.w * 1.5, 0.08);
+                const dist = Math.sqrt(Math.pow(c.x - t.x, 2) + Math.pow(c.y - t.y, 2));
+                if (dist < threshold) pairs.push({ i, j, dist });
+            }
+        }
+        pairs.sort((a, b) => a.dist - b.dist);
+
+        for (const p of pairs) {
+            if (usedNew.has(p.i) || usedTrack.has(p.j)) continue;
+            usedNew.add(p.i);
+            usedTrack.add(p.j);
+            const t = trackedFaces[p.j], c = centers[p.i];
+            matched[p.i] = { id: t.id, x: c.x, y: c.y, w: c.w, since: t.since, colorIdx: t.colorIdx, lastSeen: now };
+        }
+
+        for (let i = 0; i < centers.length; i++) {
+            if (matched[i]) continue;
+            const c = centers[i];
+            const ci = (nextFaceId - 1) % FACE_COLORS.length;
+            matched[i] = { id: nextFaceId++, x: c.x, y: c.y, w: c.w, since: now, colorIdx: ci, lastSeen: now };
+        }
+
+        const survivors = trackedFaces.filter((t, j) => !usedTrack.has(j) && (now - t.lastSeen) < TRACK_TTL);
+        trackedFaces = matched.concat(survivors);
+        return matched;
+    }
+
+    function draw() {
+        requestAnimationFrame(draw);
+
+        if (cam.paused || cam.ended || !cam.videoWidth || !fl) return;
+
+        if (cam.currentTime === lastVideoTime) return;
+        lastVideoTime = cam.currentTime;
+
+        const dev = DEVICES[currentDevice];
+
+        frameSkipCounter++;
+        if (dev.skipFrames > 0 && (frameSkipCounter % (dev.skipFrames + 1)) !== 0) {
+            total++;
+            fpsCnt++;
+            return;
+        }
+
+        const vw = cam.videoWidth, vh = cam.videoHeight;
+        if (cW !== vw || cH !== vh) {
+            cvs.width = vw;
+            cvs.height = vh;
+            cW = vw; cH = vh;
+            du = new DrawingUtils(ctx);
+        }
+
+        const nowMs = performance.now();
+
+        if (dev.extraDelay > 0 && lastThrottleEnd > 0) {
+            const elapsed = nowMs - lastThrottleEnd;
+            if (elapsed < dev.extraDelay) return;
+        }
+
+        const before = performance.now();
+        let res;
+        try {
+            res = fl.detectForVideo(cam, nowMs);
+            totalDetectCalls++;
+        } catch (e) {
+            detectErrors++;
+            if (detectErrors <= 3) console.error("detectForVideo error #" + detectErrors + ":", e);
+            setDiag("dDetect", "fail", "detectForVideo threw: " + (e.message || e).slice(0, 80));
+            return;
+        }
+        latMs = performance.now() - before;
+        lastThrottleEnd = performance.now();
+
+        ctx.clearRect(0, 0, vw, vh);
+        total++;
+        fpsCnt++;
+        const now = performance.now();
+        if (now - fpsT >= 1000) { fps = Math.round(fpsCnt * 1000 / (now - fpsT)); fpsCnt = 0; fpsT = now; }
+
+        let faces = res && res.faceLandmarks ? res.faceLandmarks : [];
+        if (faces.length > dev.maxFaces) faces = faces.slice(0, dev.maxFaces);
+        nFaces = faces.length;
+        if (nFaces === 0) { hudPupilL = 0; hudPupilR = 0; hudBlinkL = 0; hudBlinkR = 0; }
+
+        if (nFaces > maxFacesEverSeen) maxFacesEverSeen = nFaces;
+
+        if (nFaces > 0 && !firstFaceLogged) {
+            firstFaceLogged = true;
+            console.log("[FACE-DETECTED] First detection! Result keys:", Object.keys(res));
+            console.log("[FACE-DETECTED] faceLandmarks type:", typeof res.faceLandmarks, "length:", res.faceLandmarks.length);
+            console.log("[FACE-DETECTED] Face 0 length:", faces[0].length, "Sample lm[0]:", JSON.stringify(faces[0][0]));
+            console.log("[FACE-DETECTED] Sample lm[1]:", JSON.stringify(faces[0][1]), "lm[10]:", JSON.stringify(faces[0][10]));
+        }
+
+        if (nFaces > 0 || totalDetectCalls % 30 === 0 || totalDetectCalls <= 5) {
+            if (nFaces > 0) {
+                const lmSample = faces[0][0];
+                const lmInfo = lmSample ? ("lm0={x:" + lmSample.x.toFixed(3) + ",y:" + lmSample.y.toFixed(3) + "}") : "lm0=null";
+                setDiag("dDetect", "ok", nFaces + " face(s) — " + faces[0].length + " pts — " + lmInfo + " — call #" + totalDetectCalls);
+            } else {
+                const status = maxFacesEverSeen > 0 ? "warn" : (totalDetectCalls > 60 ? "warn" : "wait");
+                setDiag("dDetect", status, "0 faces (calls: " + totalDetectCalls + ", errors: " + detectErrors + ", max seen: " + maxFacesEverSeen + ")");
+            }
+        }
+
+        let renderErr = null;
+        try {
+            const tracked = matchFaces(faces, now);
+
+            for (let i = 0; i < faces.length; i++) {
+                const lm = faces[i];
+                if (!lm || lm.length < 468) continue;
+                const clr = FACE_COLORS[(tracked[i] ? tracked[i].colorIdx : 0) % FACE_COLORS.length];
+
+                function drawConns(conns, color, lw) {
+                    if (!conns || !conns.length) return;
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = lw;
+                    ctx.beginPath();
+                    for (const c of conns) {
+                        let si, ei;
+                        if (Array.isArray(c)) { si = c[0]; ei = c[1]; }
+                        else if (c.start !== undefined) { si = c.start; ei = c.end; }
+                        else continue;
+                        const a = lm[si], b = lm[ei];
+                        if (!a || !b) continue;
+                        ctx.moveTo(a.x * vw, a.y * vh);
+                        ctx.lineTo(b.x * vw, b.y * vh);
+                    }
+                    ctx.stroke();
+                }
+
+                if (L.mesh && FaceLandmarker.FACE_LANDMARKS_TESSELATION) {
+                    var ovalSet = new Set();
+                    if (L.outline && FaceLandmarker.FACE_LANDMARKS_FACE_OVAL) {
+                        for (var oi0 = 0; oi0 < FaceLandmarker.FACE_LANDMARKS_FACE_OVAL.length; oi0++) {
+                            var c0 = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL[oi0];
+                            var s0 = Array.isArray(c0) ? c0[0] : c0.start;
+                            var e0 = Array.isArray(c0) ? c0[1] : c0.end;
+                            ovalSet.add(s0 + "," + e0);
+                            ovalSet.add(e0 + "," + s0);
+                        }
+                    }
+                    ctx.strokeStyle = clr.mesh;
+                    ctx.lineWidth = 3.5;
+                    ctx.beginPath();
+                    for (var ti = 0; ti < FaceLandmarker.FACE_LANDMARKS_TESSELATION.length; ti++) {
+                        var tc = FaceLandmarker.FACE_LANDMARKS_TESSELATION[ti];
+                        var tsi = Array.isArray(tc) ? tc[0] : tc.start;
+                        var tei = Array.isArray(tc) ? tc[1] : tc.end;
+                        if (ovalSet.has(tsi + "," + tei)) continue;
+                        var ta = lm[tsi], tb = lm[tei];
+                        if (!ta || !tb) continue;
+                        ctx.moveTo(ta.x * vw, ta.y * vh);
+                        ctx.lineTo(tb.x * vw, tb.y * vh);
+                    }
+                    ctx.stroke();
+                }
+                if (L.outline && FaceLandmarker.FACE_LANDMARKS_FACE_OVAL)
+                    drawConns(FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, clr.edge, 5);
+                let eyeBlinkL_v = 0, eyeBlinkR_v = 0;
+                if (i === 0) { hudBlinkL = 0; hudBlinkR = 0; }
+                if (res.faceBlendshapes && res.faceBlendshapes[i]) {
+                    for (const b of res.faceBlendshapes[i].categories) {
+                        if (b.categoryName === "eyeBlinkLeft") eyeBlinkL_v = b.score;
+                        if (b.categoryName === "eyeBlinkRight") eyeBlinkR_v = b.score;
+                    }
+                    if (i === 0) { hudBlinkL = eyeBlinkL_v; hudBlinkR = eyeBlinkR_v; }
+                }
+                const BLINK_TH = 0.45;
+                const blinkColorL = eyeBlinkL_v > BLINK_TH ? "rgba(255,60,100,1)" : clr.feat;
+                const blinkColorR = eyeBlinkR_v > BLINK_TH ? "rgba(255,60,100,1)" : clr.feat;
+                if (L.eyes) {
+                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, blinkColorR, 4);
+                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_EYE) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, blinkColorL, 4);
+                }
+                if (L.brows) {
+                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, clr.feat, 4);
+                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW, clr.feat, 4);
+                }
+                if (L.lips && FaceLandmarker.FACE_LANDMARKS_LIPS)
+                    drawConns(FaceLandmarker.FACE_LANDMARKS_LIPS, clr.feat, 4);
+                if (L.iris) {
+                    if (FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, clr.iris, 4.5);
+                    if (FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS, clr.iris, 4.5);
+
+                    if (currentDevice === 'ventuno') {
+                        var irisR = measureIris(lm, 468, [469, 470, 471, 472], vw, vh);
+                        var irisL = measureIris(lm, 473, [474, 475, 476, 477], vw, vh);
+                        drawPupilOverlay(ctx, irisR, "R");
+                        drawPupilOverlay(ctx, irisL, "L");
+                        if (i === 0) {
+                            hudPupilL = irisL ? irisL.diamMm : 0;
+                            hudPupilR = irisR ? irisR.diamMm : 0;
+                        }
+                    }
+                }
+
+                if (L.dots) {
+                    ctx.fillStyle = clr.dot;
+                    for (let j = 0; j < lm.length; j++) {
+                        if (!lm[j]) continue;
+                        ctx.beginPath();
+                        ctx.arc(lm[j].x * vw, lm[j].y * vh, 3, 0, 6.283);
+                        ctx.fill();
+                    }
+                }
+
+                const t = tracked[i];
+                if (t && lm[10]) {
+                    const tagX = t.x * vw;
+                    const tagY = (lm[10].y * vh) - 20;
+                    const dur = fmtTime(now - t.since);
+                    const label = "Face " + t.id + "  \u00B7  " + dur;
+                    ctx.save();
+                    ctx.translate(tagX, tagY);
+                    ctx.scale(-1, 1);
+                    ctx.font = "600 15px 'Inter', sans-serif";
+                    const tw = ctx.measureText(label).width;
+                    ctx.fillStyle = "rgba(0,0,0,0.65)";
+                    ctx.beginPath();
+                    ctx.roundRect(-tw / 2 - 9, -13, tw + 18, 26, 6);
+                    ctx.fill();
+                    ctx.fillStyle = clr.tag;
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(label, 0, 0);
+                    ctx.restore();
+                }
+
+                if (L.emojis) {
+                let smileScore = 0, angerScore = 0, surpriseScore = 0, browUpScore = 0;
+                let winkScore = 0, puckerScore = 0, squintScore = 0, mouthFrown = 0;
+                if (res.faceBlendshapes && res.faceBlendshapes[i]) {
+                    const bs = res.faceBlendshapes[i].categories;
+                    let eyeBlinkL = 0, eyeBlinkR = 0;
+                    for (const b of bs) {
+                        switch (b.categoryName) {
+                            case "mouthSmileLeft": case "mouthSmileRight":
+                                smileScore = Math.max(smileScore, b.score); break;
+                            case "browDownLeft": case "browDownRight":
+                                angerScore = Math.max(angerScore, b.score); break;
+                            case "jawOpen":
+                                surpriseScore = Math.max(surpriseScore, b.score); break;
+                            case "browOuterUpLeft": case "browOuterUpRight":
+                                browUpScore = Math.max(browUpScore, b.score); break;
+                            case "eyeBlinkLeft": eyeBlinkL = b.score; break;
+                            case "eyeBlinkRight": eyeBlinkR = b.score; break;
+                            case "mouthPucker":
+                                puckerScore = Math.max(puckerScore, b.score); break;
+                            case "eyeSquintLeft": case "eyeSquintRight":
+                                squintScore = Math.max(squintScore, b.score); break;
+                            case "mouthFrownLeft": case "mouthFrownRight":
+                                mouthFrown = Math.max(mouthFrown, b.score); break;
+                        }
+                    }
+                    surpriseScore = Math.min(1, surpriseScore * 0.7 + browUpScore * 0.5);
+                    winkScore = Math.abs(eyeBlinkL - eyeBlinkR) > 0.4 ? Math.max(eyeBlinkL, eyeBlinkR) : 0;
+                }
+
+                const emojis = [
+                    { ch: "\uD83D\uDE00", on: smileScore > 0.4, glow: "rgba(255,220,50,0.9)" },
+                    { ch: "\uD83D\uDE20", on: angerScore > 0.45, glow: "rgba(255,60,60,0.9)" },
+                    { ch: "\uD83E\uDEE8", on: surpriseScore > 0.5, glow: "rgba(140,120,255,0.9)" },
+                    { ch: "\uD83E\uDEE1", on: browUpScore > 0.35, glow: "rgba(80,200,120,0.9)" },
+                    { ch: "\uD83D\uDE09", on: winkScore > 0.5, glow: "rgba(255,180,220,0.9)" },
+                    { ch: "\uD83D\uDE19", on: puckerScore > 0.4, glow: "rgba(255,130,170,0.9)" },
+                    { ch: "\uD83D\uDE12", on: squintScore > 0.55 && smileScore < 0.2, glow: "rgba(180,180,180,0.9)" },
+                    { ch: "\u2639\uFE0F", on: mouthFrown > 0.4, glow: "rgba(100,150,255,0.9)" },
+                ];
+                const chin = lm[152];
+                if (chin) {
+                    const baseX = (t ? t.x * vw : chin.x * vw);
+                    const baseY = chin.y * vh + 35;
+                    const spacing = 32;
+                    const totalW = emojis.length * spacing;
+                    const startX = baseX - totalW / 2 + spacing / 2;
+                    for (let ei = 0; ei < emojis.length; ei++) {
+                        const em = emojis[ei];
+                        ctx.save();
+                        ctx.translate(startX + ei * spacing, baseY);
+                        ctx.scale(-1, 1);
+                        ctx.font = "22px sans-serif";
+                        ctx.textAlign = "center";
+                        ctx.textBaseline = "middle";
+                        if (em.on) {
+                            ctx.shadowColor = em.glow;
+                            ctx.shadowBlur = 16;
+                            ctx.globalAlpha = 1;
+                            ctx.fillText(em.ch, 0, 0);
+                            ctx.shadowBlur = 0;
+                        } else {
+                            ctx.globalAlpha = 0.12;
+                            ctx.fillText(em.ch, 0, 0);
+                        }
+                        ctx.restore();
+                    }
+                }
+                }
+            }
+
+            if (faces.length > 0 && faces[0].length >= 455) {
+                const p = faces[0];
+                const n = p[1], lc = p[234], rc = p[454], fh = p[10], ch = p[152];
+                if (n && lc && rc && fh && ch) {
+                    const fw = Math.abs(rc.x - lc.x) || 0.01;
+                    const fht = Math.abs(ch.y - fh.y) || 0.01;
+                    yaw = Math.round(((n.x - (lc.x + rc.x) / 2) / fw) * 90);
+                    pitch = Math.round(((n.y - (fh.y + ch.y) / 2) / fht) * 90);
+                }
+                hudBL.classList.add("on");
+            } else {
+                hudBL.classList.remove("on");
+            }
+        } catch (e) {
+            renderErr = e;
+            renderErrors++;
+            if (renderErrors <= 5) console.error("Render error #" + renderErrors + ":", e);
+            setDiag("dCanvas", "fail", "RENDER ERROR #" + renderErrors + ": " + (e.message || e).slice(0, 100));
+        }
+
+        if (now - lastHud >= 500) {
+            lastHud = now;
+            document.getElementById("hFaces").textContent = nFaces + (nFaces === 1 ? " face" : " faces");
+            document.getElementById("hPts").textContent = nFaces > 0 ? (478 * nFaces).toLocaleString() : "--";
+            document.getElementById("hFps").textContent = fps;
+            document.getElementById("hLat").textContent = Math.round(latMs) + "ms";
+            document.getElementById("hDev").textContent = DEVICES[currentDevice].name;
+            document.getElementById("hUp").textContent = fmtUptime(now - startTime);
+            document.getElementById("hFrames").textContent = total.toLocaleString();
+            document.getElementById("hDetects").textContent = totalDetectCalls.toLocaleString();
+            document.getElementById("hBlinkL").textContent = hudBlinkL.toFixed(2);
+            document.getElementById("hBlinkR").textContent = hudBlinkR.toFixed(2);
+            if (currentDevice === 'ventuno') {
+                document.getElementById("hPupilL").textContent = hudPupilL > 0 ? "~" + hudPupilL.toFixed(1) + "mm" : "--";
+                document.getElementById("hPupilR").textContent = hudPupilR > 0 ? "~" + hudPupilR.toFixed(1) + "mm" : "--";
+            }
+
+            let listHtml = "";
+            for (const t of trackedFaces) {
+                const dur = fmtTime(now - t.since);
+                const clr = FACE_COLORS[t.colorIdx];
+                listHtml += '<div class="face-entry"><span class="face-id" style="color:' + clr.tag + '">Face ' + t.id + '</span><span class="face-time">' + dur + '</span></div>';
+            }
+            faceListEl.innerHTML = listHtml;
+
+            if (nFaces > 0) {
+                document.getElementById("hYaw").textContent = (yaw > 0 ? "+" : "") + yaw + "\u00B0";
+                document.getElementById("hPitch").textContent = (pitch > 0 ? "+" : "") + pitch + "\u00B0";
+            } else {
+                document.getElementById("hYaw").textContent = "--";
+                document.getElementById("hPitch").textContent = "--";
+            }
+
+            if (!renderErr) {
+                setDiag("dCanvas", "ok", cW + "x" + cH + " — rendering" + (nFaces > 0 ? " " + nFaces + " face(s)" : ""));
+            }
+        }
+    }
+
+    requestAnimationFrame(draw);
+</script>
+</body>
+</html>
