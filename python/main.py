@@ -5,11 +5,21 @@
 #
 #   Browser (MediaPipe)  <--WebSocket-->  MPU (this script)  <--Bridge-->  MCU (sketch.ino)
 #
-# The WebUI brick automatically serves everything in the assets/
-# directory. The browser runs face tracking locally using MediaPipe
-# WASM and sends detection results back here over WebSocket. This
-# script then translates those results into Bridge calls that drive
-# the LED matrix on the MCU.
+# ── Startup Diagnostics ──
+# Before the app starts serving, this script runs a comprehensive
+# set of checks and dumps as much info as possible to the terminal.
+# The Uno Q can be picky with network and USB connections, so having
+# detailed diagnostic output on every boot helps catch issues early.
+#
+# The boot sequence:
+#   1. Print banner with board/OS specs
+#   2. Check network interfaces and connectivity
+#   3. Test reachability of CDN endpoints (MediaPipe, Google Fonts)
+#   4. Print folder tree of the project
+#   5. Report system resources (CPU, RAM, disk, uptime)
+#   6. Initialize Bridge and WebUI
+#   7. Scroll IP + status on LED matrix
+#   8. Wait for browser connection
 #
 # Dependencies: only stdlib + App Lab SDK. No pip packages needed.
 
@@ -19,12 +29,320 @@ import json
 import socket
 import time
 import threading
+import os
+import platform
+import subprocess
 
 logger = Logger("face-demo")
 ui = WebUI()
 
-# Shared state that tracks what the browser is currently seeing.
-# Updated on every face_data WebSocket message from the frontend.
+BOOT_START = time.time()
+
+# ── Terminal Formatting Helpers ──
+
+def divider():
+    logger.info("─" * 56)
+
+def section(title):
+    logger.info("")
+    divider()
+    logger.info(f"  {title}")
+    divider()
+
+def kv(key, value, indent=2):
+    padding = " " * indent
+    label = f"{key}".ljust(24)
+    logger.info(f"{padding}{label}: {value}")
+
+def ok(msg):
+    logger.info(f"  ✓ {msg}")
+
+def warn(msg):
+    logger.info(f"  ⚠ {msg}")
+
+def fail(msg):
+    logger.info(f"  ✗ {msg}")
+
+
+# ── System Info ──
+
+def get_ip_address():
+    """Return the device's primary LAN IP by briefly opening a UDP
+    socket to a public DNS server. No data is actually sent."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(3)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "No IP"
+
+def get_all_ips():
+    """Return all network interface IPs by parsing hostname output."""
+    ips = []
+    try:
+        result = subprocess.run(
+            ["hostname", "-I"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            ips = result.stdout.strip().split()
+    except Exception:
+        pass
+    if not ips:
+        ip = get_ip_address()
+        if ip != "No IP":
+            ips = [ip]
+    return ips
+
+def get_uptime():
+    """Read system uptime from /proc/uptime. Returns formatted string."""
+    try:
+        with open("/proc/uptime", "r") as f:
+            secs = float(f.read().split()[0])
+        days = int(secs // 86400)
+        hrs = int((secs % 86400) // 3600)
+        mins = int((secs % 3600) // 60)
+        if days > 0:
+            return f"{days}d {hrs}h {mins}m"
+        elif hrs > 0:
+            return f"{hrs}h {mins}m"
+        else:
+            return f"{mins}m {int(secs % 60)}s"
+    except Exception:
+        return "unknown"
+
+def get_cpu_info():
+    """Parse /proc/cpuinfo for model name and core count."""
+    model = "unknown"
+    cores = 0
+    try:
+        with open("/proc/cpuinfo", "r") as f:
+            for line in f:
+                if line.startswith("model name") and model == "unknown":
+                    model = line.split(":")[1].strip()
+                if line.startswith("processor"):
+                    cores += 1
+    except Exception:
+        pass
+    return model, cores
+
+def get_mem_info():
+    """Parse /proc/meminfo for total and available RAM."""
+    total = avail = 0
+    try:
+        with open("/proc/meminfo", "r") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    total = int(line.split()[1]) // 1024
+                elif line.startswith("MemAvailable:"):
+                    avail = int(line.split()[1]) // 1024
+    except Exception:
+        pass
+    return total, avail
+
+def get_disk_info():
+    """Get disk usage for the root filesystem."""
+    try:
+        st = os.statvfs("/")
+        total = (st.f_blocks * st.f_frsize) // (1024 * 1024)
+        free = (st.f_bavail * st.f_frsize) // (1024 * 1024)
+        used = total - free
+        pct = round((used / total) * 100, 1) if total > 0 else 0
+        return total, used, free, pct
+    except Exception:
+        return 0, 0, 0, 0
+
+def get_kernel_version():
+    """Return the kernel version string."""
+    try:
+        return platform.release()
+    except Exception:
+        return "unknown"
+
+def check_dns(host="google.com"):
+    """Test DNS resolution. Returns resolved IP or None."""
+    try:
+        ip = socket.gethostbyname(host)
+        return ip
+    except Exception:
+        return None
+
+def check_http_reachable(url, timeout=5):
+    """Test if a URL is reachable via a raw HTTP HEAD request.
+    Uses only stdlib (no requests/urllib3) to avoid dependencies."""
+    try:
+        import urllib.request
+        req = urllib.request.Request(url, method="HEAD")
+        resp = urllib.request.urlopen(req, timeout=timeout)
+        return resp.status
+    except Exception as e:
+        return str(e)
+
+def print_folder_tree(root, prefix="", max_depth=3, current_depth=0):
+    """Print a folder tree to the logger. Skips hidden dirs,
+    __pycache__, node_modules, and .git to keep it readable."""
+    skip = {".git", "__pycache__", "node_modules", ".local",
+            ".cache", ".pythonlibs", ".config", "venv", ".upm"}
+    if current_depth >= max_depth:
+        return
+    try:
+        entries = sorted(os.listdir(root))
+    except PermissionError:
+        return
+    dirs = [e for e in entries if os.path.isdir(os.path.join(root, e)) and e not in skip and not e.startswith(".")]
+    files = [e for e in entries if os.path.isfile(os.path.join(root, e)) and not e.startswith(".")]
+
+    for f in files:
+        size = os.path.getsize(os.path.join(root, f))
+        size_str = f"{size}B" if size < 1024 else f"{size // 1024}KB"
+        logger.info(f"{prefix}├── {f} ({size_str})")
+    for i, d in enumerate(dirs):
+        connector = "└── " if i == len(dirs) - 1 and not files else "├── "
+        logger.info(f"{prefix}{connector}{d}/")
+        ext = "    " if i == len(dirs) - 1 else "│   "
+        print_folder_tree(os.path.join(root, d), prefix + ext,
+                         max_depth, current_depth + 1)
+
+
+# ── Boot Diagnostics ──
+# Run all checks before the app starts serving. This prints
+# everything to the terminal so you have a complete snapshot
+# of the system state on every boot.
+
+def run_boot_diagnostics():
+    """Run full system diagnostics and print to terminal."""
+
+    section("WOJO'S UNO Q FACE OUTLINE DEMO — MPU BOOT")
+    kv("App", "Face Outline Demo v1.0")
+    kv("Python", platform.python_version())
+    kv("Platform", platform.platform())
+    kv("Machine", platform.machine())
+    kv("Hostname", socket.gethostname())
+    kv("Kernel", get_kernel_version())
+    kv("PID", os.getpid())
+    kv("Working directory", os.getcwd())
+    kv("Boot time", time.strftime("%Y-%m-%d %H:%M:%S"))
+
+    # --- System Resources ---
+    section("SYSTEM RESOURCES")
+    cpu_model, cpu_cores = get_cpu_info()
+    kv("CPU model", cpu_model)
+    kv("CPU cores", cpu_cores)
+
+    mem_total, mem_avail = get_mem_info()
+    mem_used = mem_total - mem_avail
+    mem_pct = round((mem_used / mem_total) * 100, 1) if mem_total > 0 else 0
+    kv("RAM total", f"{mem_total} MB")
+    kv("RAM available", f"{mem_avail} MB ({100 - mem_pct}% free)")
+    kv("RAM used", f"{mem_used} MB ({mem_pct}%)")
+
+    disk_total, disk_used, disk_free, disk_pct = get_disk_info()
+    kv("Disk total", f"{disk_total} MB")
+    kv("Disk used", f"{disk_used} MB ({disk_pct}%)")
+    kv("Disk free", f"{disk_free} MB")
+
+    kv("System uptime", get_uptime())
+
+    # --- Network ---
+    section("NETWORK DIAGNOSTICS")
+    primary_ip = get_ip_address()
+    all_ips = get_all_ips()
+    kv("Primary IP", primary_ip)
+    kv("All IPs", ", ".join(all_ips) if all_ips else "none")
+    kv("Hostname (FQDN)", socket.getfqdn())
+
+    dns_result = check_dns("google.com")
+    if dns_result:
+        ok(f"DNS resolution OK — google.com → {dns_result}")
+    else:
+        fail("DNS resolution FAILED — check /etc/resolv.conf")
+
+    dns_cdn = check_dns("cdn.jsdelivr.net")
+    if dns_cdn:
+        ok(f"CDN DNS OK — cdn.jsdelivr.net → {dns_cdn}")
+    else:
+        warn("CDN DNS FAILED — MediaPipe may not load in browser")
+
+    # --- CDN Connectivity ---
+    # These are the URLs the browser will try to fetch. If the Uno Q
+    # can't reach them, the face tracker won't work. We check from
+    # the MPU side as an early warning.
+    section("CDN REACHABILITY (browser will need these)")
+
+    cdn_checks = [
+        ("MediaPipe WASM", "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/+esm"),
+        ("MediaPipe Model", "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"),
+        ("Google Fonts", "https://fonts.googleapis.com/css2?family=Inter"),
+    ]
+
+    for name, url in cdn_checks:
+        result = check_http_reachable(url)
+        if isinstance(result, int) and result < 400:
+            ok(f"{name}: HTTP {result} OK")
+        else:
+            warn(f"{name}: {result}")
+            if "mediapipe" in name.lower():
+                logger.info(f"    ↳ Face tracking will NOT work without this!")
+
+    # --- Project Files ---
+    section("PROJECT FOLDER TREE")
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    print_folder_tree(project_root, "  ", max_depth=3)
+
+    # --- App Lab Config ---
+    section("APP LAB CONFIGURATION")
+    app_yaml = os.path.join(project_root, "app.yaml")
+    if os.path.exists(app_yaml):
+        ok("app.yaml found")
+        try:
+            with open(app_yaml, "r") as f:
+                for line in f:
+                    line = line.rstrip()
+                    if line and not line.startswith("#"):
+                        logger.info(f"    {line}")
+        except Exception:
+            pass
+    else:
+        fail("app.yaml NOT FOUND — App Lab won't recognize this project")
+
+    sketch_yaml = os.path.join(project_root, "sketch", "sketch.yaml")
+    if os.path.exists(sketch_yaml):
+        ok("sketch/sketch.yaml found")
+    else:
+        warn("sketch/sketch.yaml missing")
+
+    assets_html = os.path.join(project_root, "assets", "index.html")
+    if os.path.exists(assets_html):
+        size = os.path.getsize(assets_html)
+        ok(f"assets/index.html found ({size // 1024} KB)")
+    else:
+        fail("assets/index.html NOT FOUND — frontend will not load")
+
+    # --- Boot Summary ---
+    boot_elapsed = time.time() - BOOT_START
+    section("BOOT DIAGNOSTICS COMPLETE")
+    kv("Diagnostics took", f"{boot_elapsed:.2f}s")
+    kv("Primary IP", primary_ip)
+    kv("DNS", "OK" if dns_result else "FAILED")
+    kv("CDN reachable", "checked (see above)")
+    logger.info("")
+    logger.info("  Open your browser to:")
+    logger.info(f"    http://{primary_ip}:<port>/")
+    logger.info("")
+    logger.info("  The LED matrix will scroll the IP address shortly.")
+    divider()
+    logger.info("")
+
+
+# Run diagnostics immediately on import (before app starts)
+run_boot_diagnostics()
+
+
+# ── Face State ──
+
 face_state = {
     "faces_detected": 0,
     "blink_count": 0,
@@ -36,57 +354,68 @@ face_state = {
     "device_mode": "uno_q"
 }
 
-# Tracks whether a face was visible on the previous update so we
-# can detect transitions (no face -> face, face -> no face).
 last_face_present = False
 
 
-def get_ip_address():
-    """Return the device's primary LAN IP by briefly opening a UDP
-    socket to a public DNS server. No data is actually sent."""
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "No IP"
-
+# ── Startup Sequence (background thread) ──
+# After diagnostics complete, this thread handles the LED matrix
+# boot sequence: scrolls the IP, then "Face Demo Ready".
 
 def startup_sequence():
-    """Runs once at boot in a background thread. Waits briefly for the
-    MCU Bridge to come up, then scrolls the IP address across the LED
-    matrix so the user knows where to point their browser."""
+    """Runs once at boot in a background thread. Scrolls diagnostic
+    info across the LED matrix so the user can see board status
+    even without a terminal connected."""
     time.sleep(2)
     ip = get_ip_address()
-    logger.info(f"Device IP: {ip}")
+
+    logger.info(f"[STARTUP] Scrolling IP on LED matrix: {ip}")
     Bridge.call("scroll_text", f"  IP: {ip}  ")
     time.sleep(8)
+
+    mem_total, mem_avail = get_mem_info()
+    Bridge.call("scroll_text", f"  RAM: {mem_avail}/{mem_total}MB  ")
+    time.sleep(6)
+
+    Bridge.call("scroll_text", f"  {platform.machine()} {get_kernel_version()[:12]}  ")
+    time.sleep(6)
+
     Bridge.call("scroll_text", "  Face Demo Ready  ")
+    logger.info("[STARTUP] LED matrix boot sequence complete")
 
 startup_thread = threading.Thread(target=startup_sequence, daemon=True)
 startup_thread.start()
 
 
-# --- Bridge provider (MCU -> MPU) ---
+# ── Bridge Providers (MCU -> MPU) ──
 
 def on_mcu_ready():
     """Called by the MCU sketch after Bridge.begin() completes on
-    the STM32 side. Useful for confirming the two processors are
-    communicating."""
-    logger.info("MCU ready — Bridge link confirmed")
+    the STM32 side. Confirms the two processors are communicating."""
+    logger.info("[BRIDGE] MCU ready — STM32 <-> QRB2210 link confirmed")
+    logger.info("[BRIDGE] MCU can now receive scroll_text, show_face, etc.")
 
 Bridge.provide("mcu_ready", on_mcu_ready)
 
+def on_mcu_status_report(report):
+    """Receive periodic status reports from the MCU. Logs them so
+    they appear in the terminal alongside MPU diagnostics."""
+    logger.info(f"[MCU-STATUS] {report}")
 
-# --- WebSocket handlers (Browser -> MPU) ---
+Bridge.provide("mcu_status_report", on_mcu_status_report)
+
+
+# ── WebSocket Handlers (Browser -> MPU) ──
 
 def on_browser_connect(sid):
     """Push the current face state to a newly connected browser so
-    its UI starts in sync with reality."""
-    logger.info(f"Browser connected: {sid}")
+    its UI starts in sync with reality. Also log connection details."""
+    logger.info(f"[WS] Browser connected: {sid}")
+    logger.info(f"[WS] Sending initial state: {json.dumps(face_state)}")
     ui.send_message("state_update", json.dumps(face_state))
+
+    Bridge.call("set_rgb", "blue")
+    time.sleep(0.3)
+    Bridge.call("set_rgb", "green")
 
 ui.on_connect(on_browser_connect)
 
@@ -97,10 +426,10 @@ def on_face_data(sid, data):
     count, blink count, dominant expression, pupil diameters, and
     head pose angles.
 
-    State transitions drive LED matrix updates:
-      - No face -> face: flash the smiley 3x, then hold it
-      - Face present:    show expression bitmap or default smiley
-      - Face -> no face: show the X pattern
+    State transitions drive LED matrix + RGB LED updates:
+      - No face -> face: flash smiley 3x, RGB green, relay ON
+      - Face present:    show expression bitmap, RGB color-coded
+      - Face -> no face: show X pattern, RGB red, relay OFF
     """
     global last_face_present
     try:
@@ -117,6 +446,7 @@ def on_face_data(sid, data):
         face_now = face_state["faces_detected"] > 0
 
         if face_now and not last_face_present:
+            logger.info(f"[FACE] Face appeared — {face_state['faces_detected']} face(s)")
             Bridge.call("flash_face", 3)
             expr = face_state["expression"]
             if expr != "neutral":
@@ -131,6 +461,7 @@ def on_face_data(sid, data):
                 Bridge.call("show_face")
 
         elif not face_now and last_face_present:
+            logger.info("[FACE] Face lost")
             Bridge.call("show_no_face")
 
         last_face_present = face_now
@@ -143,13 +474,15 @@ ui.on_message("face_data", on_face_data)
 
 def on_device_switch(sid, data):
     """Handle device profile toggle from the frontend UI. Forwards the
-    mode name to the MCU so it can scroll a confirmation message."""
+    mode name to the MCU so it can scroll a confirmation message.
+    Also sets the RGB LED color to indicate the active profile."""
     try:
         payload = json.loads(data) if isinstance(data, str) else data
         mode = payload.get("device", "uno_q")
         face_state["device_mode"] = mode
-        logger.info(f"Device mode: {mode}")
+        logger.info(f"[MODE] Device mode switched to: {mode}")
         Bridge.call("set_device_mode", mode)
+        Bridge.call("set_rgb", "blue" if mode == "uno_q" else "cyan")
     except Exception as e:
         logger.error(f"device_switch error: {e}")
 
@@ -159,7 +492,7 @@ ui.on_message("device_switch", on_device_switch)
 def on_capture_snapshot(sid, data):
     """Acknowledge a snapshot request from the frontend."""
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    logger.info(f"Snapshot captured at {timestamp}")
+    logger.info(f"[SNAPSHOT] Captured at {timestamp}")
     ui.send_message("snapshot_ack", json.dumps({
         "status": "ok",
         "timestamp": timestamp
@@ -168,7 +501,41 @@ def on_capture_snapshot(sid, data):
 ui.on_message("capture_snapshot", on_capture_snapshot)
 
 
-# --- Start ---
+# ── GPIO Control from Browser ──
+# These handlers let the frontend toggle GPIO placeholders and
+# the RGB LED. Useful for testing relay/buzzer/LED connections
+# without reflashing the MCU.
 
-logger.info("Wojo's Uno Q Face Outline Demo — starting")
+def on_rgb_control(sid, data):
+    """Set the MCU's RGB LED color from the browser."""
+    try:
+        payload = json.loads(data) if isinstance(data, str) else data
+        color = payload.get("color", "off")
+        logger.info(f"[RGB] Browser set color: {color}")
+        Bridge.call("set_rgb", color)
+    except Exception as e:
+        logger.error(f"rgb_control error: {e}")
+
+ui.on_message("rgb_control", on_rgb_control)
+
+def on_gpio_control(sid, data):
+    """Toggle a GPIO pin from the browser. Payload: {pin, state}"""
+    try:
+        payload = json.loads(data) if isinstance(data, str) else data
+        pin = payload.get("pin", 0)
+        state = payload.get("state", 0)
+        logger.info(f"[GPIO] Browser set pin {pin} -> {state}")
+        Bridge.call("set_gpio", f"{pin}:{state}")
+    except Exception as e:
+        logger.error(f"gpio_control error: {e}")
+
+ui.on_message("gpio_control", on_gpio_control)
+
+
+# ── Start ──
+
+boot_total = time.time() - BOOT_START
+logger.info(f"Total boot time: {boot_total:.2f}s")
+logger.info("Starting WebUI brick — waiting for browser connections...")
+logger.info("")
 App.run()
