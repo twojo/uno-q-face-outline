@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Copyright (C) 2025 Wojo
+//
+// SPDX-License-Identifier: MIT
+
 // Wojo's Uno Q Face Outline Demo — MCU Sketch
 //
 // This sketch runs on the STM32U585 microcontroller inside the Uno Q.

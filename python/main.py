@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (C) 2025 Wojo
+#
+# SPDX-License-Identifier: MIT
+
 # Wojo's Uno Q Face Outline Demo — MPU Entry Point
 #
 # This script runs on the Linux side (Qualcomm QRB2210) and acts as

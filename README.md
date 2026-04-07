@@ -38,7 +38,19 @@ Uses Google MediaPipe Face Landmarker (478 landmarks, up to 4 faces) running ent
   - All output to Serial monitor (MCU) and terminal (MPU/Replit)
 - **Bridge Integration** — MCU ↔ MPU communication via `Bridge.provide()` / `Bridge.call()` RPC
 
-## Architecture
+## Software Architecture Overview
+
+The software is developed for the Arduino App Lab, leveraging the UNO Q's dual-processor architecture to separate browser-side AI processing from real-time hardware control.
+
+The responsibilities are split as follows:
+
+1. **Browser (WebUI Brick):** Runs MediaPipe Face Landmarker entirely client-side in WASM. The browser handles all face detection, landmark tracking, expression analysis, and HUD rendering — zero cloud dependency for inference.
+
+2. **MPU (Qualcomm QRB2210):** Running Python, this processor hosts the WebUI Brick and coordinates between the browser and MCU. It receives face telemetry via WebSocket, forwards commands to the MCU via Bridge RPC, and runs system diagnostics at boot.
+
+3. **MCU (STM32U585):** Running the Arduino Sketch, this processor handles physical outputs — the 12x8 LED matrix, RGB LED, status LED, and GPIO placeholders. All MCU behavior is event-driven via `Bridge.provide()` callbacks.
+
+4. **Communication (RPC):** The two processors communicate via RPC using the [Arduino_RouterBridge](https://github.com/arduino-libraries/Arduino_RouterBridge) library.
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -75,12 +87,13 @@ Uses Google MediaPipe Face Landmarker (478 landmarks, up to 4 faces) running ent
 ## Project Structure
 
 ```
-├── app.yaml                 # App Lab config — bricks, board, libraries
+├── app.yaml                 # App Lab manifest — bricks and app metadata
 ├── python/
-│   └── main.py              # MPU entry — WebUI Brick + Bridge.call()
+│   ├── main.py              # MPU entry — WebUI Brick + Bridge.call()
+│   └── requirements.txt     # Python dependencies (none beyond App Lab runtime)
 ├── sketch/
 │   ├── sketch.ino           # MCU entry — Bridge.provide() + LED matrix
-│   └── sketch.yaml          # Arduino CLI board & library config
+│   └── sketch.yaml          # Arduino CLI board profile & library versions
 ├── assets/
 │   ├── index.html           # Full face tracking frontend (self-contained)
 │   └── qualcomm-logo.png    # Qualcomm branding asset

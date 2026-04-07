@@ -1,0 +1,3 @@
+# No additional Python packages required.
+# The arduino.app_utils and arduino.app_bricks modules are provided
+# by the App Lab runtime environment.
