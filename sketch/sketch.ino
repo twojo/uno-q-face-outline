@@ -216,6 +216,7 @@ void serialKV(const char* key, unsigned long value) {
 // them short and avoid blocking for extended periods.
 
 void showFace() {
+    resetMpuHeartbeat();
     if (!facePresent) {
         faceCount++;
         lastFaceTransition = millis();
@@ -233,6 +234,7 @@ void showFace() {
 }
 
 void showNoFace() {
+    resetMpuHeartbeat();
     if (facePresent) {
         unsigned long duration = (millis() - lastFaceTransition) / 1000;
         Serial.print("[FACE] Face lost after ");
@@ -247,6 +249,7 @@ void showNoFace() {
 }
 
 void flashFace(int count) {
+    resetMpuHeartbeat();
     Serial.print("[MATRIX] Flash face x");
     Serial.println(count);
     for (int i = 0; i < count; i++) {
@@ -263,6 +266,7 @@ void flashFace(int count) {
 }
 
 void showExpression(String expr) {
+    resetMpuHeartbeat();
     Serial.print("[EXPR] ");
     Serial.println(expr);
 
@@ -282,14 +286,14 @@ void showExpression(String expr) {
 }
 
 void setDeviceMode(String mode) {
-    // Kept for programmatic/testing use — no frontend toggle exists.
-    // Only stores the mode string; does not change hardware behaviour.
+    resetMpuHeartbeat();
     deviceMode = mode;
     Serial.print("[MODE] Device mode changed to: ");
     Serial.println(mode);
 }
 
 void setRgbFromPython(String color) {
+    resetMpuHeartbeat();
     Serial.print("[RGB] Set color: ");
     Serial.println(color);
     if (color == "red")         setRGB(true, false, false);
@@ -303,6 +307,7 @@ void setRgbFromPython(String color) {
 }
 
 void setGpioFromPython(String payload) {
+    resetMpuHeartbeat();
     Serial.print("[GPIO] Command: ");
     Serial.println(payload);
     int sep = payload.indexOf(':');
@@ -335,6 +340,7 @@ void setGpioFromPython(String payload) {
 }
 
 void reportStatus() {
+    resetMpuHeartbeat();
     unsigned long upSec = (millis() - bootTime) / 1000;
     String report = "";
     report += "uptime_s=" + String(upSec);
@@ -347,6 +353,7 @@ void reportStatus() {
 }
 
 void scrollText(String text) {
+    resetMpuHeartbeat();
     Serial.print("[MATRIX] Text: ");
     Serial.println(text);
     matrix.draw(frame_smiley);
@@ -471,8 +478,39 @@ const int MAX_READY_RETRIES = 60;
 const unsigned long READY_RETRY_INTERVAL = 3000;
 volatile bool mpuAcknowledged = false;
 
+// -- MPU Heartbeat Timeout --
+// After handshake, if no Bridge call is received within this interval
+// the MCU assumes the MPU has crashed or disconnected and resets to
+// an error state. Any Bridge provider callback resets the timer.
+const unsigned long MPU_HEARTBEAT_TIMEOUT_MS = 30000;
+volatile unsigned long lastMpuActivity = 0;
+volatile bool mpuTimedOut = false;
+
+// Error pattern: alternating X with blank (visual "lost connection")
+uint8_t frame_error[104] = {
+    7,0,0,0,0,0,7,0,0,0,0,0,7,
+    0,7,0,0,0,7,0,7,0,0,0,7,0,
+    0,0,7,0,7,0,0,0,7,0,7,0,0,
+    0,0,0,7,0,0,0,0,0,7,0,0,0,
+    0,0,7,0,7,0,0,0,7,0,7,0,0,
+    0,7,0,0,0,7,0,7,0,0,0,7,0,
+    7,0,0,0,0,0,7,0,0,0,0,0,7,
+    0,0,0,0,0,0,0,0,0,0,0,0,0
+};
+
+void resetMpuHeartbeat() {
+    lastMpuActivity = millis();
+    if (mpuTimedOut) {
+        mpuTimedOut = false;
+        Serial.println("[MCU] MPU heartbeat restored — resuming normal operation");
+        setRGB(true, false, false);
+        matrix.draw(frame_check);
+    }
+}
+
 void onMpuAck() {
     mpuAcknowledged = true;
+    lastMpuActivity = millis();
     Serial.println("[MCU] MPU acknowledged mcu_ready — retries stopped");
     setRGB(false, true, false);
     delay(200);
@@ -480,8 +518,9 @@ void onMpuAck() {
 }
 
 void loop() {
+    unsigned long now = millis();
+
     if (!mpuAcknowledged && readyRetries < MAX_READY_RETRIES) {
-        unsigned long now = millis();
         if (now - lastReadyRetry >= READY_RETRY_INTERVAL) {
             lastReadyRetry = now;
             readyRetries++;
@@ -492,5 +531,18 @@ void loop() {
             Serial.println(")");
             Bridge.call("mcu_ready");
         }
+    }
+
+    if (mpuAcknowledged && !mpuTimedOut &&
+        (now - lastMpuActivity >= MPU_HEARTBEAT_TIMEOUT_MS)) {
+        mpuTimedOut = true;
+        Serial.print("[MCU] MPU heartbeat timeout (");
+        Serial.print(MPU_HEARTBEAT_TIMEOUT_MS / 1000);
+        Serial.println("s) — showing error pattern");
+        matrix.draw(frame_error);
+        setRGB(true, false, true);
+        facePresent = false;
+        digitalWrite(STATUS_LED, HIGH);
+        triggerRelay(false);
     }
 }

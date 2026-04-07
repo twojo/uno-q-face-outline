@@ -1,6 +1,138 @@
 # Wojo's Uno Q Face Outline Demo
 
+[![Arduino](https://img.shields.io/badge/Arduino-Uno_Q-00878F?logo=arduino&logoColor=white)](https://docs.arduino.cc/hardware/uno-q/)
+[![Qualcomm](https://img.shields.io/badge/Qualcomm-QRB2210-3253DC?logo=qualcomm&logoColor=white)](https://www.qualcomm.com/products/technology/processors)
+[![MediaPipe](https://img.shields.io/badge/MediaPipe-Face_Landmarker-4285F4?logo=google&logoColor=white)](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker)
+[![App Lab](https://img.shields.io/badge/App_Lab-Bricks_SDK-00878F?logo=arduino&logoColor=white)](https://docs.arduino.cc/software/app-lab/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+**2026 Wojo's Uno Q Face Outline Demo V1**
+
 A real-time face tracking demo showcasing the Arduino Uno Q's dual-processor architecture, Arduino App Lab, and Bricks SDK. Debian Linux and an STM32 microcontroller work together on the same Uno-hat-compatible board — the MPU runs Python and serves a web app, the MCU drives LEDs and GPIO in real time, and Arduino Bridge RPC ties them together. Face detection (478 landmarks, up to 4 faces) provides the AI workload that exercises this full pipeline.
+
+---
+
+## Quick Start
+
+### Hardware Requirements
+
+| Component | Details |
+|-----------|---------|
+| Board | [Arduino Uno Q](https://store.arduino.cc/pages/uno-q) (QRB2210 + STM32U585, 2 GB or 4 GB) |
+| LED Matrix | Built-in 13x8 (no wiring needed) |
+| Camera | Standard UVC USB webcam |
+| Connection | [USB-C multiport adapter](https://store.arduino.cc/products/usb-c-to-hdmi-multiport-adapter-with-ethernet-and-usb-hub) with external power delivery |
+| Browser | Chrome or Edge on any device on the same network |
+
+The board can be powered via USB-C (5V 3A), the 5V pin, or VIN (7-24V):
+
+![UNO Q power options](https://docs.arduino.cc/static/72456f6873252eb705cfd28538166e8a/a6d36/power-options-3.png)
+
+### Installation
+
+App Lab runs in two modes: directly on the Uno Q as a single-board computer (SBC mode, recommended with the 4 GB variant), or hosted on your PC with the board connected via USB-C.
+
+![SBC and PC hosted modes](https://docs.arduino.cc/static/a149a5e406178f25376d784b1d615e6d/a6d36/modes-2.png)
+
+Download this repository as a `.zip`. Open [Arduino App Lab](https://www.arduino.cc/en/software/#app-lab-section) (pre-installed on the Uno Q in SBC mode, or install the desktop version on your PC). Click Import App and select the `.zip`. App Lab reads `app.yaml`, compiles the sketch for the STM32 MCU, deploys the WebUI Brick, and launches the application. The LED matrix will display the board's IP address -- open it in Chrome on any device on the same Wi-Fi network.
+
+For manual setup without App Lab: clone this repo to the Uno Q, flash `sketch/sketch.ino` via Arduino IDE 2+, ensure the Bricks SDK is installed, and run `python/main.py` on the Linux side.
+
+### First-Time Setup on a Fresh Board
+
+If this is a brand-new Uno Q that has never been connected to App Lab before, expect several update prompts before the demo runs. The order and outcome matter:
+
+<details>
+<summary><strong>What App Lab will prompt you to update (and what to do)</strong></summary>
+
+| Prompt | What it updates | Recommended action | What happens if you skip |
+|--------|----------------|-------------------|-------------------------|
+| System firmware | Linux OS image on the QRB2210 MPU | **Accept** — this ensures Wi-Fi, Docker, and the Bricks runtime are current | Demo may work, but you risk kernel/driver incompatibilities with the WebUI Brick |
+| Arduino board core (Zephyr) | The Zephyr RTOS platform that runs sketches on the STM32 MCU | **Accept** — `arduino:zephyr` must match the version that `Arduino_RouterBridge 0.4.1` was compiled against | Sketch compilation will likely fail if the core is too old |
+| Board firmware (STM32 bootloader) | Low-level MCU bootloader | **Accept** — required for Bridge RPC to function correctly between MCU and MPU | Bridge.begin() may hang or fail silently |
+| Brick container updates | Docker images for the WebUI Brick and other App Lab services | **Accept** — the WebUI Brick serves `assets/index.html` and handles WebSocket messaging | The demo cannot start without the WebUI Brick container |
+
+</details>
+
+**After accepting all updates:**
+
+1. The board will reboot (possibly more than once). Wait for the green power LED to stabilize — this can take 60-90 seconds on first boot after a firmware update.
+2. Connect the board to Wi-Fi if not already configured (App Lab > Settings > Network). The demo requires internet access to download MediaPipe (~4 MB) from cdn.jsdelivr.net on first load. After the first successful load, the browser caches the WASM engine and model.
+3. Import the demo `.zip` and let App Lab compile the sketch. Compilation takes ~30-60 seconds. The LED matrix will show a boot icon, then a checkmark, then scroll the board's IP address.
+4. Open the displayed IP address in Chrome on any device on the same Wi-Fi network. If you see a blank screen instead of the camera view, check the diagnostics panel (scroll down) — it will tell you which step failed (usually network or camera).
+
+<details>
+<summary><strong>Troubleshooting</strong></summary>
+
+- **Blank screen, no error**: The JavaScript module failed to load. Open the browser developer console (F12) and look for network errors. Usually means cdn.jsdelivr.net is unreachable — check Wi-Fi.
+- **"Cannot Load Face Detection Engine" overlay**: The board has no internet. Connect to Wi-Fi and hit the Retry button on the overlay.
+- **LED matrix stays on boot icon (never shows checkmark)**: Bridge.begin() is stuck. This usually means a core/firmware version mismatch. Go back to App Lab and accept all pending updates, then re-import.
+- **"No Camera Detected" overlay**: Plug a USB webcam into any USB-A port on the Uno Q. The built-in MIPI-CSI connector requires the Arduino Media Carrier board.
+- **Camera permission denied**: The browser on the Uno Q may block camera access by default. Check browser settings > Site permissions > Camera > Allow.
+- **MCU shows red LED but Python logs say "MCU ready"**: Normal — the MCU starts in red (idle/waiting). It turns green when the first face is detected.
+- **Sketch won't compile**: Make sure `arduino:zephyr` board core is installed and up to date. The sketch depends on `Arduino_RouterBridge 0.4.1` which requires specific Zephyr core versions.
+
+</details>
+
+<details>
+<summary><strong>Recovery if you declined updates</strong></summary>
+
+If you said "No" to one or more update prompts and the demo doesn't work, you can trigger updates manually:
+1. Open App Lab settings
+2. Check for board/firmware/core updates
+3. Accept all pending updates
+4. Reboot the board
+5. Re-import the demo `.zip`
+
+The MCU sketch includes an acknowledgement-driven retry mechanism — it re-sends the `mcu_ready` signal to the Python side every 3 seconds for up to 3 minutes after boot. Once the MPU receives the signal, it sends `mpu_ack` back to the MCU, which immediately stops retrying. This means even if the MPU takes a long time to start (common after firmware updates that trigger a full OS reboot), the Bridge connection will be established automatically as soon as both sides are ready.
+
+</details>
+
+---
+
+## What This Demo Showcases
+
+### The Uno Q + App Lab pipeline
+
+The core of this demo is the Uno Q's dual-processor architecture working end-to-end through App Lab:
+
+```text
+Browser (web app)  ──WebSocket──→  Python on Debian (MPU)  ──Bridge RPC──→  STM32 MCU (Zephyr)
+     ↑                                    │                                      │
+  AI inference                     Coordinates data flow               LED matrix, RGB LED,
+  (face detection)                 Translates face data                GPIO, real-time control
+                                   to MCU commands
+```
+
+This is what makes the Uno Q different from a typical microcontroller or a typical SBC. Debian Linux and an STM32 are on the same Uno-hat-compatible PCB, communicating over a built-in RPC bridge, managed through App Lab and Bricks. The demo uses face detection as the AI workload, but the architecture — Python coordinator on Debian, Bridge providers, MCU actuation, WebSocket telemetry, App Lab deployment — is the same pattern you would use for object detection, sensor fusion, safety monitoring, or any other edge AI task.
+
+### App Lab Bricks — the Uno Q-native way to build
+
+The `arduino:web_ui` Brick is what powers this demo. It serves the HTML/JS from `assets/`, provides WebSocket messaging between the browser and Python, and requires zero configuration beyond one line in `app.yaml`. Other Bricks extend the Uno Q with additional AI capabilities:
+
+| Brick | What it does | Model | Setup |
+|-------|-------------|-------|-------|
+| `arduino:web_ui` | Serves web content + WebSocket messaging | (no AI model) | **This demo uses it** |
+| `arduino:object_detection` | Detects objects in camera frames | YOLOX-Nano | Add one line to `app.yaml` |
+| `arduino:motion_detection` | Detects motion in video stream | Frame differencing | Add one line to `app.yaml` |
+
+To add a Brick, edit `app.yaml`:
+
+```yaml
+bricks:
+  - arduino:web_ui
+  - arduino:object_detection
+```
+
+Or add it through the App Lab UI. Each Brick deploys as a container on the QRB2210 and exposes an API to your Python code. Bricks are the Uno Q-native way to add AI capabilities — they use the full Debian Linux environment on the MPU, not just the browser.
+
+### About the face detection inference source
+
+This demo uses Google MediaPipe Face Landmarker as its inference source. MediaPipe runs in the browser, not on the Uno Q's MPU. It was chosen for this demo because it provides zero-setup 478-point face landmarks that exercise the full Uno Q pipeline without requiring any model compilation, camera driver configuration, or additional Python dependencies on the board. Import the zip, open the browser, and the entire architecture — App Lab, Bricks, WebSocket, Python on Debian, Bridge RPC, STM32 MCU, LED matrix — is running end-to-end.
+
+The inference source is deliberately swappable. The Python coordinator, Bridge providers, sketch, and MCU actuation layer do not depend on MediaPipe. Replace the browser-side face data with an App Lab Brick (object detection), an AI Hub TFLite model (on-device headless inference), or a custom Edge Impulse model — the MCU layer and App Lab workflow stay the same. That modularity is the architectural point of this demo.
+
+---
 
 ## Why the Arduino Uno Q
 
@@ -33,7 +165,7 @@ The QRB2210 has **no dedicated TPU or NPU** (no TOPS rating). AI inference relie
 
 **How the Uno Q pipeline works in this demo:**
 
-```
+```text
   ┌─────────────────────────────────────────────────────────────────────┐
   │  BROWSER (Chromium, served by arduino:web_ui Brick)                 │
   │                                                                     │
@@ -68,106 +200,9 @@ The QRB2210 has **no dedicated TPU or NPU** (no TOPS rating). AI inference relie
 
 The inference source (currently browser-side face detection) is swappable. The same Python coordinator, Bridge providers, and MCU sketch work with any AI input — App Lab Bricks, TFLite models on the MPU, or custom models. See the "What This Demo Showcases" section for details on swappability.
 
-## Performance Bottlenecks
-
-Where the system slows down and what limits throughput at each stage:
-
-```
-  Stage                          Typical Latency       Bottleneck
-  ─────────────────────────────────────────────────────────────────
-  USB camera capture             ~67ms (15 FPS)        UVC webcam frame rate
-  MediaPipe WASM inference       ~5-15ms               CPU (4x A53 cores)
-  Canvas rendering (per face)    ~1-2ms                GPU compositing
-  WebSocket emit (throttled)     500ms interval        Intentional throttle
-  Bridge RPC (MPU -> MCU)        ~2-5ms                Serial transport
-  LED matrix update              <1ms                  SPI to matrix driver
-  ─────────────────────────────────────────────────────────────────
-  Browser-side (camera to overlay)  ~75-90ms           Camera is the ceiling
-  Full loop (camera to LED)         ~500-575ms         WebSocket throttle
-```
-
-Browser-side rendering (overlay on screen) happens at full frame rate -- the camera frame is the ceiling there. But the MCU hardware response (LED matrix, RGB LED, GPIO) is gated by the 500ms WebSocket telemetry throttle, so the end-to-end latency from camera frame to physical LED change is ~500-575ms. This throttle is intentional to avoid flooding the Bridge RPC channel.
-
-The camera is the dominant bottleneck. The QRB2210's dual ISPs support up to 25 MP at 30 FPS through MIPI-CSI, but this demo uses a standard USB webcam over UVC, which typically delivers 640x480 at 15 FPS. Attaching the [UNO Media Carrier](https://docs.arduino.cc/hardware/uno-media-carrier/) and a MIPI-CSI camera would roughly double the available frame rate and unlock higher resolution input.
-
-The adaptive performance system (State Diagram 4) compensates for CPU contention. When other processes compete for the A53 cores -- Docker containers, system services, additional Bricks -- FPS drops below 8 and the app automatically skips every other frame rather than dropping quality. Recovery to full speed happens when sustained FPS exceeds 14.
-
-Memory is rarely the bottleneck. The 2 GB variant runs this demo comfortably. The 4 GB variant is recommended if you plan to run multiple Bricks simultaneously (object detection + face tracking + web UI) or use the board as a standalone single-board computer with a desktop environment.
-
-## Beyond Face Tracking: Industrial and Pro Applications
-
-This demo is a proof-of-concept for the Uno Q's dual-processor architecture, but the pattern it demonstrates -- AI inference feeding into a Python coordinator on Debian, which drives real-time MCU actuation via Bridge RPC, all deployed through App Lab -- applies directly to [Arduino Pro](https://www.arduino.cc/pro/) industrial use cases. The Uno Q's Qualcomm QRB2210 + STM32U585 combination and App Lab workflow are built for exactly this kind of edge AI deployment.
-
-**Access control and visitor management.** Replace the LED matrix feedback with a relay on D7 to control a door strike or turnstile. When a new face appears, the MPU calls `flash_face(3)` on the MCU (rapid LED flash + buzzer alert), then subsequent face-present updates call `show_face()` which sets the relay pin HIGH. When the face disappears, `show_no_face()` drops the relay. Enable the relay by setting `enableRelay = true` in `sketch.ino`. Add Arduino Cloud logging (see below) to maintain a persistent visitor log with timestamps and screenshots.
-
-**Occupancy monitoring.** The persistent face count (`MAX_FACES = 4`) and tracking lifecycle (State Diagram 5) already count concurrent faces and track duration. Forward the face count to a building management system via the MPU's Wi-Fi to control HVAC, lighting, or elevator dispatch based on real-time occupancy.
-
-**Safety compliance.** Swap the MediaPipe face model for an object detection model (the App Lab `arduino:object_detection` Brick uses YOLOX-Nano) to detect PPE, hard hats, safety vests, or missing guards. The MCU can drive a warning buzzer on D5 and a red status light via the RGB LED when non-compliance is detected.
-
-**Quality inspection.** Mount a MIPI-CSI camera via the Media Carrier and point it at a production line. Use the same architecture -- vision model in the browser or via TFLite on the MPU, defect classification in Python, pass/fail signal to MCU GPIO for reject actuators. The Modulino Distance sensor can trigger inspection only when a part is at the correct position.
-
-**Operator presence detection.** In machinery safety, an operator must be present for a machine to run. The face tracking lifecycle's 800ms TTL (State Diagram 5) provides a presence/absence signal with sub-second latency. Wire D7 to a safety interlock relay. Face detected = machine enabled. Face lost for 800ms = machine stop. The MCU handles this at Zephyr real-time priority, independent of Linux process scheduling.
-
-**Retail analytics and smart signage.** Count foot traffic, measure dwell time (tracked face duration), and estimate audience demographics. The multi-face tracking with persistent IDs means you can distinguish between a new visitor and a returning one within a session. Forward aggregated data to Arduino Cloud dashboards for store managers.
-
-**Agriculture and environmental monitoring.** Replace the camera-based AI model with sensor-based Bricks. The Modulino Movement sensor detects equipment vibration. The Modulino Distance sensor monitors fill levels. The MCU drives actuators (pumps, valves, alerts) via GPIO. The same App Lab workflow, Bridge RPC, and Arduino Cloud integration apply -- only the Brick and the model change.
-
-## The App Lab and Bricks Experience
-
-The [Arduino App Lab](https://docs.arduino.cc/software/app-lab/) is a unified development environment that lets you combine Arduino sketches, Python scripts, and containerized Linux applications into a single workflow. You do not need to manually set up a toolchain, configure a cross-compiler, or wire up a web server -- App Lab and Bricks handle all of that.
-
-![Arduino App Lab](https://docs.arduino.cc/static/782ed8393ae066932b79a19418651a50/a6d36/app-lab.png)
-
-[Bricks](https://docs.arduino.cc/software/app-lab/tutorials/bricks) are code building blocks that abstract away complexity. This project uses a single Brick:
-
-- **`arduino:web_ui`** -- serves the contents of `assets/` as a web application and provides WebSocket messaging between the browser and `python/main.py`. The Brick injects WebSocket connectivity at runtime so the browser-side face data can reach the Python coordinator, which then forwards it to the MCU via Bridge RPC. No explicit socket code is needed in the HTML.
-
-Other Bricks are available for object detection, motion detection, speech recognition, and more. Each one deploys as a container on the QRB2210 and exposes an API to your Python application. Adding a Brick to this project is done in the App Lab UI:
-
-![Adding a Brick in App Lab](https://docs.arduino.cc/static/c4ba129c26c39fd5f37d2dfed7fee780/a6d36/add-brick-1.png)
-
-To install this demo, download the repository as a `.zip`, open [Arduino App Lab](https://www.arduino.cc/en/software/#app-lab-section), click Import App, and select the file. App Lab reads `app.yaml`, compiles the sketch, deploys the Brick, and launches the application. The LED matrix will display the device IP -- open that address in Chrome on any device on the same network.
-
-## Expanding the Hardware
-
-The Uno Q is designed to be expanded. It retains the classic UNO form factor for shield compatibility, and adds two bottom-mounted high-speed connectors (JMEDIA and JMISC) for advanced peripherals.
-
-![UNO form factor](https://docs.arduino.cc/static/7d5a122fd16435d60983ecb96c2e490f/a6d36/uno-form-factor.png)
-
-**Carrier boards** snap onto the bottom connectors and expose interfaces that the UNO headers alone cannot provide:
-
-| Carrier | What it adds |
-|---------|-------------|
-| [UNO Media Carrier](https://docs.arduino.cc/hardware/uno-media-carrier/) | Dual MIPI-CSI camera connectors (Raspberry Pi compatible), MIPI-DSI display output, three 3.5 mm audio jacks (mic in, line out, ear out) |
-| [UNO Breakout Carrier](https://docs.arduino.cc/hardware/uno-breakout-carrier/) | Full breakout of JMEDIA and JMISC signals to 2.54 mm headers -- audio, I2C, SPI, UART, PWM, PSSI, GPIO for oscilloscope probing and custom circuits |
-
-**Qwiic / Modulino sensors** connect via the onboard Qwiic connector (I2C on Wire1) with no soldering. Some modules relevant to this project:
-
-| Modulino | Use with this demo |
-|----------|--------------------|
-| [Modulino Movement](https://docs.arduino.cc/hardware/modulino-movement/) | LSM6DSOX accelerometer/gyroscope -- detect if the Uno Q is being moved or tilted while tracking |
-| [Modulino Distance](https://docs.arduino.cc/hardware/modulino-distance/) | Time-of-flight distance sensor -- measure the viewer's distance from the camera |
-| [Modulino Buttons](https://docs.arduino.cc/hardware/modulino-buttons/) | Physical buttons -- cycle overlay presets or toggle tracking without touching the browser |
-
-The GPIO placeholder pins (D3-D7) in this demo are already wired for a relay, buzzer, NeoPixel strip, and two auxiliary outputs. Enabling them is a single flag change in `sketch.ino`.
-
-## Arduino Cloud Integration (Future)
-
-The current demo runs entirely on the local network -- face tracking data stays in the browser and MCU, and everything resets when you reload the page. [Arduino Cloud](https://docs.arduino.cc/arduino-cloud/) could change that.
-
-With an Arduino Cloud integration, the Uno Q could push face detection events to a persistent cloud dashboard. Practical possibilities:
-
-- Log the timestamp and screenshot of each new face detection to a cloud Thing
-- Maintain a persistent face count across sessions (total faces detected, daily/weekly)
-- Display a live dashboard showing current tracking state, uptime, and system health remotely
-- Set up webhook notifications when a face is detected (or when no face has been seen for a threshold period)
-- Store historical data with [Arduino Cloud's built-in data export](https://docs.arduino.cc/arduino-cloud/features/iot-cloud-historical-data/) for analysis
-
-The Uno Q's built-in Wi-Fi and the WebUI Brick's `web_ui.expose_api()` pattern (REST endpoints alongside WebSocket) make this feasible without restructuring the app. The MPU-side Python code already has the face state dict and event hooks needed to push data upstream.
-
 ## Architecture
 
-```
+```text
 Browser (WebUI Brick)                  assets/index.html
   MediaPipe Face Landmarker (WASM)     478 landmarks per face, 4 faces max
   Canvas overlay                       mesh, outline, iris, HUD, emojis
@@ -199,7 +234,7 @@ STM32 MCU (STM32U585)                 sketch/sketch.ino
 
 Both processors boot in parallel. The MCU completes first (no OS) and waits for Bridge; the MPU runs Linux, starts Python, then connects.
 
-```
+```text
   MCU (STM32U585)                                MPU (QRB2210 Linux)
   ──────────────                                  ──────────────────
   Power-on                                        Power-on
@@ -238,9 +273,10 @@ Both processors boot in parallel. The MCU completes first (no OS) and waits for 
   font rendering which is not yet implemented for the Zephyr platform.
 ```
 
-### 2. Camera Initialization Flow
+<details>
+<summary><strong>2. Camera Initialization Flow</strong></summary>
 
-```
+```text
   Page Load
       |
       v
@@ -256,7 +292,7 @@ Both processors boot in parallel. The MCU completes first (no OS) and waits for 
       |                    |
       +- label             v
       +- resolution    Show camera-error overlay with:
-      +- frameRate       step-by-step fix instructions,
+      +- frameRate      step-by-step fix instructions,
       +- facingMode      Uno Q setup link,
       +- megapixels      permission guide
       |
@@ -270,11 +306,14 @@ Both processors boot in parallel. The MCU completes first (no OS) and waits for 
   Start draw() render loop
 ```
 
-### 3. Face Detection and Rendering Pipeline
+</details>
+
+<details>
+<summary><strong>3. Face Detection and Rendering Pipeline</strong></summary>
 
 Every animation frame passes through this pipeline. The adaptive performance system may skip frames to maintain smooth rendering.
 
-```
+```text
   requestAnimationFrame(draw)
       |
       v
@@ -324,11 +363,14 @@ Every animation frame passes through this pipeline. The adaptive performance sys
   Emit face_data via WebSocket     <-- throttled to 500ms
 ```
 
-### 4. Adaptive Performance State Machine
+</details>
+
+<details>
+<summary><strong>4. Adaptive Performance State Machine</strong></summary>
 
 Monitors FPS over a sliding window and auto-adjusts frame skipping. Hysteresis gap (8 to 14) prevents rapid toggling.
 
-```
+```text
                     +---------------------+
                     |     OPTIMAL          |
                     |  skipFrames = 0      |
@@ -363,11 +405,14 @@ Monitors FPS over a sliding window and auto-adjusts frame skipping. Hysteresis g
     Min samples needed: 3
 ```
 
-### 5. Face Tracking Lifecycle
+</details>
+
+<details>
+<summary><strong>5. Face Tracking Lifecycle</strong></summary>
 
 Each detected face gets a persistent monotonic ID (never recycled) and a unique color from a 4-color palette (blue, orange, green, purple).
 
-```
+```text
   New face detected in frame
       |
       v
@@ -411,11 +456,13 @@ Each detected face gets a persistent monotonic ID (never recycled) and a unique 
   Max tracked faces: 4 (MAX_FACES).
 ```
 
+</details>
+
 ### 6. Bridge Communication Flow (MCU -- MPU -- Browser)
 
 Three layers communicate via two protocols: WebSocket (browser to MPU, provided by the WebUI Brick SDK at runtime on real hardware) and Bridge RPC (MPU to MCU). The browser HTML does not contain explicit socket code -- the Brick SDK injects WebSocket messaging at runtime. In the Replit preview, the browser runs standalone without the SDK, so face detection and rendering work but no data reaches the MPU or MCU.
 
-```
+```text
   BROWSER (via WebUI Brick SDK)
 
     MediaPipe --> face data --> Brick emit("face_data")
@@ -468,11 +515,12 @@ Three layers communicate via two protocols: WebSocket (browser to MPU, provided 
       Bridge.call("mcu_status_report")  on-demand status string (via report_status)
 ```
 
-### 7. RGB LED State Machine
+<details>
+<summary><strong>7. RGB LED State Machine</strong></summary>
 
 LED4 is active-low (LOW = ON, HIGH = OFF). Any color can be set programmatically via `set_rgb`. Supported colors: red, green, blue, yellow, cyan, magenta, white, off.
 
-```
+```text
   +----------+     Boot          +------------------+
   |  OFF     | ──────────>       | SELF-TEST        |
   +----------+                   | R -> G -> B      |
@@ -506,11 +554,14 @@ LED4 is active-low (LOW = ON, HIGH = OFF). Any color can be set programmatically
         +----------+ +----------+ +----------+
 ```
 
-### 8. Overlay Rendering Order
+</details>
+
+<details>
+<summary><strong>8. Overlay Rendering Order</strong></summary>
 
 Each frame draws layers in a specific order. The overlay preset controls which layers are visible.
 
-```
+```text
   Canvas (cleared each frame)
   ───────────────────────────────────
   Layer 0:  Video frame (via cam element)
@@ -531,28 +582,29 @@ Each frame draws layers in a specific order. The overlay preset controls which l
   Layer 13: System stats overlay            always (top-right)
   Layer 14: HUD ticker (bottom-center)      always
   ───────────────────────────────────
-
-  Overlay Presets:
-  +---------------------+------+---------+------+-------+------+------+----+-------+
-  | Preset              | Mesh | Outline | Eyes | Brows | Lips | Iris |Dots| Emoji |
-  +---------------------+------+---------+------+-------+------+------+----+-------+
-  | Full Mesh+Features  |  Y   |    Y    |  Y   |   Y   |  Y   |  Y   | Y  |   Y   |
-  | Outline+Features    |  -   |    Y    |  Y   |   Y   |  Y   |  Y   | -  |   Y   |
-  | Mesh Only           |  Y   |    -    |  -   |   -   |  -   |  -   | -  |   -   |
-  | Dots Only           |  -   |    -    |  -   |   -   |  -   |  -   | Y  |   -   |
-  | Minimal             |  -   |    Y    |  -   |   -   |  -   |  Y   | -  |   -   |
-  | Outline+Emojis      |  -   |    Y    |  -   |   -   |  Y   |  -   | -  |   Y   |
-  +---------------------+------+---------+------+-------+------+------+----+-------+
-
-  Iris measurement and pupil diameter display are always active
-  when the iris layer is enabled in the current preset.
 ```
 
-### 9. Delegate Selection and Validation Flow
+**Overlay Presets:**
+
+| Preset | Mesh | Outline | Eyes | Brows | Lips | Iris | Dots | Emoji |
+|--------|:----:|:-------:|:----:|:-----:|:----:|:----:|:----:|:-----:|
+| Full Mesh+Features | Y | Y | Y | Y | Y | Y | Y | Y |
+| Outline+Features | - | Y | Y | Y | Y | Y | - | Y |
+| Mesh Only | Y | - | - | - | - | - | - | - |
+| Dots Only | - | - | - | - | - | - | Y | - |
+| Minimal | - | Y | - | - | - | Y | - | - |
+| Outline+Emojis | - | Y | - | - | Y | - | - | Y |
+
+Iris measurement and pupil diameter display are always active when the iris layer is enabled in the current preset.
+
+</details>
+
+<details>
+<summary><strong>9. Delegate Selection and Validation Flow</strong></summary>
 
 The QRB2210's Adreno 702 GPU supports WebGL, but MediaPipe's GPU delegate produces spatially incorrect landmarks despite appearing to work. The app uses CPU-first with automatic runtime validation: 6 sanity checks per frame, 5-frame voting window (majority rules), auto-switch on failure, continuous re-validation every 60 seconds.
 
-```
+```text
   App Start
       |
       v
@@ -600,11 +652,14 @@ The QRB2210's Adreno 702 GPU supports WebGL, but MediaPipe's GPU delegate produc
   If degraded: warn (no auto-switch)
 ```
 
-### 10. WebSocket Telemetry Flow
+</details>
+
+<details>
+<summary><strong>10. WebSocket Telemetry Flow</strong></summary>
 
 Face data flows from the browser to the MPU, which drives MCU hardware responses.
 
-```
+```text
   Browser (every 500ms when faces present)
   ──────────────────────────────────────────
   emit("face_data", {
@@ -637,9 +692,11 @@ Face data flows from the browser to the MPU, which drives MCU hardware responses
   4. Emit state_update to browser
 ```
 
+</details>
+
 ## Project Structure
 
-```
+```text
 app.yaml                  App Lab manifest (bricks: arduino:web_ui)
 python/
   main.py                 MPU entry -- WebUI Brick + Bridge forwarding
@@ -651,77 +708,43 @@ sketch/
   sketch.ino              MCU entry -- Bridge.provide() + LED matrix
   sketch.yaml             Arduino CLI board profile and library versions
 assets/
-  index.html              Full face tracking frontend (self-contained)
+  index.html              Face tracking frontend (references css/ and js/)
+  css/styles.css          Extracted stylesheet
+  js/app.js               Extracted application logic (ES module)
   qualcomm-logo.png       Qualcomm branding asset
 app.py                    Replit-only Flask server (excluded from App Lab via .gitignore)
-templates/index.html      Replit copy of assets/index.html
+templates/                Replit copy of assets/ (index.html, css/, js/)
 static/                   Replit static assets
 ```
 
-## Hardware Requirements
+## Performance Bottlenecks
 
-| Component | Details |
-|-----------|---------|
-| Board | [Arduino Uno Q](https://store.arduino.cc/pages/uno-q) (QRB2210 + STM32U585, 2 GB or 4 GB) |
-| LED Matrix | Built-in 13x8 (no wiring needed) |
-| Camera | Standard UVC USB webcam |
-| Connection | [USB-C multiport adapter](https://store.arduino.cc/products/usb-c-to-hdmi-multiport-adapter-with-ethernet-and-usb-hub) with external power delivery |
-| Browser | Chrome or Edge on any device on the same network |
+<details>
+<summary><strong>Where the system slows down and what limits throughput at each stage</strong></summary>
 
-The board can be powered via USB-C (5V 3A), the 5V pin, or VIN (7-24V):
+```text
+  Stage                          Typical Latency       Bottleneck
+  ─────────────────────────────────────────────────────────────────
+  USB camera capture             ~67ms (15 FPS)        UVC webcam frame rate
+  MediaPipe WASM inference       ~5-15ms               CPU (4x A53 cores)
+  Canvas rendering (per face)    ~1-2ms                GPU compositing
+  WebSocket emit (throttled)     500ms interval        Intentional throttle
+  Bridge RPC (MPU -> MCU)        ~2-5ms                Serial transport
+  LED matrix update              <1ms                  SPI to matrix driver
+  ─────────────────────────────────────────────────────────────────
+  Browser-side (camera to overlay)  ~75-90ms           Camera is the ceiling
+  Full loop (camera to LED)         ~500-575ms         WebSocket throttle
+```
 
-![UNO Q power options](https://docs.arduino.cc/static/72456f6873252eb705cfd28538166e8a/a6d36/power-options-3.png)
+Browser-side rendering (overlay on screen) happens at full frame rate -- the camera frame is the ceiling there. But the MCU hardware response (LED matrix, RGB LED, GPIO) is gated by the 500ms WebSocket telemetry throttle, so the end-to-end latency from camera frame to physical LED change is ~500-575ms. This throttle is intentional to avoid flooding the Bridge RPC channel.
 
-## Installation
+The camera is the dominant bottleneck. The QRB2210's dual ISPs support up to 25 MP at 30 FPS through MIPI-CSI, but this demo uses a standard USB webcam over UVC, which typically delivers 640x480 at 15 FPS. Attaching the [UNO Media Carrier](https://docs.arduino.cc/hardware/uno-media-carrier/) and a MIPI-CSI camera would roughly double the available frame rate and unlock higher resolution input.
 
-App Lab runs in two modes: directly on the Uno Q as a single-board computer (SBC mode, recommended with the 4 GB variant), or hosted on your PC with the board connected via USB-C.
+The adaptive performance system (State Diagram 4) compensates for CPU contention. When other processes compete for the A53 cores -- Docker containers, system services, additional Bricks -- FPS drops below 8 and the app automatically skips every other frame rather than dropping quality. Recovery to full speed happens when sustained FPS exceeds 14.
 
-![SBC and PC hosted modes](https://docs.arduino.cc/static/a149a5e406178f25376d784b1d615e6d/a6d36/modes-2.png)
+Memory is rarely the bottleneck. The 2 GB variant runs this demo comfortably. The 4 GB variant is recommended if you plan to run multiple Bricks simultaneously (object detection + face tracking + web UI) or use the board as a standalone single-board computer with a desktop environment.
 
-Download this repository as a `.zip`. Open [Arduino App Lab](https://www.arduino.cc/en/software/#app-lab-section) (pre-installed on the Uno Q in SBC mode, or install the desktop version on your PC). Click Import App and select the `.zip`. App Lab reads `app.yaml`, compiles the sketch for the STM32 MCU, deploys the WebUI Brick, and launches the application. The LED matrix will display the board's IP address -- open it in Chrome on any device on the same Wi-Fi network.
-
-For manual setup without App Lab: clone this repo to the Uno Q, flash `sketch/sketch.ino` via Arduino IDE 2+, ensure the Bricks SDK is installed, and run `python/main.py` on the Linux side.
-
-## First-Time Setup on a Fresh Board
-
-If this is a brand-new Uno Q that has never been connected to App Lab before, expect several update prompts before the demo runs. The order and outcome matter:
-
-**What App Lab will prompt you to update (and what to do):**
-
-| Prompt | What it updates | Recommended action | What happens if you skip |
-|--------|----------------|-------------------|-------------------------|
-| System firmware | Linux OS image on the QRB2210 MPU | **Accept** — this ensures Wi-Fi, Docker, and the Bricks runtime are current | Demo may work, but you risk kernel/driver incompatibilities with the WebUI Brick |
-| Arduino board core (Zephyr) | The Zephyr RTOS platform that runs sketches on the STM32 MCU | **Accept** — `arduino:zephyr` must match the version that `Arduino_RouterBridge 0.4.1` was compiled against | Sketch compilation will likely fail if the core is too old |
-| Board firmware (STM32 bootloader) | Low-level MCU bootloader | **Accept** — required for Bridge RPC to function correctly between MCU and MPU | Bridge.begin() may hang or fail silently |
-| Brick container updates | Docker images for the WebUI Brick and other App Lab services | **Accept** — the WebUI Brick serves `assets/index.html` and handles WebSocket messaging | The demo cannot start without the WebUI Brick container |
-
-**After accepting all updates:**
-
-1. The board will reboot (possibly more than once). Wait for the green power LED to stabilize — this can take 60-90 seconds on first boot after a firmware update.
-2. Connect the board to Wi-Fi if not already configured (App Lab > Settings > Network). The demo requires internet access to download MediaPipe (~4 MB) from cdn.jsdelivr.net on first load. After the first successful load, the browser caches the WASM engine and model.
-3. Import the demo `.zip` and let App Lab compile the sketch. Compilation takes ~30-60 seconds. The LED matrix will show a boot icon, then a checkmark, then scroll the board's IP address.
-4. Open the displayed IP address in Chrome on any device on the same Wi-Fi network. If you see a blank screen instead of the camera view, check the diagnostics panel (scroll down) — it will tell you which step failed (usually network or camera).
-
-**If something doesn't work after import:**
-
-- **Blank screen, no error**: The JavaScript module failed to load. Open the browser developer console (F12) and look for network errors. Usually means cdn.jsdelivr.net is unreachable — check Wi-Fi.
-- **"Cannot Load Face Detection Engine" overlay**: The board has no internet. Connect to Wi-Fi and hit the Retry button on the overlay.
-- **LED matrix stays on boot icon (never shows checkmark)**: Bridge.begin() is stuck. This usually means a core/firmware version mismatch. Go back to App Lab and accept all pending updates, then re-import.
-- **"No Camera Detected" overlay**: Plug a USB webcam into any USB-A port on the Uno Q. The built-in MIPI-CSI connector requires the Arduino Media Carrier board.
-- **Camera permission denied**: The browser on the Uno Q may block camera access by default. Check browser settings > Site permissions > Camera > Allow.
-- **MCU shows red LED but Python logs say "MCU ready"**: Normal — the MCU starts in red (idle/waiting). It turns green when the first face is detected.
-- **Sketch won't compile**: Make sure `arduino:zephyr` board core is installed and up to date. The sketch depends on `Arduino_RouterBridge 0.4.1` which requires specific Zephyr core versions.
-
-**Recovery if you declined updates:**
-
-If you said "No" to one or more update prompts and the demo doesn't work, you can trigger updates manually:
-1. Open App Lab settings
-2. Check for board/firmware/core updates
-3. Accept all pending updates
-4. Reboot the board
-5. Re-import the demo `.zip`
-
-The MCU sketch includes an acknowledgement-driven retry mechanism — it re-sends the `mcu_ready` signal to the Python side every 3 seconds for up to 3 minutes after boot. Once the MPU receives the signal, it sends `mpu_ack` back to the MCU, which immediately stops retrying. This means even if the MPU takes a long time to start (common after firmware updates that trigger a full OS reboot), the Bridge connection will be established automatically as soon as both sides are ready.
+</details>
 
 ## GPIO Placeholders
 
@@ -779,51 +802,95 @@ Designed to pull as few external resources as possible.
 
 **Replit preview only (app.py):** `flask` and `psutil`. Both excluded from the App Lab project via `.gitignore`.
 
-## What This Demo Showcases
+---
 
-### The Uno Q + App Lab pipeline
+<details>
+<summary><strong>Beyond Face Tracking: Industrial and Pro Applications</strong></summary>
 
-The core of this demo is the Uno Q's dual-processor architecture working end-to-end through App Lab:
+This demo is a proof-of-concept for the Uno Q's dual-processor architecture, but the pattern it demonstrates -- AI inference feeding into a Python coordinator on Debian, which drives real-time MCU actuation via Bridge RPC, all deployed through App Lab -- applies directly to [Arduino Pro](https://www.arduino.cc/pro/) industrial use cases. The Uno Q's Qualcomm QRB2210 + STM32U585 combination and App Lab workflow are built for exactly this kind of edge AI deployment.
 
-```
-Browser (web app)  ──WebSocket──→  Python on Debian (MPU)  ──Bridge RPC──→  STM32 MCU (Zephyr)
-     ↑                                    │                                      │
-  AI inference                     Coordinates data flow               LED matrix, RGB LED,
-  (face detection)                 Translates face data                GPIO, real-time control
-                                   to MCU commands
-```
+**Access control and visitor management.** Replace the LED matrix feedback with a relay on D7 to control a door strike or turnstile. When a new face appears, the MPU calls `flash_face(3)` on the MCU (rapid LED flash + buzzer alert), then subsequent face-present updates call `show_face()` which sets the relay pin HIGH. When the face disappears, `show_no_face()` drops the relay. Enable the relay by setting `enableRelay = true` in `sketch.ino`. Add Arduino Cloud logging (see below) to maintain a persistent visitor log with timestamps and screenshots.
 
-This is what makes the Uno Q different from a typical microcontroller or a typical SBC. Debian Linux and an STM32 are on the same Uno-hat-compatible PCB, communicating over a built-in RPC bridge, managed through App Lab and Bricks. The demo uses face detection as the AI workload, but the architecture — Python coordinator on Debian, Bridge providers, MCU actuation, WebSocket telemetry, App Lab deployment — is the same pattern you would use for object detection, sensor fusion, safety monitoring, or any other edge AI task.
+**Occupancy monitoring.** The persistent face count (`MAX_FACES = 4`) and tracking lifecycle (State Diagram 5) already count concurrent faces and track duration. Forward the face count to a building management system via the MPU's Wi-Fi to control HVAC, lighting, or elevator dispatch based on real-time occupancy.
 
-### App Lab Bricks — the Uno Q-native way to build
+**Safety compliance.** Swap the MediaPipe face model for an object detection model (the App Lab `arduino:object_detection` Brick uses YOLOX-Nano) to detect PPE, hard hats, safety vests, or missing guards. The MCU can drive a warning buzzer on D5 and a red status light via the RGB LED when non-compliance is detected.
 
-The `arduino:web_ui` Brick is what powers this demo. It serves the HTML/JS from `assets/`, provides WebSocket messaging between the browser and Python, and requires zero configuration beyond one line in `app.yaml`. Other Bricks extend the Uno Q with additional AI capabilities:
+**Quality inspection.** Mount a MIPI-CSI camera via the Media Carrier and point it at a production line. Use the same architecture -- vision model in the browser or via TFLite on the MPU, defect classification in Python, pass/fail signal to MCU GPIO for reject actuators. The Modulino Distance sensor can trigger inspection only when a part is at the correct position.
 
-| Brick | What it does | Model | Setup |
-|-------|-------------|-------|-------|
-| `arduino:web_ui` | Serves web content + WebSocket messaging | (no AI model) | **This demo uses it** |
-| `arduino:object_detection` | Detects objects in camera frames | YOLOX-Nano | Add one line to `app.yaml` |
-| `arduino:motion_detection` | Detects motion in video stream | Frame differencing | Add one line to `app.yaml` |
+**Operator presence detection.** In machinery safety, an operator must be present for a machine to run. The face tracking lifecycle's 800ms TTL (State Diagram 5) provides a presence/absence signal with sub-second latency. Wire D7 to a safety interlock relay. Face detected = machine enabled. Face lost for 800ms = machine stop. The MCU handles this at Zephyr real-time priority, independent of Linux process scheduling.
 
-To add a Brick, edit `app.yaml`:
+**Retail analytics and smart signage.** Count foot traffic, measure dwell time (tracked face duration), and estimate audience demographics. The multi-face tracking with persistent IDs means you can distinguish between a new visitor and a returning one within a session. Forward aggregated data to Arduino Cloud dashboards for store managers.
 
-```yaml
-bricks:
-  - arduino:web_ui
-  - arduino:object_detection
-```
+**Agriculture and environmental monitoring.** Replace the camera-based AI model with sensor-based Bricks. The Modulino Movement sensor detects equipment vibration. The Modulino Distance sensor monitors fill levels. The MCU drives actuators (pumps, valves, alerts) via GPIO. The same App Lab workflow, Bridge RPC, and Arduino Cloud integration apply -- only the Brick and the model change.
 
-Or add it through the App Lab UI. Each Brick deploys as a container on the QRB2210 and exposes an API to your Python code. Bricks are the Uno Q-native way to add AI capabilities — they use the full Debian Linux environment on the MPU, not just the browser.
+</details>
 
-### About the face detection inference source
+<details>
+<summary><strong>The App Lab and Bricks Experience</strong></summary>
 
-This demo uses Google MediaPipe Face Landmarker as its inference source. MediaPipe runs in the browser, not on the Uno Q's MPU. It was chosen for this demo because it provides zero-setup 478-point face landmarks that exercise the full Uno Q pipeline without requiring any model compilation, camera driver configuration, or additional Python dependencies on the board. Import the zip, open the browser, and the entire architecture — App Lab, Bricks, WebSocket, Python on Debian, Bridge RPC, STM32 MCU, LED matrix — is running end-to-end.
+The [Arduino App Lab](https://docs.arduino.cc/software/app-lab/) is a unified development environment that lets you combine Arduino sketches, Python scripts, and containerized Linux applications into a single workflow. You do not need to manually set up a toolchain, configure a cross-compiler, or wire up a web server -- App Lab and Bricks handle all of that.
 
-The inference source is deliberately swappable. The Python coordinator, Bridge providers, sketch, and MCU actuation layer do not depend on MediaPipe. Replace the browser-side face data with an App Lab Brick (object detection), an AI Hub TFLite model (on-device headless inference), or a custom Edge Impulse model — the MCU layer and App Lab workflow stay the same. That modularity is the architectural point of this demo.
+![Arduino App Lab](https://docs.arduino.cc/static/782ed8393ae066932b79a19418651a50/a6d36/app-lab.png)
+
+[Bricks](https://docs.arduino.cc/software/app-lab/tutorials/bricks) are code building blocks that abstract away complexity. This project uses a single Brick:
+
+- **`arduino:web_ui`** -- serves the contents of `assets/` as a web application and provides WebSocket messaging between the browser and `python/main.py`. The Brick injects WebSocket connectivity at runtime so the browser-side face data can reach the Python coordinator, which then forwards it to the MCU via Bridge RPC. No explicit socket code is needed in the HTML.
+
+Other Bricks are available for object detection, motion detection, speech recognition, and more. Each one deploys as a container on the QRB2210 and exposes an API to your Python application. Adding a Brick to this project is done in the App Lab UI:
+
+![Adding a Brick in App Lab](https://docs.arduino.cc/static/c4ba129c26c39fd5f37d2dfed7fee780/a6d36/add-brick-1.png)
+
+To install this demo, download the repository as a `.zip`, open [Arduino App Lab](https://www.arduino.cc/en/software/#app-lab-section), click Import App, and select the file. App Lab reads `app.yaml`, compiles the sketch, deploys the Brick, and launches the application. The LED matrix will display the device IP -- open that address in Chrome on any device on the same network.
+
+</details>
+
+<details>
+<summary><strong>Expanding the Hardware</strong></summary>
+
+The Uno Q is designed to be expanded. It retains the classic UNO form factor for shield compatibility, and adds two bottom-mounted high-speed connectors (JMEDIA and JMISC) for advanced peripherals.
+
+![UNO form factor](https://docs.arduino.cc/static/7d5a122fd16435d60983ecb96c2e490f/a6d36/uno-form-factor.png)
+
+**Carrier boards** snap onto the bottom connectors and expose interfaces that the UNO headers alone cannot provide:
+
+| Carrier | What it adds |
+|---------|-------------|
+| [UNO Media Carrier](https://docs.arduino.cc/hardware/uno-media-carrier/) | Dual MIPI-CSI camera connectors (Raspberry Pi compatible), MIPI-DSI display output, three 3.5 mm audio jacks (mic in, line out, ear out) |
+| [UNO Breakout Carrier](https://docs.arduino.cc/hardware/uno-breakout-carrier/) | Full breakout of JMEDIA and JMISC signals to 2.54 mm headers -- audio, I2C, SPI, UART, PWM, PSSI, GPIO for oscilloscope probing and custom circuits |
+
+**Qwiic / Modulino sensors** connect via the onboard Qwiic connector (I2C on Wire1) with no soldering. Some modules relevant to this project:
+
+| Modulino | Use with this demo |
+|----------|--------------------|
+| [Modulino Movement](https://docs.arduino.cc/hardware/modulino-movement/) | LSM6DSOX accelerometer/gyroscope -- detect if the Uno Q is being moved or tilted while tracking |
+| [Modulino Distance](https://docs.arduino.cc/hardware/modulino-distance/) | Time-of-flight distance sensor -- measure the viewer's distance from the camera |
+| [Modulino Buttons](https://docs.arduino.cc/hardware/modulino-buttons/) | Physical buttons -- cycle overlay presets or toggle tracking without touching the browser |
+
+The GPIO placeholder pins (D3-D7) in this demo are already wired for a relay, buzzer, NeoPixel strip, and two auxiliary outputs. Enabling them is a single flag change in `sketch.ino`.
+
+</details>
+
+<details>
+<summary><strong>Arduino Cloud Integration (Future)</strong></summary>
+
+The current demo runs entirely on the local network -- face tracking data stays in the browser and MCU, and everything resets when you reload the page. [Arduino Cloud](https://docs.arduino.cc/arduino-cloud/) could change that.
+
+With an Arduino Cloud integration, the Uno Q could push face detection events to a persistent cloud dashboard. Practical possibilities:
+
+- Log the timestamp and screenshot of each new face detection to a cloud Thing
+- Maintain a persistent face count across sessions (total faces detected, daily/weekly)
+- Display a live dashboard showing current tracking state, uptime, and system health remotely
+- Set up webhook notifications when a face is detected (or when no face has been seen for a threshold period)
+- Store historical data with [Arduino Cloud's built-in data export](https://docs.arduino.cc/arduino-cloud/features/iot-cloud-historical-data/) for analysis
+
+The Uno Q's built-in Wi-Fi and the WebUI Brick's `web_ui.expose_api()` pattern (REST endpoints alongside WebSocket) make this feasible without restructuring the app. The MPU-side Python code already has the face state dict and event hooks needed to push data upstream.
+
+</details>
 
 ---
 
-## Supplemental Reference: Advanced AI Model Options
+<details>
+<summary><strong>Supplemental Reference: Advanced AI Model Options</strong></summary>
 
 > **Note:** The sections below describe AI model workflows that are technically possible on the Uno Q's QRB2210 hardware but are **not part of this demo** and **not included in the App Lab zip**. They require additional software installation (tflite-runtime, OpenCV, numpy), a camera connected to the MPU, and in some cases cloud accounts (AI Hub, Edge Impulse). These workflows are included as reference material for developers who want to go beyond browser-side MediaPipe or App Lab Bricks. Some of these workflows are more naturally suited to the upcoming **Ventuno Q** (with its 40-TOPS NPU), where on-device inference becomes a primary use case rather than an optional advanced path.
 
@@ -837,7 +904,7 @@ The QRB2210 in the Uno Q has **no NPU** -- only CPU and Adreno 702 GPU. That mea
 
 **AI Hub workflow:**
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                        QUALCOMM AI HUB WORKFLOW                                 │
 │                     aihub.qualcomm.com/get-started                               │
@@ -873,7 +940,7 @@ The key insight: you can profile your model on the QRB2210 _in the cloud_ before
 
 The QRB2210 is Qualcomm's entry-tier IoT processor. Understanding where it sits in the product line helps you evaluate whether to upgrade to a higher-tier board for NPU-accelerated inference, or whether the QRB2210's CPU-only path is sufficient for your workload.
 
-```
+```text
 QUALCOMM DRAGONWING IoT PROCESSOR LINEUP
 
   Performance
@@ -928,7 +995,7 @@ For this demo, the QRB2210's CPU inference is more than adequate -- face detecti
 
 The `python/face_detector_mpu.py` module and `python/ai_hub_setup.py` helper implement an alternative path: face detection runs natively on the QRB2210 MPU using `tflite-runtime`, bypassing the browser entirely.
 
-```
+```text
 Camera (v4l2/USB) → OpenCV capture → TFLite inference (CPU) → face results
                                                                ├→ Bridge → MCU (LED/RGB)
                                                                └→ WebSocket → Browser (overlay)
@@ -942,7 +1009,7 @@ The diagram below shows how TFLite models execute on the QRB2210. The current co
   <img src="https://raw.githubusercontent.com/tensorflow/tensorflow/master/tensorflow/lite/g3doc/images/convert/workflow.svg" alt="TensorFlow Lite conversion and inference workflow" width="700">
 </p>
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                    TFLite RUNTIME ON QRB2210                             │
 ├──────────────────────────────────────────────────────────────────────────┤
@@ -1017,7 +1084,7 @@ Models on [Hugging Face Hub](https://huggingface.co/) that can be exported to TF
 
 **Hugging Face model discovery and deployment workflow:**
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                      HUGGING FACE → UNO Q PIPELINE                          │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -1068,7 +1135,7 @@ The main consideration is model size and architecture. The QRB2210 has no NPU, s
 
 **Edge Impulse end-to-end workflow:**
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                     EDGE IMPULSE STUDIO WORKFLOW                            │
 │                       edgeimpulse.com/studio                                │
@@ -1119,7 +1186,7 @@ Edge Impulse also has a direct Arduino library export path (Arduino Library > De
 
 ### All platforms at a glance
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                      AI MODEL ECOSYSTEM FOR UNO Q                               │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -1166,7 +1233,7 @@ Edge Impulse also has a direct Arduino library export path (Arduino Library > De
 
 ### The decision tree
 
-```
+```text
 Do you need face landmarks (478 points, expressions, iris)?
   YES → Browser-side MediaPipe (this demo's default)
   NO  → Continue below
@@ -1191,9 +1258,12 @@ Do you have your own training data?
 
 In all cases, the MCU layer (`sketch.ino`), the Bridge providers, the WebSocket events, and the Python coordinator structure remain the same. Only the inference source changes. This is the architectural advantage of the Uno Q's dual-processor design -- the AI model is decoupled from the real-time control layer.
 
+</details>
+
 ---
 
-## Further Reading: Where the Uno Q fits in Qualcomm's world
+<details>
+<summary><strong>Further Reading: Where the Uno Q fits in Qualcomm's world</strong></summary>
 
 > **Context section.** The material below is background reading about Qualcomm's product ecosystem, the upcoming Ventuno Q, and industry trends. None of it is required to use this demo — it's here to help you understand where the Uno Q sits in the bigger picture and where the platform is heading.
 
@@ -1201,34 +1271,34 @@ Qualcomm is not just a phone chip company. As of 2025-2026, Qualcomm silicon shi
 
 The Uno Q's QRB2210 sits at the entry tier of the Dragonwing IoT line — the most accessible on-ramp into Qualcomm's ecosystem.
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                    QUALCOMM SILICON — FULL MARKET MAP (2025-2026)                │
 │                                                                                 │
 │    SNAPDRAGON (Consumer/Commercial)         DRAGONWING (Industrial/Embedded)    │
 │                                                                                 │
 │  ┌───────────────────────────────────┐    ┌───────────────────────────────────┐  │
-│  │  📱 MOBILE                        │    │  🏭 IoT (Q Series)                │  │
+│  │  MOBILE                           │    │  IoT (Q Series)                   │  │
 │  │  Snapdragon 8 Elite (Gen 5)       │    │                                   │  │
-│  │  Snapdragon 7s / 6s / 4 Gen 3     │    │  QCS8550  (Q8) ─── High-end      │  │
-│  │  Powers: Samsung, OnePlus, Xiaomi │    │  QCS6490  (Q6) ─── Mid-tier       │  │
-│  │  Revenue: ~$27B/yr                │    │  QRB2210  (Q2) ─── Entry ◄── UNO Q│  │
+│  │  Snapdragon 7s / 6s / 4 Gen 3     │    │  QCS8550  (Q8) --- High-end      │  │
+│  │  Powers: Samsung, OnePlus, Xiaomi │    │  QCS6490  (Q6) --- Mid-tier       │  │
+│  │  Revenue: ~$27B/yr                │    │  QRB2210  (Q2) --- Entry <-- UNO Q│  │
 │  ├───────────────────────────────────┤    │                                   │  │
-│  │  💻 PC / COMPUTE                  │    │  Revenue: ~$6.6B/yr (all IoT)     │  │
+│  │  PC / COMPUTE                     │    │  Revenue: ~$6.6B/yr (all IoT)     │  │
 │  │  Snapdragon X2 Elite (Oryon Gen 3)│    ├───────────────────────────────────┤  │
-│  │  Snapdragon X Plus / X            │    │  🤖 ROBOTICS (IQ Series)          │  │
+│  │  Snapdragon X Plus / X            │    │  ROBOTICS (IQ Series)             │  │
 │  │  Up to ~80 TOPS NPU, CoPilot+ PCs│    │                                   │  │
-│  │  Powers: Dell, Lenovo, HP, Acer   │    │  IQ10 ─── Humanoids, industrial   │  │
+│  │  Powers: Dell, Lenovo, HP, Acer   │    │  IQ10 --- Humanoids, industrial   │  │
 │  ├───────────────────────────────────┤    │            AMRs (18-core, top-end)│  │
-│  │  🚗 AUTOMOTIVE                    │    │  IQ8  ─── Edge AI, robotics ◄──── │  │
+│  │  AUTOMOTIVE                       │    │  IQ8  --- Edge AI, robotics <---- │  │
 │  │  Snapdragon Cockpit Elite         │    │            VENTUNO Q              │  │
-│  │  Snapdragon Ride (ADAS)           │    │  IQ6  ─── Smart cameras, drones   │  │
+│  │  Snapdragon Ride (ADAS)           │    │  IQ6  --- Smart cameras, drones   │  │
 │  │  Digital Chassis platform         │    │                                   │  │
 │  │  Revenue: ~$4B/yr (+35% YoY)      │    │  Revenue: included in IoT total   │  │
 │  ├───────────────────────────────────┤    └───────────────────────────────────┘  │
-│  │  🥽 XR (AR/VR/MR)                 │                                          │
+│  │  XR (AR/VR/MR)                    │                                          │
 │  │  Snapdragon XR2+ Gen 2            │    ┌───────────────────────────────────┐  │
-│  │  Powers: Meta Quest 3, Samsung    │    │  📡 NETWORKING / INFRA             │  │
+│  │  Powers: Meta Quest 3, Samsung    │    │  NETWORKING / INFRA               │  │
 │  │  Galaxy XR, HTC Vive              │    │  5G RAN, Small Cells, Fixed       │  │
 │  │  Next: XR2 Gen 3 ("Project Matrix")│   │  Wireless Access, Wi-Fi 7         │  │
 │  └───────────────────────────────────┘    └───────────────────────────────────┘  │
@@ -1242,8 +1312,8 @@ The Uno Q's QRB2210 sits at the entry tier of the Dragonwing IoT line — the mo
 
 Qualcomm announced its intent to acquire Arduino in October 2025. The combined entity is executing a two-board hardware strategy pairing Qualcomm silicon with the Arduino form factor and developer ecosystem.
 
-```
-                              ARDUINO × QUALCOMM BOARDS
+```text
+                              ARDUINO x QUALCOMM BOARDS
 
     ┌──────────────────────────────────┐    ┌──────────────────────────────────┐
     │         ARDUINO UNO Q            │    │       ARDUINO VENTUNO Q          │
@@ -1274,11 +1344,11 @@ Qualcomm announced its intent to acquire Arduino in October 2025. The combined e
     └──────────────────────────────────┘    └──────────────────────────────────┘
 
     Both boards share:
-    ├── Dual-brain architecture (MPU + MCU via RPC Bridge)
-    ├── Arduino App Lab + Bricks ecosystem
-    ├── Arduino IDE / Cloud compatibility
-    ├── Python (MPU) + C++ Sketch (MCU) programming model
-    └── Same Bridge API pattern (providers, WebSocket, etc.)
+    |-- Dual-brain architecture (MPU + MCU via RPC Bridge)
+    |-- Arduino App Lab + Bricks ecosystem
+    |-- Arduino IDE / Cloud compatibility
+    |-- Python (MPU) + C++ Sketch (MCU) programming model
+    +-- Same Bridge API pattern (providers, WebSocket, etc.)
 ```
 
 _Ventuno Q specs are based on the Embedded World 2026 announcement and may change before final production. Verify current details at [arduino.cc](https://www.arduino.cc/)._
@@ -1287,17 +1357,17 @@ The Ventuno Q's ~40-TOPS NPU fundamentally changes what's possible. Models that 
 
 ---
 
-## The bigger picture: 2026-2027 and beyond
+### The bigger picture: 2026-2027 and beyond
 
 _This section includes forward-looking observations based on publicly announced products, published roadmaps, and industry trends as of early 2026. Timelines, specs, and market projections are subject to change._
 
 The Uno Q exists at the intersection of several converging trends. Understanding where each piece of the ecosystem is headed helps you evaluate what to build today and what to plan for.
 
-### Qualcomm's acquisition strategy — building the full stack
+#### Qualcomm's acquisition strategy — building the full stack
 
 Qualcomm has moved beyond selling chips. Through a series of acquisitions and announced deals, it is assembling every layer of the edge AI stack:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                 QUALCOMM'S FULL-STACK EDGE AI ECOSYSTEM                         │
 │                 Assembled through acquisitions (2024-2025)                       │
@@ -1325,9 +1395,9 @@ Qualcomm has moved beyond selling chips. Through a series of acquisitions and an
                               ┌──────────▼──────────┐
                               │ THE VISION:          │
                               │ One vendor for       │
-                              │ chip → model →       │
-                              │ OS → OTA → IDE →     │
-                              │ cloud → community    │
+                              │ chip -> model ->     │
+                              │ OS -> OTA -> IDE ->  │
+                              │ cloud -> community   │
                               └─────────────────────┘
 ```
 
@@ -1342,7 +1412,7 @@ This vertical integration means a developer building on the Uno Q today has a pa
 | **Deploy fleet** | FoundriesFactory + Arduino Cloud | OTA updates to 10 or 10,000 boards |
 | **Monitor** | Arduino Cloud | Dashboard, alerts, remote management |
 
-### Arduino App Lab and Bricks — what's coming
+#### Arduino App Lab and Bricks — what's coming
 
 App Lab has evolved rapidly through 2026. Key milestones:
 
@@ -1353,19 +1423,19 @@ App Lab has evolved rapidly through 2026. Key milestones:
 
 The Bricks system is Arduino's answer to containerized AI services. Each Brick is a Docker container that runs on the MPU and exposes an API. As the Ventuno Q ships with 40-TOPS NPU and 16 GB RAM, expect Bricks to expand into more demanding workloads — LLM inference, multi-model pipelines, real-time video analytics — that are impractical on the Uno Q's hardware.
 
-### Edge AI and on-device LLMs — the industry trajectory
+#### Edge AI and on-device LLMs — the industry trajectory
 
 The broader edge computing market is projected to grow from ~$25-30B (2026) to $250-350B by the early 2030s, driven by privacy requirements, latency constraints, and bandwidth costs that make cloud-only AI impractical for many applications.
 
 Key trends shaping the Uno Q's relevance:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                     EDGE AI LANDSCAPE — 2026 → 2028+                            │
+│                     EDGE AI LANDSCAPE — 2026 -> 2028+                           │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                 │
 │  TODAY (2026)                          NEAR FUTURE (2027-2028)                  │
-│  ─────────                             ────────────────────                     │
+│  ---------                             --------------------                    │
 │                                                                                 │
 │  NPU becoming standard                NPU in every tier of silicon              │
 │  in mid/high-end chips                 (even entry-level IoT will               │
@@ -1375,7 +1445,7 @@ Key trends shaping the Uno Q's relevance:
 │  running on phones/PCs                 plan, and act autonomously               │
 │  (Phi-3, Gemma, Llama 3.2)            without cloud round-trips                │
 │                                                                                 │
-│  Edge Impulse + AI Hub =               Unified train → optimize →              │
+│  Edge Impulse + AI Hub =               Unified train -> optimize ->             │
 │  separate tools, converging            deploy pipeline (one tool)              │
 │                                                                                 │
 │  FoundriesFactory for                  Zero-touch provisioning:                │
@@ -1399,11 +1469,11 @@ Key trends shaping the Uno Q's relevance:
 - **NPU is coming to every tier.** Future Q-series entry boards will likely include dedicated AI acceleration, making the CPU-only constraint of the QRB2210 a temporary limitation of this generation.
 - **Qualcomm's $1 trillion bet on physical AI** (their stated market projection for 2040) means continued investment in the Dragonwing line, the Arduino partnership, Edge Impulse integration, and FoundriesFactory — the ecosystem around the Uno Q will keep expanding.
 
-### Robotics and physical AI — where it's all going
+#### Robotics and physical AI — where it's all going
 
 Qualcomm's vision of "physical AI" — AI that perceives, decides, and acts in the real world — is the thread connecting all of these acquisitions. The IQ10 (18-core, top-tier robotics processor unveiled at CES 2026) targets full-size humanoid robots and industrial AMRs. The IQ8 (in the Ventuno Q) targets mid-tier robotics and edge AI. The Q2/QRB2210 (in the Uno Q) is the education and prototyping entry point.
 
-```
+```text
                          QUALCOMM PHYSICAL AI STACK
 
                     ┌─────────────────────────────┐
@@ -1427,17 +1497,19 @@ Qualcomm's vision of "physical AI" — AI that perceives, decides, and acts in t
                     ┌──────────────▼───────────────┐
                     │      SILICON                  │
                     │                               │
-                    │  IQ10 ── Humanoid/Industrial  │
-                    │  IQ8  ── Edge AI/Robotics     │
-                    │  IQ6  ── Smart Cameras        │
-                    │  Q8   ── High-end IoT         │
-                    │  Q6   ── Mid-tier IoT         │
-                    │  Q2   ── Entry IoT ◄── UNO Q  │
+                    │  IQ10 -- Humanoid/Industrial  │
+                    │  IQ8  -- Edge AI/Robotics     │
+                    │  IQ6  -- Smart Cameras        │
+                    │  Q8   -- High-end IoT         │
+                    │  Q6   -- Mid-tier IoT         │
+                    │  Q2   -- Entry IoT <-- UNO Q  │
                     │                               │
                     └─────────────────────────────┘
 ```
 
 The face detection demo running on this Uno Q is a small example of this larger arc. The same architectural pattern — camera input, AI inference, Bridge to MCU, real-time actuation — is how a warehouse robot processes its environment, how a smart camera identifies defects on a production line, and how a drone navigates autonomously. The Uno Q teaches the pattern at an accessible price point and complexity level.
+
+</details>
 
 ## Links
 

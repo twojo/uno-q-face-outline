@@ -540,15 +540,27 @@ Bridge.provide("mcu_status_report", on_mcu_status_report)
 def on_browser_connect(sid):
     """Push the current face state to a newly connected browser so
     its UI starts in sync with reality. Also log connection details."""
-    logger.info(f"[WS] Browser connected: {sid}")
-    logger.info(f"[WS] Sending initial state: {json.dumps(face_state)}")
-    ui.send_message("state_update", json.dumps(face_state))
+    try:
+        logger.info(f"[WS] Browser connected: {sid}")
+        logger.info(f"[WS] Sending initial state: {json.dumps(face_state)}")
+        ui.send_message("state_update", json.dumps(face_state))
 
-    safe_bridge_call("set_rgb", "blue")
-    time.sleep(0.3)
-    safe_bridge_call("set_rgb", "green")
+        safe_bridge_call("set_rgb", "blue")
+        time.sleep(0.3)
+        safe_bridge_call("set_rgb", "green")
+    except Exception as e:
+        logger.error(f"[WS] on_browser_connect error: {e}")
+
+def on_browser_disconnect(sid):
+    """Handle browser disconnection gracefully."""
+    try:
+        logger.info(f"[WS] Browser disconnected: {sid}")
+        safe_bridge_call("set_rgb", "red")
+    except Exception as e:
+        logger.error(f"[WS] on_browser_disconnect error: {e}")
 
 ui.on_connect(on_browser_connect)
+ui.on_disconnect(on_browser_disconnect)
 
 
 def on_face_data(sid, data):
@@ -709,6 +721,39 @@ def on_ai_toggle(sid, data):
 ui.on_message("ai_toggle", on_ai_toggle)
 
 
+# ── Graceful Shutdown ──
+
+import signal
+import sys
+
+_shutting_down = False
+
+def _shutdown_handler(signum, frame):
+    global _shutting_down
+    if _shutting_down:
+        return
+    _shutting_down = True
+    sig_name = signal.Signals(signum).name if hasattr(signal, 'Signals') else str(signum)
+    logger.info(f"[SHUTDOWN] Received {sig_name} — cleaning up...")
+    try:
+        if mpu_detector and mpu_detector.running:
+            mpu_detector.stop()
+            logger.info("[SHUTDOWN] On-device detector stopped")
+    except Exception as e:
+        logger.error(f"[SHUTDOWN] Error stopping detector: {e}")
+    try:
+        safe_bridge_call("set_rgb", "red")
+        safe_bridge_call("show_no_face")
+        logger.info("[SHUTDOWN] MCU reset to idle state")
+    except Exception as e:
+        logger.error(f"[SHUTDOWN] Error resetting MCU: {e}")
+    logger.info("[SHUTDOWN] Cleanup complete — exiting")
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, _shutdown_handler)
+signal.signal(signal.SIGINT, _shutdown_handler)
+
+
 # ── Start ──
 
 boot_total = time.time() - BOOT_START
@@ -719,4 +764,11 @@ else:
     logger.info("On-device AI: browser-only mode (no model/runtime)")
 logger.info("Starting WebUI brick — waiting for browser connections...")
 logger.info("")
-App.run()
+try:
+    App.run()
+except KeyboardInterrupt:
+    logger.info("[SHUTDOWN] KeyboardInterrupt — shutting down")
+    _shutdown_handler(signal.SIGINT, None)
+except Exception as e:
+    logger.error(f"[FATAL] App.run() raised: {e}")
+    _shutdown_handler(signal.SIGTERM, None)
