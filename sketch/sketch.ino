@@ -192,7 +192,7 @@ void serialKV(const char* key, unsigned long value) {
 // Provider callbacks run on a separate thread from loop(), so keep
 // them short and avoid blocking for extended periods.
 
-void scrollText(const String& text) {
+void scrollText(const char* text) {
     Serial.print("[MATRIX] Scrolling: ");
     Serial.println(text);
     matrix.beginDraw();
@@ -252,17 +252,18 @@ void flashFace(int count) {
     triggerBuzzer(1000, 100);
 }
 
-void showExpression(const String& expr) {
+void showExpression(const char* expr) {
     Serial.print("[EXPR] ");
     Serial.println(expr);
 
-    if (expr == "surprise") {
+    String e(expr);
+    if (e == "surprise") {
         matrix.loadFrame(frame_surprise);
         setRGB(false, false, true);
-    } else if (expr == "eyebrow") {
+    } else if (e == "eyebrow") {
         matrix.loadFrame(frame_eyebrows);
         setRGB(true, true, false);
-    } else if (expr == "smile") {
+    } else if (e == "smile") {
         matrix.loadFrame(frame_smiley);
         setRGB(false, true, false);
     } else {
@@ -271,41 +272,41 @@ void showExpression(const String& expr) {
     }
 }
 
-void setDeviceMode(const String& mode) {
+void setDeviceMode(const char* mode) {
     deviceMode = mode;
     Serial.print("[MODE] Device mode changed to: ");
     Serial.println(mode);
     String msg = " Mode: ";
     msg += mode;
     msg += " ";
-    scrollText(msg);
+    scrollText(msg.c_str());
 }
 
-// RGB control from Python — lets the MPU set arbitrary colors
-// for custom status indicators or alerts.
-void setRgbFromPython(const String& color) {
+void setRgbFromPython(const char* color) {
     Serial.print("[RGB] Set color: ");
     Serial.println(color);
-    if (color == "red")        setRGB(true, false, false);
-    else if (color == "green") setRGB(false, true, false);
-    else if (color == "blue")  setRGB(false, false, true);
-    else if (color == "yellow") setRGB(true, true, false);
-    else if (color == "cyan")  setRGB(false, true, true);
-    else if (color == "magenta") setRGB(true, false, true);
-    else if (color == "white") setRGB(true, true, true);
-    else if (color == "off")   rgbOff();
+    String c(color);
+    if (c == "red")        setRGB(true, false, false);
+    else if (c == "green") setRGB(false, true, false);
+    else if (c == "blue")  setRGB(false, false, true);
+    else if (c == "yellow") setRGB(true, true, false);
+    else if (c == "cyan")  setRGB(false, true, true);
+    else if (c == "magenta") setRGB(true, false, true);
+    else if (c == "white") setRGB(true, true, true);
+    else if (c == "off")   rgbOff();
 }
 
-// GPIO toggle from Python — lets the MPU control any placeholder pin.
-// payload format: "pin:state" e.g. "7:1" to set pin 7 HIGH
-void setGpioFromPython(const String& payload) {
-    int sep = payload.indexOf(':');
+void setGpioFromPython(const char* payload) {
+    Serial.print("[GPIO] Command: ");
+    Serial.println(payload);
+    String p(payload);
+    int sep = p.indexOf(':');
     if (sep < 0) {
         Serial.println("[GPIO] Bad format (expected pin:state)");
         return;
     }
-    int pin = payload.substring(0, sep).toInt();
-    int state = payload.substring(sep + 1).toInt();
+    int pin = p.substring(0, sep).toInt();
+    int state = p.substring(sep + 1).toInt();
 
     bool allowed = false;
     if (pin == PIN_RELAY   && enableRelay)  allowed = true;
@@ -330,7 +331,7 @@ void setGpioFromPython(const String& payload) {
 
 // Report MCU status back to the MPU — called periodically or on demand.
 // Returns a summary string with uptime, face count, memory, and pin states.
-void reportStatus(const String& unused) {
+void reportStatus() {
     unsigned long upSec = (millis() - bootTime) / 1000;
     String report = "";
     report += "uptime_s=" + String(upSec);
