@@ -1,6 +1,6 @@
 # Wojo's Uno Q Face Outline Demo
 
-Real-time face tracking for the Arduino Uno Q, built with the Arduino App Lab and Bricks SDK. Google MediaPipe Face Landmarker runs entirely in the browser -- 478 landmarks, up to 4 faces, zero cloud dependency for inference.
+A real-time face tracking demo showcasing the Arduino Uno Q's dual-processor architecture, Arduino App Lab, and Bricks SDK. Debian Linux and an STM32 microcontroller work together on the same Uno-hat-compatible board — the MPU runs Python and serves a web app, the MCU drives LEDs and GPIO in real time, and Arduino Bridge RPC ties them together. Face detection (478 landmarks, up to 4 faces) provides the AI workload that exercises this full pipeline.
 
 ## Why the Arduino Uno Q
 
@@ -10,7 +10,7 @@ The [Arduino Uno Q](https://docs.arduino.cc/hardware/uno-q/) is a dual-processor
 
 The QRB2210 MPU provides quad-core Cortex-A53 at 2.0 GHz, an Adreno 702 GPU, dual ISPs for camera input, Wi-Fi 5, Bluetooth 5.1, and 2 GB or 4 GB of LPDDR4 RAM. The STM32U585 MCU provides Cortex-M33 at 160 MHz with 2 MB flash and 786 KB SRAM, running deterministic real-time control. The two processors communicate through a built-in RPC library called Arduino Bridge.
 
-This face tracking demo uses all of it. The browser-side AI model runs on the QRB2210's CPU via WASM. The MCU drives the built-in 13x8 LED matrix and RGB LED to give physical feedback when a face is detected, lost, or changes expression. Bridge RPC ties them together so the Python coordinator on the MPU can forward face state from the browser to the MCU in real time.
+This demo exercises all of it. The QRB2210 MPU runs a Python coordinator and serves a web application through the `arduino:web_ui` App Lab Brick. The browser performs face detection and sends results back over WebSocket. The Python coordinator on Debian receives those results and forwards them to the STM32 MCU via Bridge RPC. The MCU drives the built-in 13x8 LED matrix and RGB LED to give physical feedback when a face is detected, lost, or changes expression — all running on Zephyr OS at real-time priority. The point is the architecture: Debian Linux, an STM32, and App Lab working together on a single Uno-hat-compatible board.
 
 ![UNO Q pinout](https://docs.arduino.cc/static/c4c115ced208022ab43299bda7ea661e/a6d36/Simple-pinout-ABX00162.png)
 
@@ -24,38 +24,49 @@ The Uno Q has four distinct compute blocks. Understanding which one handles whic
 
 | Block | Silicon | Clock | Role in this demo |
 |-------|---------|-------|-------------------|
-| **CPU** | Quad-core Arm Cortex-A53 (Kryo) | 2.0 GHz | Runs Debian Linux, Python coordinator, Docker containers for Bricks, and the Chromium browser that executes MediaPipe WASM face detection |
-| **GPU** | Qualcomm Adreno 702 | 845 MHz | OpenGL ES 3.1, Vulkan 1.1, OpenCL 2.0. Available for WebGL rendering and TFLite GPU delegate, but MediaPipe's GPU delegate produces spatially incorrect landmarks on Adreno -- so this demo defaults to CPU |
+| **CPU** | Quad-core Arm Cortex-A53 (Kryo) | 2.0 GHz | Runs Debian Linux, Python coordinator, Docker containers for App Lab Bricks, and the Chromium browser |
+| **GPU** | Qualcomm Adreno 702 | 845 MHz | OpenGL ES 3.1, Vulkan 1.1, OpenCL 2.0. Available for WebGL rendering and TFLite GPU delegate |
 | **DSP** | Dual-core Qualcomm Hexagon | -- | Handles audio signal processing and always-on low-power tasks. Not directly used by this demo, but available for keyword detection or audio-triggered face capture in future extensions |
 | **MCU** | STM32U585 Arm Cortex-M33 | 160 MHz | Runs Arduino sketch on Zephyr OS. Drives the 13x8 LED matrix, RGB LED, status LED, and GPIO pins. Receives commands from the MPU via Bridge RPC. No AI workload -- purely real-time I/O |
 
 The QRB2210 has **no dedicated TPU or NPU** (no TOPS rating). AI inference relies on the CPU and GPU through framework runtimes like TFLite and WASM. This is an intentional tradeoff -- the QRB2210 is Qualcomm's entry-tier IoT processor, optimized for low power and cost rather than raw ML throughput. For NPU-accelerated inference, Qualcomm's higher-tier processors (QCS6490, QCS8550) include the Hexagon Tensor Processor, but those are not available in the UNO form factor today.
 
-**How inference works in this demo:**
+**How the Uno Q pipeline works in this demo:**
 
 ```
-  Browser (Chromium on QRB2210)
-      |
-      v
-  MediaPipe Face Landmarker
-  loaded as WASM module
-      |
-      v
-  CPU delegate (default)          GPU delegate (fallback)
-  Cortex-A53 WASM execution       Adreno 702 via WebGL
-  ~5-15ms per frame               Available but produces
-  Always correct landmarks        spatially incorrect landmarks
-      |                           Auto-detected and rejected
-      v                           by 6-point validation
-  478 landmarks per face          (see State Diagram 9)
-  Up to 4 faces simultaneously
-      |
-      v
-  Canvas overlay rendering
-  (uses GPU for compositing)
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  BROWSER (Chromium, served by arduino:web_ui Brick)                 │
+  │                                                                     │
+  │  1. Camera capture (getUserMedia)                                   │
+  │  2. Face detection (WASM, ~5-15ms/frame on Cortex-A53)              │
+  │  3. 478 landmarks per face, up to 4 faces                          │
+  │  4. Canvas overlay rendering (GPU compositing)                      │
+  │                                                                     │
+  │  ── WebSocket ──→ sends face data to Python coordinator             │
+  └─────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  PYTHON COORDINATOR on Debian Linux (MPU, main.py)                  │
+  │                                                                     │
+  │  Receives face data → translates to MCU commands                   │
+  │  10 Bridge providers registered (show_face, set_rgb, etc.)          │
+  │                                                                     │
+  │  ── Bridge RPC ──→ sends commands to STM32 MCU                      │
+  └─────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  STM32U585 MCU on Zephyr OS (sketch.ino)                           │
+  │                                                                     │
+  │  LED matrix (13x8): face bitmap, IP address, expressions           │
+  │  RGB LED: face detected (green), idle (red), expressions (colors)  │
+  │  GPIO: relay, buzzer placeholders (D5, D7)                          │
+  │  Real-time priority, deterministic timing                          │
+  └─────────────────────────────────────────────────────────────────────┘
 ```
 
-The optional on-device TFLite path (AI Hub) runs on the MPU side, bypassing the browser entirely. It captures frames from a USB camera via OpenCV, runs `face_det_lite` INT8 through `tflite-runtime` on the CPU, and sends bounding boxes to the browser via WebSocket. This path is useful when the browser is on a remote device and you want detection to happen on the Uno Q itself.
+The inference source (currently browser-side face detection) is swappable. The same Python coordinator, Bridge providers, and MCU sketch work with any AI input — App Lab Bricks, TFLite models on the MPU, or custom models. See the "What This Demo Showcases" section for details on swappability.
 
 ## Performance Bottlenecks
 
@@ -85,7 +96,7 @@ Memory is rarely the bottleneck. The 2 GB variant runs this demo comfortably. Th
 
 ## Beyond Face Tracking: Industrial and Pro Applications
 
-This demo is a face tracking proof-of-concept, but the architecture it demonstrates -- browser-side AI inference, Python coordination, real-time MCU control, and Bridge RPC -- applies directly to [Arduino Pro](https://www.arduino.cc/pro/) industrial use cases. The Uno Q's dual-processor design and App Lab workflow are built for exactly this kind of edge AI deployment.
+This demo is a proof-of-concept for the Uno Q's dual-processor architecture, but the pattern it demonstrates -- AI inference feeding into a Python coordinator on Debian, which drives real-time MCU actuation via Bridge RPC, all deployed through App Lab -- applies directly to [Arduino Pro](https://www.arduino.cc/pro/) industrial use cases. The Uno Q's Qualcomm QRB2210 + STM32U585 combination and App Lab workflow are built for exactly this kind of edge AI deployment.
 
 **Access control and visitor management.** Replace the LED matrix feedback with a relay on D7 to control a door strike or turnstile. When a new face appears, the MPU calls `flash_face(3)` on the MCU (rapid LED flash + buzzer alert), then subsequent face-present updates call `show_face()` which sets the relay pin HIGH. When the face disappears, `show_no_face()` drops the relay. Enable the relay by setting `enableRelay = true` in `sketch.ino`. Add Arduino Cloud logging (see below) to maintain a persistent visitor log with timestamps and screenshots.
 
@@ -768,21 +779,31 @@ Designed to pull as few external resources as possible.
 
 **Replit preview only (app.py):** `flask` and `psutil`. Both excluded from the App Lab project via `.gitignore`.
 
-## Where AI Models Come From
+## What This Demo Showcases
 
-### What this demo uses: MediaPipe in the browser
+### The Uno Q + App Lab pipeline
 
-This demo runs Google MediaPipe Face Landmarker entirely in the browser via WASM. No AI models run on the Uno Q's MPU — the board serves the web page (via the `arduino:web_ui` Brick), receives face data over WebSocket, and drives the LED matrix and RGB LED through Bridge providers. This is the recommended approach for App Lab demos on the Uno Q because it requires zero model setup and works immediately after zip import.
+The core of this demo is the Uno Q's dual-processor architecture working end-to-end through App Lab:
 
-### What else works on the Uno Q today: App Lab Bricks
+```
+Browser (web app)  ──WebSocket──→  Python on Debian (MPU)  ──Bridge RPC──→  STM32 MCU (Zephyr)
+     ↑                                    │                                      │
+  AI inference                     Coordinates data flow               LED matrix, RGB LED,
+  (face detection)                 Translates face data                GPIO, real-time control
+                                   to MCU commands
+```
 
-App Lab Bricks are the other Uno Q-native AI option. These are containerized services that Arduino provides — you add one line to `app.yaml` and the Brick runs as a Docker container on the QRB2210:
+This is what makes the Uno Q different from a typical microcontroller or a typical SBC. Debian Linux and an STM32 are on the same Uno-hat-compatible PCB, communicating over a built-in RPC bridge, managed through App Lab and Bricks. The demo uses face detection as the AI workload, but the architecture — Python coordinator on Debian, Bridge providers, MCU actuation, WebSocket telemetry, App Lab deployment — is the same pattern you would use for object detection, sensor fusion, safety monitoring, or any other edge AI task.
 
-| Brick | What it does | Model | Uno Q compatible |
-|-------|-------------|-------|:---:|
-| `arduino:web_ui` | Serves web content + WebSocket messaging | (no AI model) | Yes (this demo uses it) |
-| `arduino:object_detection` | Detects objects in camera frames | YOLOX-Nano | Yes |
-| `arduino:motion_detection` | Detects motion in video stream | Frame differencing | Yes |
+### App Lab Bricks — the Uno Q-native way to build
+
+The `arduino:web_ui` Brick is what powers this demo. It serves the HTML/JS from `assets/`, provides WebSocket messaging between the browser and Python, and requires zero configuration beyond one line in `app.yaml`. Other Bricks extend the Uno Q with additional AI capabilities:
+
+| Brick | What it does | Model | Setup |
+|-------|-------------|-------|-------|
+| `arduino:web_ui` | Serves web content + WebSocket messaging | (no AI model) | **This demo uses it** |
+| `arduino:object_detection` | Detects objects in camera frames | YOLOX-Nano | Add one line to `app.yaml` |
+| `arduino:motion_detection` | Detects motion in video stream | Frame differencing | Add one line to `app.yaml` |
 
 To add a Brick, edit `app.yaml`:
 
@@ -792,16 +813,13 @@ bricks:
   - arduino:object_detection
 ```
 
-Or add it through the App Lab UI. Each Brick deploys as a container on the QRB2210 and exposes an API to your Python code. Bricks are the easiest way to add AI capabilities to an Uno Q project beyond browser-side MediaPipe.
+Or add it through the App Lab UI. Each Brick deploys as a container on the QRB2210 and exposes an API to your Python code. Bricks are the Uno Q-native way to add AI capabilities — they use the full Debian Linux environment on the MPU, not just the browser.
 
-### Why browser-side MediaPipe is the right choice for this demo
+### About the face detection inference source
 
-1. **Zero setup.** MediaPipe loads from a CDN -- no model compilation, no Python dependencies, no camera driver configuration. Import the zip, open the browser, and it works.
-2. **478 landmarks.** MediaPipe Face Landmarker provides full 3D face geometry (478 points), expression blendshapes, and iris tracking. No Brick or AI Hub model provides this level of face detail.
-3. **Browser handles the camera.** The browser's `getUserMedia` API manages camera permissions, resolution negotiation, and frame delivery. Running inference on the MPU side requires OpenCV, v4l2 camera access, and manual frame capture -- additional complexity that can fail on first boot.
-4. **Works without the Uno Q.** Because inference runs client-side, you can open the demo on any laptop or phone browser to evaluate it before deploying to hardware. The Replit preview uses this mode.
+This demo uses Google MediaPipe Face Landmarker as its inference source. MediaPipe runs in the browser, not on the Uno Q's MPU. It was chosen for this demo because it provides zero-setup 478-point face landmarks that exercise the full Uno Q pipeline without requiring any model compilation, camera driver configuration, or additional Python dependencies on the board. Import the zip, open the browser, and the entire architecture — App Lab, Bricks, WebSocket, Python on Debian, Bridge RPC, STM32 MCU, LED matrix — is running end-to-end.
 
-The trade-off is that browser-side inference ties the detection loop to the browser process. If the browser tab is closed, detection stops.
+The inference source is deliberately swappable. The Python coordinator, Bridge providers, sketch, and MCU actuation layer do not depend on MediaPipe. Replace the browser-side face data with an App Lab Brick (object detection), an AI Hub TFLite model (on-device headless inference), or a custom Edge Impulse model — the MCU layer and App Lab workflow stay the same. That modularity is the architectural point of this demo.
 
 ---
 
