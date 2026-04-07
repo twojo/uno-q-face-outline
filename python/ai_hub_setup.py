@@ -28,9 +28,10 @@ Usage:
   python ai_hub_setup.py --check
 
 Requirements (install on dev machine, NOT on Uno Q):
-  pip install qai-hub qai_hub_models numpy
+  pip install qai-hub qai-hub-models numpy
 
-On the Uno Q, only tflite-runtime and numpy are needed at runtime.
+On the Uno Q, only ai-edge-litert and numpy are needed at runtime.
+ai-edge-litert is Google's successor to tflite-runtime with Python 3.13+ support.
 The compile step runs in AI Hub's cloud — no local GPU required.
 """
 
@@ -96,6 +97,11 @@ def check_qai_models():
 
 def check_tflite_runtime():
     try:
+        from ai_edge_litert.interpreter import Interpreter
+        return True, "ai_edge_litert"
+    except ImportError:
+        pass
+    try:
         from tflite_runtime.interpreter import Interpreter
         return True, "tflite_runtime"
     except ImportError:
@@ -145,10 +151,10 @@ def cmd_check(args):
     print(f"  qai_hub installed:        {'✓' if has_hub else '✗ (pip install qai-hub)'}")
 
     has_models = check_qai_models()
-    print(f"  qai_hub_models installed: {'✓' if has_models else '✗ (pip install qai_hub_models)'}")
+    print(f"  qai_hub_models installed: {'✓' if has_models else '✗ (pip install qai-hub-models)'}")
 
     has_tflite, tflite_backend = check_tflite_runtime()
-    print(f"  TFLite runtime:           {'✓ (' + tflite_backend + ')' if has_tflite else '✗ (pip install tflite-runtime)'}")
+    print(f"  TFLite runtime:           {'✓ (' + tflite_backend + ')' if has_tflite else '✗ (pip install ai-edge-litert)'}")
 
     has_numpy, np_ver = check_numpy()
     print(f"  numpy installed:          {'✓ (' + np_ver + ')' if has_numpy else '✗ (pip install numpy)'}")
@@ -216,13 +222,13 @@ def cmd_compile(args):
     has_hub, hub = check_qai_hub()
     if not has_hub:
         print("ERROR: qai_hub not installed.")
-        print("  pip install qai-hub qai_hub_models")
+        print("  pip install qai-hub qai-hub-models")
         return 1
 
     has_models = check_qai_models()
     if not has_models:
         print("ERROR: qai_hub_models not installed.")
-        print("  pip install qai_hub_models")
+        print("  pip install qai-hub-models")
         return 1
 
     model_name = args.model
@@ -305,7 +311,7 @@ def cmd_compile(args):
 
         print("\nNext steps:")
         print(f"  1. Copy {output_path} to your Uno Q")
-        print(f"  2. On the Uno Q, install: pip install tflite-runtime numpy")
+        print(f"  2. On the Uno Q, install: pip install ai-edge-litert numpy")
         print(f"  3. The face detector will auto-discover the model on next boot")
         print()
         return 0
@@ -342,8 +348,8 @@ def cmd_download(args):
         print(f"  2. Click 'Download Model' → select TFLite runtime")
         print(f"  3. Save the .tflite file as: {MODELS_DIR / model_info['output_file']}")
         print()
-        print("Or install qai_hub for automated download:")
-        print("  pip install qai-hub qai_hub_models")
+        print("Or install qai-hub for automated download:")
+        print("  pip install qai-hub qai-hub-models")
         return 1
 
     print("NOTE: --download cannot produce a .tflite file directly.")
@@ -381,12 +387,14 @@ def cmd_verify(args):
     has_tflite, backend = check_tflite_runtime()
     if not has_tflite:
         print(f"\n  ⚠ Cannot verify inference — no TFLite runtime installed")
-        print(f"    Install: pip install tflite-runtime")
+        print(f"    Install: pip install ai-edge-litert")
         return 0
 
     print(f"\n  Loading with {backend}...")
     try:
-        if backend == "tflite_runtime":
+        if backend == "ai_edge_litert":
+            from ai_edge_litert.interpreter import Interpreter
+        elif backend == "tflite_runtime":
             from tflite_runtime.interpreter import Interpreter
         else:
             import tensorflow as tf

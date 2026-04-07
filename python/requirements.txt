@@ -7,10 +7,13 @@
 #     arduino.app_utils (Logger, App, Bridge)
 #     arduino.app_bricks.web_ui (WebUI)
 
-# On-device face detection via TFLite (required for MPU-side inference)
-tflite-runtime>=2.14.0
+# On-device face detection (required for MPU-side inference)
+#   ai-edge-litert is Google's successor to tflite-runtime,
+#   with full Python 3.13+ support (cp313 wheels available).
+ai-edge-litert>=1.0.1
 numpy>=1.24.0
 opencv-python-headless>=4.8.1.78
 
-# For the AI Hub compile helper (dev machine only, not Uno Q):
-#   pip install qai-hub qai_hub_models torch
+# Qualcomm AI Hub — model download, compile, and optimization
+qai-hub>=0.19.0
+qai-hub-models>=0.18.0

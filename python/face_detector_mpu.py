@@ -17,7 +17,7 @@ Architecture:
 
 Graceful degradation:
   - No .tflite model found  → skip, browser-only mode
-  - No tflite-runtime       → skip, browser-only mode
+  - No ai-edge-litert       → skip, browser-only mode
   - No camera device        → skip, browser-only mode
   - Model load failure      → skip with error log, browser-only mode
 
@@ -38,18 +38,24 @@ _tflite_backend = None
 _Interpreter = None
 
 try:
-    from tflite_runtime.interpreter import Interpreter
+    from ai_edge_litert.interpreter import Interpreter
     _Interpreter = Interpreter
     _tflite_available = True
-    _tflite_backend = "tflite_runtime"
+    _tflite_backend = "ai_edge_litert"
 except ImportError:
     try:
-        import tensorflow as tf
-        _Interpreter = tf.lite.Interpreter
+        from tflite_runtime.interpreter import Interpreter
+        _Interpreter = Interpreter
         _tflite_available = True
-        _tflite_backend = "tensorflow"
-    except (ImportError, AttributeError):
-        pass
+        _tflite_backend = "tflite_runtime"
+    except ImportError:
+        try:
+            import tensorflow as tf
+            _Interpreter = tf.lite.Interpreter
+            _tflite_available = True
+            _tflite_backend = "tensorflow"
+        except (ImportError, AttributeError):
+            pass
 
 _numpy_available = False
 _np = None
@@ -175,7 +181,7 @@ class FaceDetectorMPU:
 
         if not _tflite_available:
             self._status = "no_runtime"
-            self._status_detail = "TFLite runtime not installed (pip install tflite-runtime)"
+            self._status_detail = "TFLite runtime not installed (pip install ai-edge-litert)"
             self._log(f"[AI-HUB] ⚠ {self._status_detail}")
             return False
 
