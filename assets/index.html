@@ -1,10 +1,35 @@
 <!DOCTYPE html>
+<!--
+  Wojo's Uno Q Face Outline Demo — Browser Frontend
+
+  This single HTML file is the entire face tracking UI. It runs
+  client-side in the browser with no server-side AI processing.
+
+  External dependencies (all version-pinned):
+    1. Google Fonts (Inter, JetBrains Mono) — cosmetic, degrades to
+       system fonts if CDN is unreachable
+    2. @mediapipe/tasks-vision 0.10.3 from jsdelivr — WASM face
+       landmarker engine, pinned to avoid breaking API changes
+    3. face_landmarker.task model from Google Cloud Storage — the
+       trained model weights (~4MB, cached by the browser)
+
+  No other external code is loaded. Everything else — sanity
+  validation, device simulation, HUD overlays, expression detection,
+  pupil measurement — is implemented inline below.
+
+  On a real Uno Q, this file lives in assets/ and is served
+  automatically by the WebUI brick. On Replit, Flask serves a copy
+  from templates/ for live preview.
+-->
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
     <title>Wojo's Uno Q Face Outline Demo</title>
     <style>
+        /* Google Fonts — optional enhancement. If the CDN is down or the
+           device is air-gapped, the font-family fallbacks (sans-serif,
+           monospace) keep everything readable. */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -394,6 +419,9 @@
     </div>
 
 <script type="module">
+    // --- Diagnostics Panel ---
+    // Updates the status dots and detail text in the diagnostics panel.
+    // Each row (WebGL, WASM, Model, Camera, etc.) shows pass/fail/warn.
     function setDiag(id, status, info) {
         const row = document.getElementById(id);
         const dot = row.querySelector(".diag-dot");
@@ -411,6 +439,10 @@
         setDiag("dWebGL", "fail", "No WebGL — face detection requires a browser with WebGL");
     }
 
+    // --- MediaPipe Import ---
+    // Version 0.10.3 is pinned. This is the only external JS library.
+    // It provides face landmark detection (478 points per face) running
+    // entirely in WASM — no data leaves the browser.
     let FaceLandmarker, FilesetResolver, DrawingUtils;
     try {
         const mp = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/+esm");
@@ -434,6 +466,13 @@
         throw e;
     }
 
+    // --- Model Loading with Delegate Selection ---
+    // IMPORTANT: On the Uno Q (Adreno 650 GPU), the GPU delegate produces
+    // spatially incorrect landmarks — they pass count checks (478) but
+    // cluster in the wrong positions. We try CPU first because it gives
+    // reliable results on the QRB2210. If CPU fails, GPU is tried as
+    // a fallback. The sanity validator (below) will catch bad output
+    // from either delegate and auto-switch if needed.
     let fl = null;
     let usedDelegate = "none";
 
@@ -471,18 +510,21 @@
 
     document.getElementById("specDel").textContent = usedDelegate;
 
-    // ── Landmark Sanity Validator ────────────────────────────────
-    // Validates that detected landmarks are geometrically plausible.
-    // GPU delegates (e.g. Adreno 650) can produce landmarks that
-    // "look right" in count (478) but are spatially wrong — all
-    // clustered in one corner, or z-values wildly off. This catches
-    // that and auto-switches to CPU if needed.
+    // --- Landmark Sanity Validator ---
+    // Catches bad inference output that "looks right" in count (478
+    // landmarks) but is geometrically wrong — all points clustered in
+    // a corner, eyes overlapping, forehead below chin, etc. This is a
+    // known issue with GPU delegates on certain Qualcomm Adreno GPUs.
     //
-    // State Machine:
-    //   UNTESTED → (first face) → VALIDATING → (pass 3/5 frames) → PASSED
-    //                                        → (fail 3/5 frames) → FAILED → auto-switch → RECOVERING
-    //   RECOVERING → (reload CPU) → VALIDATING → PASSED
-    //   PASSED → (continuous monitoring every 60s) → PASSED | DEGRADED
+    // The validator uses a 5-frame voting window: if 3 out of 5 frames
+    // pass all 6 geometric checks, the delegate is trusted. If it
+    // fails, the validator auto-switches to the other delegate and
+    // re-validates. After passing, continuous monitoring runs every
+    // 60 seconds to catch gradual degradation.
+    //
+    // State flow:
+    //   UNTESTED → VALIDATING → PASSED (or FAILED → RECOVERING → re-validate)
+    //   PASSED → continuous checks → DEGRADED → self-heal → PASSED
 
     const SANITY = {
         state: "UNTESTED",
@@ -716,6 +758,13 @@
     ctx.fillText("CANVAS OK — WAITING FOR FACE...", cvs.width / 2, cvs.height / 2);
     setDiag("dCanvas", "ok", cvs.width + "x" + cvs.height + " — drawing test passed");
 
+    // --- System Stats Overlay ---
+    // Polls /api/stats every 2 seconds for CPU, RAM, IP, temperature,
+    // and disk metrics. Draws a small translucent panel in the top-right
+    // corner of the canvas with mini bar charts. Also updates a text
+    // ticker at the bottom center. Degrades gracefully to "SYS: offline"
+    // if the Flask backend is unreachable (e.g., on a real Uno Q where
+    // only the WebUI brick is running).
     const sysStats = {
         cpu_pct: 0, ram_pct: 0, ram_used_mb: 0, ram_total_mb: 0,
         ip: "...", disk_pct: 0, cpu_temp_c: null, py_rss_mb: 0,
@@ -810,6 +859,10 @@
         ctx.restore();
     }
 
+    // --- Multi-Face Rendering ---
+    // Each tracked face gets a unique color palette. Up to 4 faces
+    // are supported (matching MediaPipe's numFaces config). Colors
+    // cycle if more faces appear than palette entries.
     const FACE_COLORS = [
         { mesh: "rgba(120,160,255,0.55)", edge: "rgba(90,160,255,0.95)",  feat: "rgba(100,180,255,1)", iris: "rgba(0,220,255,1)",  dot: "rgba(90,160,255,0.7)",  tag: "#7799ff" },
         { mesh: "rgba(255,190,80,0.55)", edge: "rgba(255,190,70,0.95)", feat: "rgba(255,200,80,1)", iris: "rgba(255,220,90,1)",  dot: "rgba(255,190,70,0.7)", tag: "#ffbb44" },
@@ -817,6 +870,9 @@
         { mesh: "rgba(240,150,240,0.55)", edge: "rgba(240,140,240,0.95)", feat: "rgba(250,160,250,1)", iris: "rgba(255,170,255,1)", dot: "rgba(240,140,240,0.7)", tag: "#ee88ee" },
     ];
 
+    // Overlay presets control which drawing layers are active. Users
+    // pick a preset from the dropdown; each toggles mesh, outline,
+    // eyes, brows, lips, iris, dots, and emoji layers on or off.
     const PRESETS = {
         full:    { mesh:1, outline:1, eyes:1, brows:1, lips:1, iris:1, dots:1, emojis:1 },
         outline: { mesh:0, outline:1, eyes:1, brows:1, lips:1, iris:1, dots:0, emojis:1 },
@@ -829,6 +885,14 @@
     let L = { ...PRESETS.full };
     presetEl.onchange = () => { L = { ...PRESETS[presetEl.value] }; };
 
+    // --- Device Simulation ---
+    // Simulates hardware differences between the Uno Q (QRB2210) and
+    // the higher-end Ventuno (QCS6490). The Uno Q profile adds frame
+    // skipping and throttle delay to mimic its slower processing.
+    // Ventuno enables pupil diameter measurement (needs faster inference)
+    // and supports up to 4 simultaneous faces. These settings only
+    // affect the browser UI — the actual inference speed depends on
+    // the hardware running the browser.
     const DEVICES = {
         unoq: {
             name: "Uno Q",
@@ -895,6 +959,11 @@
     let hudBlinkL = 0, hudBlinkR = 0;
     let hudPupilL = 0, hudPupilR = 0;
 
+    // --- Pupil Diameter Measurement (Ventuno only) ---
+    // Estimates iris diameter in millimeters using the ratio of iris
+    // pixel radius to frame width, scaled by an assumed sensor FOV of
+    // ~280mm at the subject distance. This is approximate — accurate
+    // measurement would need camera intrinsics and depth data.
     function measureIris(lm, centerIdx, edgeIndices, vw, vh) {
         var c = lm[centerIdx];
         if (!c) return null;
@@ -939,6 +1008,11 @@
         ctx.restore();
     }
 
+    // --- Face Tracking & ID Assignment ---
+    // Maintains persistent face identities across frames using
+    // centroid-based nearest-neighbor matching. Each face gets a
+    // unique ID and color that persists as long as it stays in frame.
+    // Faces that disappear for more than TRACK_TTL ms are dropped.
     let trackedFaces = [];
     let nextFaceId = 1;
     const TRACK_TTL = 800;
@@ -1001,6 +1075,11 @@
         return matched;
     }
 
+    // --- Main Render Loop ---
+    // Runs via requestAnimationFrame (~60fps on desktop, throttled on
+    // Uno Q). Each frame: skip check → detect faces → draw overlays →
+    // update HUD. The loop is self-correcting: it skips frames when
+    // the video hasn't advanced and applies device-specific throttling.
     function draw() {
         requestAnimationFrame(draw);
 

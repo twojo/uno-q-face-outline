@@ -141,15 +141,43 @@ Uses Google MediaPipe Face Landmarker (478 landmarks, up to 4 faces) running ent
 | `state_update` | MPU → Browser | Full face state JSON |
 | `snapshot_ack` | MPU → Browser | `{"status": "ok", "timestamp": "..."}` |
 
-## Libraries Used
+## Dependencies
 
-| Library | Side | Purpose |
-|---------|------|---------|
-| `Arduino_RouterBridge` | MCU | Bridge RPC between MCU ↔ MPU |
-| `Arduino_LED_Matrix` | MCU | 12x8 LED matrix control |
-| `ArduinoGraphics` | MCU | Text scrolling, fonts, drawing |
-| `MediaPipe Face Landmarker` | Browser | 478-point face tracking (WASM) |
-| `WebUI Brick` | MPU | Serves frontend + WebSocket |
+This project is designed to pull as few external resources as possible.
+
+### MCU (sketch.ino) — Arduino Libraries
+
+| Library | Version | Notes |
+|---------|---------|-------|
+| `Arduino_RouterBridge` | 0.3.0 | Bridge RPC — the only library listed in sketch.yaml |
+| `Arduino_RPClite` | 0.2.1 | Transitive dep of RouterBridge |
+| `ArxContainer` | 0.7.0 | Transitive dep of RouterBridge |
+| `ArxTypeTraits` | 0.3.2 | Transitive dep of RouterBridge |
+| `DebugLog` | 0.8.4 | Transitive dep of RouterBridge |
+| `MsgPack` | 0.4.2 | Transitive dep of RouterBridge |
+| `Arduino_LED_Matrix` | (platform) | Bundled with arduino:zephyr, not in sketch.yaml |
+| `ArduinoGraphics` | (platform) | Bundled with arduino:zephyr, not in sketch.yaml |
+
+### MPU (python/main.py) — Python
+
+Only the App Lab SDK (`arduino.app_utils`, `arduino.app_bricks.web_ui`) and Python stdlib. **Zero pip packages.**
+
+### Browser (assets/index.html) — CDN Resources
+
+| Resource | CDN | Pinned | Required |
+|----------|-----|--------|----------|
+| `@mediapipe/tasks-vision` | jsdelivr | 0.10.3 | Yes — core face tracking engine |
+| `face_landmarker.task` model | Google Cloud Storage | float16/1 | Yes — trained model weights (~4MB, cached) |
+| Google Fonts (Inter, JetBrains Mono) | Google Fonts | latest | No — degrades to system fonts if offline |
+
+### Replit Preview Only (app.py)
+
+| Package | Notes |
+|---------|-------|
+| `flask` | Serves the HTML for Replit's web preview |
+| `psutil` | System stats overlay — stable, no version sensitivity |
+
+Both are excluded from the App Lab project via `.gitignore`.
 
 ## Delegate Selection & Landmark Validation
 

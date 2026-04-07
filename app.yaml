@@ -1,3 +1,9 @@
+# App Lab manifest for Wojo's Uno Q Face Outline Demo.
+# The web_ui brick serves everything in assets/ and provides WebSocket
+# messaging between the browser and python/main.py. No other bricks
+# are needed — face detection runs entirely in the browser via
+# MediaPipe WASM, so there are no server-side AI containers to pull.
+
 name: Wojo's Uno Q Face Outline Demo
 icon: "\U0001F916"
 description: >

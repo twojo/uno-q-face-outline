@@ -1,3 +1,13 @@
+# Arduino CLI sketch project file for the Uno Q MCU (STM32U585).
+#
+# Only Arduino_RouterBridge and its transitive dependencies are listed.
+# ArduinoGraphics and Arduino_LED_Matrix are bundled with the
+# arduino:zephyr platform and do not need separate entries.
+#
+# Version numbers here match the official app-bricks-examples as of
+# App Lab 0.6.0 / Bricks 0.8.x. Pinning versions avoids pulling
+# newer releases that might introduce breaking changes.
+
 profiles:
   default:
     platforms:
