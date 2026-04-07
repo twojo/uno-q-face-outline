@@ -98,77 +98,18 @@ unsigned long bootTime = 0;
 unsigned long faceCount = 0;
 unsigned long lastFaceTransition = 0;
 
-// ── 8x12 LED Matrix Bitmap Patterns ──
-// Each pattern is 8 rows by 12 columns (matching the built-in matrix).
-// 1 = LED on, 0 = LED off.
-// Design your own at: https://ledmatrix-editor.arduino.cc
+// ── 12x8 LED Matrix Bitmap Patterns (packed uint32_t format) ──
+// Each frame is 3 x uint32_t = 96 bits = 12 cols x 8 rows.
+// Bits are packed MSB-first, left-to-right, top-to-bottom.
+// The Zephyr platform's Arduino_LED_Matrix uses loadFrame() with
+// this format. Design your own at: https://ledmatrix-editor.arduino.cc
 
-const byte frame_smiley[8][12] = {
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0 },
-    { 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
-    { 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0 },
-    { 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
-};
-
-const byte frame_surprise[8][12] = {
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0 },
-    { 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0 },
-    { 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0 }
-};
-
-const byte frame_no_face[8][12] = {
-    { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
-    { 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0 },
-    { 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0 },
-    { 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0 },
-    { 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0 },
-    { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 }
-};
-
-const byte frame_blank[8][12] = {
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
-};
-
-const byte frame_eyebrows[8][12] = {
-    { 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0 },
-    { 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
-};
-
-// Checkmark bitmap — shown briefly when a setup step succeeds.
-const byte frame_check[8][12] = {
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0 },
-    { 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0 },
-    { 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0 }
-};
+const uint32_t frame_smiley[] = { 0x00030c30, 0xc0008014, 0x023fc000 };
+const uint32_t frame_surprise[] = { 0x00030c49, 0x230c0000, 0xf00900f0 };
+const uint32_t frame_no_face[] = { 0x80140220, 0x41081082, 0x04402801 };
+const uint32_t frame_blank[] = { 0x00000000, 0x00000000, 0x00000000 };
+const uint32_t frame_eyebrows[] = { 0x71c00030, 0xc30c0000, 0x003fc000 };
+const uint32_t frame_check[] = { 0x00000200, 0x40084102, 0x20140080 };
 
 // ── RGB LED Helpers ──
 // The Uno Q's RGB LED can be used for at-a-glance status:
@@ -278,7 +219,7 @@ void showFace() {
     digitalWrite(STATUS_LED, HIGH);
     setRGB(false, true, false);
     triggerRelay(true);
-    matrix.renderBitmap(frame_smiley, 8, 12);
+    matrix.loadFrame(frame_smiley);
 }
 
 void showNoFace() {
@@ -292,21 +233,21 @@ void showNoFace() {
     digitalWrite(STATUS_LED, LOW);
     setRGB(true, false, false);
     triggerRelay(false);
-    matrix.renderBitmap(frame_no_face, 8, 12);
+    matrix.loadFrame(frame_no_face);
 }
 
 void flashFace(int count) {
     Serial.print("[MATRIX] Flash face x");
     Serial.println(count);
     for (int i = 0; i < count; i++) {
-        matrix.renderBitmap(frame_smiley, 8, 12);
+        matrix.loadFrame(frame_smiley);
         setRGB(false, true, false);
         delay(80);
-        matrix.renderBitmap(frame_blank, 8, 12);
+        matrix.loadFrame(frame_blank);
         rgbOff();
         delay(80);
     }
-    matrix.renderBitmap(frame_smiley, 8, 12);
+    matrix.loadFrame(frame_smiley);
     setRGB(false, true, false);
     triggerBuzzer(1000, 100);
 }
@@ -316,13 +257,13 @@ void showExpression(const String& expr) {
     Serial.println(expr);
 
     if (expr == "surprise") {
-        matrix.renderBitmap(frame_surprise, 8, 12);
+        matrix.loadFrame(frame_surprise);
         setRGB(false, false, true);
     } else if (expr == "eyebrow") {
-        matrix.renderBitmap(frame_eyebrows, 8, 12);
+        matrix.loadFrame(frame_eyebrows);
         setRGB(true, true, false);
     } else if (expr == "smile") {
-        matrix.renderBitmap(frame_smiley, 8, 12);
+        matrix.loadFrame(frame_smiley);
         setRGB(false, true, false);
     } else {
         scrollText(expr);
@@ -468,6 +409,7 @@ void setup() {
     Serial.println("  Initializing 12x8 LED matrix...");
 
     matrix.begin();
+    matrix.setGrayscaleBits(3);
 
     // Show a brief splash. Font_4x6 fits "UNO" in 12 columns.
     matrix.beginDraw();
@@ -538,7 +480,7 @@ void setup() {
     Serial.println();
 
     // Show checkmark on matrix to indicate successful boot
-    matrix.renderBitmap(frame_check, 8, 12);
+    matrix.loadFrame(frame_check);
     delay(800);
 
     // Scroll final status on the matrix
