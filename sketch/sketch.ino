@@ -9,9 +9,11 @@
 // drives the built-in 13x8 LED matrix, RGB LEDs, and status LED to
 // reflect the current face tracking state.
 //
-// The MCU is entirely event-driven: all work happens inside Bridge
-// provider callbacks. loop() stays empty because there is nothing
-// to poll -- the Bridge handles its own thread for incoming calls.
+// The MCU is primarily event-driven: face/expression/RGB/GPIO work
+// happens inside Bridge provider callbacks. loop() handles two
+// housekeeping tasks: retrying the mcu_ready handshake until the MPU
+// acknowledges, and monitoring for MPU heartbeat timeout after an
+// active session begins.
 //
 // -- Startup Sequence --
 //   1. Serial init + banner with board specs
@@ -482,9 +484,13 @@ volatile bool mpuAcknowledged = false;
 // After handshake, if no Bridge call is received within this interval
 // the MCU assumes the MPU has crashed or disconnected and resets to
 // an error state. Any Bridge provider callback resets the timer.
+// The timeout only starts AFTER the first face-related Bridge call
+// (not immediately after mpu_ack), so idle periods without any face
+// traffic do not false-trigger the timeout.
 const unsigned long MPU_HEARTBEAT_TIMEOUT_MS = 30000;
 volatile unsigned long lastMpuActivity = 0;
 volatile bool mpuTimedOut = false;
+volatile bool sessionActive = false;
 
 // Error pattern: alternating X with blank (visual "lost connection")
 uint8_t frame_error[104] = {
@@ -500,6 +506,7 @@ uint8_t frame_error[104] = {
 
 void resetMpuHeartbeat() {
     lastMpuActivity = millis();
+    sessionActive = true;
     if (mpuTimedOut) {
         mpuTimedOut = false;
         Serial.println("[MCU] MPU heartbeat restored — resuming normal operation");
@@ -533,7 +540,7 @@ void loop() {
         }
     }
 
-    if (mpuAcknowledged && !mpuTimedOut &&
+    if (mpuAcknowledged && sessionActive && !mpuTimedOut &&
         (now - lastMpuActivity >= MPU_HEARTBEAT_TIMEOUT_MS)) {
         mpuTimedOut = true;
         Serial.print("[MCU] MPU heartbeat timeout (");
