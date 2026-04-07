@@ -517,11 +517,13 @@ if mpu_detector:
 
 def on_mcu_ready():
     """Called by the MCU sketch after Bridge.begin() completes on
-    the STM32 side. Confirms the two processors are communicating."""
+    the STM32 side. Confirms the two processors are communicating.
+    Sends mpu_ack back so the MCU stops retrying."""
     global _bridge_ready
     _bridge_ready = True
     logger.info("[BRIDGE] MCU ready — STM32 <-> QRB2210 link confirmed")
     logger.info("[BRIDGE] MCU can now receive scroll_text, show_face, etc.")
+    safe_bridge_call("mpu_ack")
 
 Bridge.provide("mcu_ready", on_mcu_ready)
 

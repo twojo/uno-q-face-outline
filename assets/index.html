@@ -341,7 +341,7 @@
         <div class="header-div"></div>
         <div class="header-title">
             <h1>Wojo's Uno Q Face Outline Demo</h1>
-            <span class="sub">Replit 2026.03</span>
+            <span class="sub">Face Demo v1.0</span>
         </div>
         <div class="header-links">
             <a href="https://store.arduino.cc/collections/arduino-days-promo/products/uno-q-4gb" target="_blank" rel="noopener" class="header-link" id="buyLink">Get Uno Q 4GB</a>
@@ -352,7 +352,7 @@
 
     <div class="specs-bar" id="specsBar">
         <div class="spec-chip"><span class="spec-k">SoC</span> <span class="spec-v">QRB2210</span></div>
-        <div class="spec-chip"><span class="spec-k">CPU</span> <span class="spec-v">Cortex-A53 1.4GHz</span></div>
+        <div class="spec-chip"><span class="spec-k">CPU</span> <span class="spec-v">Cortex-A53 2.0GHz</span></div>
         <div class="spec-chip"><span class="spec-k">MCU</span> <span class="spec-v">STM32U585</span></div>
         <div class="spec-chip"><span class="spec-k">RAM</span> <span class="spec-v">4GB</span></div>
         <div class="spec-chip"><span class="spec-k">Faces</span> <span class="spec-v" id="specFaces">4</span></div>
@@ -424,6 +424,25 @@
     </div>
 
 <script type="module">
+    function showFatalError(title, detail, suggestions) {
+        const viewport = document.querySelector(".viewport");
+        const errorDiv = document.createElement("div");
+        errorDiv.className = "camera-error";
+        let html = '<h2>' + title + '</h2>' +
+            '<p>' + detail + '</p>';
+        if (suggestions && suggestions.length > 0) {
+            html += '<ol class="cam-steps">';
+            for (const s of suggestions) html += '<li>' + s + '</li>';
+            html += '</ol>';
+        }
+        html += '<p style="margin-top:16px"><button onclick="location.reload()" style="' +
+            'padding:8px 24px;border:1px solid #60a5fa;border-radius:6px;background:transparent;' +
+            'color:#60a5fa;cursor:pointer;font-family:inherit;font-size:13px">Retry</button></p>';
+        errorDiv.innerHTML = html;
+        viewport.appendChild(errorDiv);
+        document.getElementById("diagPanel").style.display = "block";
+    }
+
     // --- Diagnostics Panel ---
     // Updates the status dots and detail text in the diagnostics panel.
     // Each row (WebGL, WASM, Model, Camera, etc.) shows pass/fail/warn.
@@ -457,6 +476,16 @@
         setDiag("dImport", "ok", "tasks-vision 0.10.3 loaded");
     } catch (e) {
         setDiag("dImport", "fail", e.message || String(e));
+        showFatalError(
+            "Cannot Load Face Detection Engine",
+            "MediaPipe could not be downloaded from cdn.jsdelivr.net. This usually means the board has no internet connection yet.",
+            [
+                "Make sure your Uno Q is connected to <strong>Wi-Fi</strong> (check App Lab > Settings > Network)",
+                "If you just updated the firmware, the board may need a moment to reconnect — wait 15-30 seconds and hit <strong>Retry</strong>",
+                "If behind a corporate firewall, ensure <strong>cdn.jsdelivr.net</strong> and <strong>storage.googleapis.com</strong> are allowed",
+                "Try opening <a href=\"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/+esm\" target=\"_blank\">this link</a> in a browser tab — if it fails, the network is the issue"
+            ]
+        );
         throw e;
     }
 
@@ -468,11 +497,20 @@
         setDiag("dWasm", "ok", "WASM fileset resolved");
     } catch (e) {
         setDiag("dWasm", "fail", e.message || String(e));
+        showFatalError(
+            "WASM Runtime Failed to Load",
+            "The MediaPipe WASM engine could not be initialized. This is usually a network or memory issue.",
+            [
+                "Check your <strong>internet connection</strong> — the WASM files are ~4 MB from cdn.jsdelivr.net",
+                "If on a 2 GB Uno Q, close other browser tabs to free memory",
+                "Wait a moment and hit <strong>Retry</strong> — the CDN may have been temporarily slow"
+            ]
+        );
         throw e;
     }
 
     // --- Model Loading with Delegate Selection ---
-    // IMPORTANT: On the Uno Q (Adreno 650 GPU), the GPU delegate produces
+    // IMPORTANT: On the Uno Q (Adreno 702 GPU), the GPU delegate produces
     // spatially incorrect landmarks — they pass count checks (478) but
     // cluster in the wrong positions. We try CPU first because it gives
     // reliable results on the QRB2210. If CPU fails, GPU is tried as
@@ -509,6 +547,17 @@
             setDiag("dModel", "ok", "Loaded with GPU delegate (CPU unavailable)");
         } catch (gpuErr) {
             setDiag("dModel", "fail", "Both CPU and GPU failed: " + gpuErr.message.slice(0, 80));
+            showFatalError(
+                "Face Detection Model Failed to Load",
+                "The face landmarker model (~4 MB) could not be downloaded or initialized with either CPU or GPU delegates.",
+                [
+                    "Check that <strong>storage.googleapis.com</strong> is reachable from this device",
+                    "If you just updated the board firmware, the network stack may still be initializing — wait 30 seconds and <strong>Retry</strong>",
+                    "On a 2 GB board, memory pressure can cause model allocation failures — close other tabs",
+                    "CPU error: " + cpuErr.message.slice(0, 60),
+                    "GPU error: " + gpuErr.message.slice(0, 60)
+                ]
+            );
             throw gpuErr;
         }
     }

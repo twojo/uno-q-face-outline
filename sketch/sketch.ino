@@ -438,11 +438,12 @@ void setup() {
     Bridge.provide("set_rgb",         setRgbFromPython);
     Bridge.provide("set_gpio",        setGpioFromPython);
     Bridge.provide("report_status",   reportStatus);
+    Bridge.provide("mpu_ack",         onMpuAck);
 
-    Serial.println("  9 providers registered:");
+    Serial.println("  10 providers registered:");
     Serial.println("    scroll_text, show_face, show_no_face,");
     Serial.println("    flash_face, show_expression, set_device_mode,");
-    Serial.println("    set_rgb, set_gpio, report_status");
+    Serial.println("    set_rgb, set_gpio, report_status, mpu_ack");
 
     // -- Boot Summary --
     serialSection("BOOT COMPLETE");
@@ -464,5 +465,32 @@ void setup() {
     setRGB(true, false, false);
 }
 
+unsigned long lastReadyRetry = 0;
+int readyRetries = 0;
+const int MAX_READY_RETRIES = 60;
+const unsigned long READY_RETRY_INTERVAL = 3000;
+volatile bool mpuAcknowledged = false;
+
+void onMpuAck() {
+    mpuAcknowledged = true;
+    Serial.println("[MCU] MPU acknowledged mcu_ready — retries stopped");
+    setRGB(false, true, false);
+    delay(200);
+    setRGB(true, false, false);
+}
+
 void loop() {
+    if (!mpuAcknowledged && readyRetries < MAX_READY_RETRIES) {
+        unsigned long now = millis();
+        if (now - lastReadyRetry >= READY_RETRY_INTERVAL) {
+            lastReadyRetry = now;
+            readyRetries++;
+            Serial.print("[MCU] Re-sending mcu_ready (retry ");
+            Serial.print(readyRetries);
+            Serial.print("/");
+            Serial.print(MAX_READY_RETRIES);
+            Serial.println(")");
+            Bridge.call("mcu_ready");
+        }
+    }
 }

@@ -671,6 +671,47 @@ Download this repository as a `.zip`. Open [Arduino App Lab](https://www.arduino
 
 For manual setup without App Lab: clone this repo to the Uno Q, flash `sketch/sketch.ino` via Arduino IDE 2+, ensure the Bricks SDK is installed, and run `python/main.py` on the Linux side.
 
+## First-Time Setup on a Fresh Board
+
+If this is a brand-new Uno Q that has never been connected to App Lab before, expect several update prompts before the demo runs. The order and outcome matter:
+
+**What App Lab will prompt you to update (and what to do):**
+
+| Prompt | What it updates | Recommended action | What happens if you skip |
+|--------|----------------|-------------------|-------------------------|
+| System firmware | Linux OS image on the QRB2210 MPU | **Accept** — this ensures Wi-Fi, Docker, and the Bricks runtime are current | Demo may work, but you risk kernel/driver incompatibilities with the WebUI Brick |
+| Arduino board core (Zephyr) | The Zephyr RTOS platform that runs sketches on the STM32 MCU | **Accept** — `arduino:zephyr` must match the version that `Arduino_RouterBridge 0.4.1` was compiled against | Sketch compilation will likely fail if the core is too old |
+| Board firmware (STM32 bootloader) | Low-level MCU bootloader | **Accept** — required for Bridge RPC to function correctly between MCU and MPU | Bridge.begin() may hang or fail silently |
+| Brick container updates | Docker images for the WebUI Brick and other App Lab services | **Accept** — the WebUI Brick serves `assets/index.html` and handles WebSocket messaging | The demo cannot start without the WebUI Brick container |
+
+**After accepting all updates:**
+
+1. The board will reboot (possibly more than once). Wait for the green power LED to stabilize — this can take 60-90 seconds on first boot after a firmware update.
+2. Connect the board to Wi-Fi if not already configured (App Lab > Settings > Network). The demo requires internet access to download MediaPipe (~4 MB) from cdn.jsdelivr.net on first load. After the first successful load, the browser caches the WASM engine and model.
+3. Import the demo `.zip` and let App Lab compile the sketch. Compilation takes ~30-60 seconds. The LED matrix will show a boot icon, then a checkmark, then scroll the board's IP address.
+4. Open the displayed IP address in Chrome on any device on the same Wi-Fi network. If you see a blank screen instead of the camera view, check the diagnostics panel (scroll down) — it will tell you which step failed (usually network or camera).
+
+**If something doesn't work after import:**
+
+- **Blank screen, no error**: The JavaScript module failed to load. Open the browser developer console (F12) and look for network errors. Usually means cdn.jsdelivr.net is unreachable — check Wi-Fi.
+- **"Cannot Load Face Detection Engine" overlay**: The board has no internet. Connect to Wi-Fi and hit the Retry button on the overlay.
+- **LED matrix stays on boot icon (never shows checkmark)**: Bridge.begin() is stuck. This usually means a core/firmware version mismatch. Go back to App Lab and accept all pending updates, then re-import.
+- **"No Camera Detected" overlay**: Plug a USB webcam into any USB-A port on the Uno Q. The built-in MIPI-CSI connector requires the Arduino Media Carrier board.
+- **Camera permission denied**: The browser on the Uno Q may block camera access by default. Check browser settings > Site permissions > Camera > Allow.
+- **MCU shows red LED but Python logs say "MCU ready"**: Normal — the MCU starts in red (idle/waiting). It turns green when the first face is detected.
+- **Sketch won't compile**: Make sure `arduino:zephyr` board core is installed and up to date. The sketch depends on `Arduino_RouterBridge 0.4.1` which requires specific Zephyr core versions.
+
+**Recovery if you declined updates:**
+
+If you said "No" to one or more update prompts and the demo doesn't work, you can trigger updates manually:
+1. Open App Lab settings
+2. Check for board/firmware/core updates
+3. Accept all pending updates
+4. Reboot the board
+5. Re-import the demo `.zip`
+
+The MCU sketch includes an acknowledgement-driven retry mechanism — it re-sends the `mcu_ready` signal to the Python side every 3 seconds for up to 3 minutes after boot. Once the MPU receives the signal, it sends `mpu_ack` back to the MCU, which immediately stops retrying. This means even if the MPU takes a long time to start (common after firmware updates that trigger a full OS reboot), the Bridge connection will be established automatically as soon as both sides are ready.
+
 ## GPIO Placeholders
 
 Pre-configured pins for extending the demo. All set as OUTPUT at boot but remain LOW unless their enable flag is set to `true` in `sketch.ino`. The MCU enforces a pin allowlist -- only D3-D7 can be toggled, and only when their enable flag is `true`. Requests for other pins or disabled pins are blocked and logged.
