@@ -1150,7 +1150,82 @@ A comprehensive reference covering GenAI, peripherals, GPIO, debugging, and appl
 5. **Camera streaming** — FFmpeg with `libx264 baseline` profile + `zerolatency` tuning gives lowest latency for UDP streaming
 6. **SPI display** — ST7789 via raw SPI at 10MHz works reliably; custom 5x7 font bitmaps in PROGMEM
 
-### Data Flow Comparison (All Three Projects)
+### SafeGuard AI (dharmsaliya/safeguard-ai)
+
+An intelligent fall detection and emergency response system using a Modulino Movement sensor (LSM6DSOX accelerometer/gyroscope) with TinyML inference on the Uno Q. Features an adaptive calibration UI and Twilio emergency call integration.
+
+```
+  MCU (STM32U585)                MPU (QRB2210)               Browser (WebUI)
+  ──────────────                 ─────────────                ───────────────
+  LSM6DSOX polling at 100Hz      TFLite INT8 inference        Chart.js real-time plot
+  Bridge.notify() fire-and-       Sliding window (200 samples) Calibrate button → POST
+  forget to MPU (no response)    Jerk/magnitude features       Alarm overlay + countdown
+  Modulino I2C on Wire1          web_ui.expose_api() REST      QR code medical report
+  No Bridge.provide() needed     web_ui.send_message() WS      Audio siren (Web Audio)
+                                 Twilio API (urllib, no lib)    localStorage history
+```
+
+**Key patterns — new to this reference:**
+
+| Pattern | SafeGuard Implementation | Relevance to Our Project |
+|---------|------------------------|-------------------------|
+| `Bridge.notify()` | MCU pushes sensor data fire-and-forget to MPU — no response needed | Alternative to `Bridge.call()`; we could use `notify` for face telemetry MCU→MPU |
+| `web_ui.expose_api()` | REST endpoints alongside WebSocket: `expose_api("GET", "/status", fn)`, `expose_api("POST", "/calibrate", fn)` | We could expose calibration/config endpoints for our overlay presets |
+| `App.run()` without loop | No `user_loop` parameter — all logic driven by `Bridge.provide()` callbacks | Validates our `App.run(user_loop=loop)` pattern; both approaches work |
+| TFLite INT8 quantized | `ai_edge_litert.interpreter` with int8 quantization + scale/zero_point | Same pattern as our `face_detector_mpu.py` TFLite loading |
+| Adaptive calibration | 15s learning phase → activity profiling → threshold adjustment (0.45–0.85) | Demonstrates clean UI-driven calibration flow with progress feedback |
+| Modulino I2C | `LSM6DSOXClass myIMU(Wire1, 0x6A)` — Modulino sensors use Wire1 not Wire | Hardware pattern for Qwiic/I2C peripherals on Uno Q |
+| Alarm overlay | Full-screen overlay with countdown timer, cancel button, siren audio, QR code | Clean UI pattern for critical alerts with user dismissal |
+| Multi-page WebUI | `index.html` + `history.html` sharing `style.css` — localStorage for persistence | Shows multi-page apps work in WebUI Brick's asset serving |
+
+**Architecture highlights:**
+
+```
+  ┌───────────────────────────────────────────────────────────────┐
+  │  SafeGuard AI — 3-Layer Architecture                         │
+  ├───────────────────────────────────────────────────────────────┤
+  │                                                               │
+  │  sketch.ino (MCU):                                            │
+  │    ┌─────────────┐     Bridge.notify()     ┌──────────────┐  │
+  │    │ LSM6DSOX    │ ───────────────────────→ │ main.py      │  │
+  │    │ 100Hz poll  │  "record_sensor_movement"│ (MPU)        │  │
+  │    │ millis()    │  7 values: ax,ay,az,     │              │  │
+  │    │ guard       │  gx,gy,gz,temp           │              │  │
+  │    └─────────────┘                          └──────┬───────┘  │
+  │                                                    │          │
+  │  main.py (MPU):                                    ▼          │
+  │    ┌──────────────────────────────────────────────────────┐   │
+  │    │ Bridge.provide("record_sensor_movement", handler)     │   │
+  │    │   └→ process_new_sample() → jerk, magnitude features │   │
+  │    │   └→ raw_buffer.append() (deque, maxlen=200)         │   │
+  │    │   └→ fall_detector.predict() every 10 samples        │   │
+  │    │       └→ if prob > threshold → Twilio call + WS alert│   │
+  │    │   └→ web_ui.send_message('sample', {...})            │   │
+  │    │   └→ web_ui.send_message('movement', {...})          │   │
+  │    │                                                       │   │
+  │    │ web_ui.expose_api("GET", "/status", _get_status)     │   │
+  │    │ web_ui.expose_api("POST", "/calibrate", _start_cal)  │   │
+  │    └──────────────────────────────────────────────────────┘   │
+  │                                                               │
+  │  assets/ (Browser WebUI):                                     │
+  │    ┌──────────────────────────────────────────────────────┐   │
+  │    │ socket.on('movement') → status + alarm trigger       │   │
+  │    │ socket.on('sample') → Chart.js update                │   │
+  │    │ socket.on('calibration_done') → profile update       │   │
+  │    │ fetch('/calibrate', POST) → start calibration        │   │
+  │    │ localStorage → incident history persistence          │   │
+  │    └──────────────────────────────────────────────────────┘   │
+  └───────────────────────────────────────────────────────────────┘
+```
+
+**TinyML training pipeline** (in `tinyml/` directory):
+- Feature engineering: 12 features from 6-axis IMU (3 acc + 3 gyro + altitude delta + 2 magnitudes + 3 jerks)
+- Sliding window: 200 samples at 100Hz = 2-second windows, 50% overlap stride
+- Model: Conv1D (32→64→64) + GlobalAvgPool + Dense(32) + softmax(2) — binary fall/no-fall
+- Quantization: Full INT8 via TFLite converter with representative dataset calibration
+- Deployment: Single `.tflite` file bundled in `python/` directory
+
+### Data Flow Comparison (All Four Projects)
 
 ```
   ┌────────────────────────────────────────────────────────────────────┐
@@ -1174,6 +1249,11 @@ A comprehensive reference covering GenAI, peripherals, GPIO, debugging, and appl
   │                                                           (SPI)    │
   │    Direction: Container-first, bridge to display                    │
   │                                                                    │
+  │  SafeGuard AI:                                                     │
+  │    Sensor → MCU notify() → MPU TFLite → WS → Browser alarm        │
+  │                                       → Twilio API (emergency)     │
+  │    Direction: Hardware-push, AI-on-MPU, dual output                 │
+  │                                                                    │
   └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1187,3 +1267,4 @@ A comprehensive reference covering GenAI, peripherals, GPIO, debugging, and appl
 - Qualcomm QRB2210 Dragonwing SoC
 - [DIY-ECG Uno Q](https://github.com/diy-ecg/diy-ecg-uno-Q) — ECG acquisition reference
 - [Arduino Uno Q Projects](https://github.com/MartinsRepo/Arduino-Uno-Q-Projects) — Community reference collection
+- [SafeGuard AI](https://github.com/dharmsaliya/safeguard-ai) — Fall detection with Modulino Movement + TinyML reference
