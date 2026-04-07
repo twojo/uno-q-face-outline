@@ -20,11 +20,15 @@ For full pinout details, datasheet, schematics, and CAD files, see the [official
 
 The [Arduino App Lab](https://docs.arduino.cc/software/app-lab/) is a unified development environment that lets you combine Arduino sketches, Python scripts, and containerized Linux applications into a single workflow. You do not need to manually set up a toolchain, configure a cross-compiler, or wire up a web server -- App Lab and Bricks handle all of that.
 
+![Arduino App Lab](https://docs.arduino.cc/static/782ed8393ae066932b79a19418651a50/a6d36/app-lab.png)
+
 [Bricks](https://docs.arduino.cc/software/app-lab/tutorials/bricks) are code building blocks that abstract away complexity. This project uses a single Brick:
 
 - **`arduino:web_ui`** -- serves the contents of `assets/` as a web application and provides WebSocket messaging between the browser and `python/main.py`. The Brick injects WebSocket connectivity at runtime so the browser-side face data can reach the Python coordinator, which then forwards it to the MCU via Bridge RPC. No explicit socket code is needed in the HTML.
 
-Other Bricks are available for object detection, motion detection, speech recognition, and more. Each one deploys as a container on the QRB2210 and exposes an API to your Python application. Adding a Brick to this project would be as simple as editing `app.yaml` and importing it in `python/main.py`.
+Other Bricks are available for object detection, motion detection, speech recognition, and more. Each one deploys as a container on the QRB2210 and exposes an API to your Python application. Adding a Brick to this project is done in the App Lab UI:
+
+![Adding a Brick in App Lab](https://docs.arduino.cc/static/c4ba129c26c39fd5f37d2dfed7fee780/a6d36/add-brick-1.png)
 
 To install this demo, download the repository as a `.zip`, open [Arduino App Lab](https://www.arduino.cc/en/software/#app-lab-section), click Import App, and select the file. App Lab reads `app.yaml`, compiles the sketch, deploys the Brick, and launches the application. The LED matrix will display the device IP -- open that address in Chrome on any device on the same network.
 
@@ -568,7 +572,15 @@ static/                   Replit static assets
 | Connection | [USB-C multiport adapter](https://store.arduino.cc/products/usb-c-to-hdmi-multiport-adapter-with-ethernet-and-usb-hub) with external power delivery |
 | Browser | Chrome or Edge on any device on the same network |
 
+The board can be powered via USB-C (5V 3A), the 5V pin, or VIN (7-24V):
+
+![UNO Q power options](https://docs.arduino.cc/static/72456f6873252eb705cfd28538166e8a/a6d36/power-options-3.png)
+
 ## Installation
+
+App Lab runs in two modes: directly on the Uno Q as a single-board computer (SBC mode, recommended with the 4 GB variant), or hosted on your PC with the board connected via USB-C.
+
+![SBC and PC hosted modes](https://docs.arduino.cc/static/a149a5e406178f25376d784b1d615e6d/a6d36/modes-2.png)
 
 Download this repository as a `.zip`. Open [Arduino App Lab](https://www.arduino.cc/en/software/#app-lab-section) (pre-installed on the Uno Q in SBC mode, or install the desktop version on your PC). Click Import App and select the `.zip`. App Lab reads `app.yaml`, compiles the sketch for the STM32 MCU, deploys the WebUI Brick, and launches the application. The LED matrix will display the board's IP address -- open it in Chrome on any device on the same Wi-Fi network.
 
