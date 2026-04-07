@@ -768,12 +768,58 @@ Designed to pull as few external resources as possible.
 
 **Replit preview only (app.py):** `flask` and `psutil`. Both excluded from the App Lab project via `.gitignore`.
 
-## On-Device AI Hub (Optional)
+## Where AI Models Come From: AI Hub, Bricks, Hugging Face, and Custom Models
 
-The QRB2210 is a quad-core Cortex-A53 at 2.0 GHz with an Adreno 702 GPU but no Hexagon NPU. TFLite runs on CPU/GPU only. Expected: `face_det_lite` INT8 at ~5-15ms/frame (CPU), with camera capture at 640x480 15 FPS as the practical bottleneck. For NPU-accelerated inference, consider the QCS6490 or QCS8550 (higher-tier Qualcomm boards with Hexagon HTP).
+This demo uses Google MediaPipe in the browser, but the Uno Q can run models from many different sources. Understanding which source to use -- and why -- depends on where you want inference to happen, how much optimization you need, and whether you want to bring your own model.
+
+### What is Qualcomm AI Hub?
+
+[Qualcomm AI Hub](https://aihub.qualcomm.com/) is a cloud service that takes pre-trained AI models (PyTorch, ONNX, TensorFlow) and compiles them into optimized runtimes for specific Qualcomm chipsets. You upload a model, select a target device (like the QRB2210), and AI Hub returns a `.tflite`, `.dlc`, or `.bin` file that has been profiled for that exact silicon. Quantization (INT8, INT16) is available as an option during compilation -- it is not automatic, but AI Hub makes it straightforward by handling calibration and conversion in the cloud.
+
+A standard TFLite model already benefits from TFLite's built-in optimized kernels and XNNPACK delegate. AI Hub goes further by applying device-specific operator fusion, memory layout tuning, and optional quantization that can improve inference time significantly -- the exact speedup depends on the model architecture, input size, and workload. For boards with a Hexagon NPU (QCS6490, QCS8550), AI Hub can also compile models that run on the DSP/NPU rather than the CPU, which typically brings much larger speedups.
+
+The QRB2210 in the Uno Q has **no NPU** -- only CPU and Adreno 702 GPU. That means AI Hub's main value for this board is operator fusion and optional quantization, not NPU offloading. You can still see meaningful improvements (the included `ai_hub_setup.py` helper supports `--quantize` for INT8 quantization), but you are not getting the dramatic NPU-accelerated inference that higher-tier Qualcomm boards offer.
+
+### Why this demo uses browser-side MediaPipe instead of AI Hub
+
+This demo defaults to Google MediaPipe running in the browser via WASM for several reasons:
+
+1. **Zero setup.** MediaPipe loads from a CDN -- no model compilation, no Python dependencies, no camera driver configuration. Import the zip, open the browser, and it works.
+2. **478 landmarks.** MediaPipe Face Landmarker provides full 3D face geometry (478 points), expression blendshapes, and iris tracking. The AI Hub `face_det_lite` model only provides bounding boxes -- no landmarks, no expressions, no pupil data.
+3. **Browser handles the camera.** The browser's `getUserMedia` API manages camera permissions, resolution negotiation, and frame delivery. Running inference on the MPU side requires OpenCV, v4l2 camera access, and manual frame capture -- additional complexity that can fail on first boot.
+4. **Works without the Uno Q.** Because inference runs client-side, you can open the demo on any laptop or phone browser to evaluate it before deploying to hardware. The Replit preview uses this mode.
+
+The trade-off is that browser-side inference ties the detection loop to the browser process. If the browser tab is closed, detection stops. The on-device AI Hub path (below) runs headless on the MPU, independent of any browser connection.
+
+### On-device inference via AI Hub (optional)
+
+The `python/face_detector_mpu.py` module and `python/ai_hub_setup.py` helper implement an alternative path: face detection runs natively on the QRB2210 MPU using `tflite-runtime`, bypassing the browser entirely.
+
+```
+Camera (v4l2/USB) → OpenCV capture → TFLite inference (CPU) → face results
+                                                               ├→ Bridge → MCU (LED/RGB)
+                                                               └→ WebSocket → Browser (overlay)
+```
+
+This path is useful when:
+- You want detection to run headless (no browser open)
+- The browser is on a remote device and you want to minimize latency
+- You are building a production system that cannot depend on a browser tab
+
+**Hardware constraints on the QRB2210:**
+
+| Spec | Value | Impact |
+|------|-------|--------|
+| CPU | Cortex-A53 @ 2.0 GHz (4 cores) | TFLite runs here. INT8 face_det_lite: ~5-15ms/frame |
+| GPU | Adreno 702 @ 845 MHz | TFLite GPU delegate available but slower than CPU for small models. MediaPipe GPU delegate produces incorrect landmarks |
+| NPU/TPU | None (0 TOPS) | No hardware neural network accelerator. This is an entry-tier IoT SoC |
+| Camera | USB (UVC) or MIPI-CSI via Media Carrier | 640x480 @ 15 FPS is the practical ceiling for USB webcams. MIPI-CSI supports higher resolution |
+| RAM | 2 GB or 4 GB LPDDR4 | Model + OpenCV + TFLite runtime uses ~80-120 MB |
+
+**Setup:**
 
 ```bash
-# On your dev machine -- compile model for QRB2210
+# On your dev machine -- compile model for QRB2210 via AI Hub cloud
 pip install qai-hub qai_hub_models torch
 qai-hub configure --api_token YOUR_TOKEN
 python python/ai_hub_setup.py --compile --model face_det_lite --device QRB2210
@@ -784,10 +830,102 @@ scp python/models/face_det_lite.tflite unoq:~/face-demo/python/models/
 # On the Uno Q -- install runtime deps
 pip install tflite-runtime numpy opencv-python-headless
 
-# Reboot the app -- it auto-discovers the model
+# Reboot the app -- it auto-discovers .tflite files in python/models/ at boot
 ```
 
-The system always works without AI Hub models. Missing tflite-runtime, numpy, opencv, .tflite model, or /dev/video device all result in browser-only mode (MediaPipe WASM). Boot diagnostics report full AI Hub status.
+The system always works without AI Hub models. Missing `tflite-runtime`, `numpy`, `opencv`, `.tflite` model, or `/dev/video` device all result in graceful fallback to browser-only mode (MediaPipe WASM). Boot diagnostics report full AI Hub status under the "AI HUB -- ON-DEVICE FACE DETECTION" section.
+
+### Using an App Lab Brick instead
+
+App Lab Bricks are containerized AI services that run as Docker containers on the QRB2210. Arduino provides several pre-built Bricks for common tasks:
+
+| Brick | What it does | Model |
+|-------|-------------|-------|
+| `arduino:object_detection` | Detects objects in camera frames | YOLOX-Nano |
+| `arduino:motion_detection` | Detects motion in video stream | Frame differencing |
+| `arduino:web_ui` | Serves web content + WebSocket messaging | (no AI model) |
+
+To add a Brick, edit `app.yaml`:
+
+```yaml
+bricks:
+  - arduino:web_ui
+  - arduino:object_detection
+```
+
+Or add it through the App Lab UI. Each Brick deploys as a container on the QRB2210 and exposes an API to your Python code.
+
+**When to use a Brick vs AI Hub vs browser-side:**
+
+| Approach | Where it runs | Setup effort | Model flexibility | Best for |
+|----------|--------------|-------------|-------------------|----------|
+| Browser (MediaPipe WASM) | Client browser, CPU | Zero -- loads from CDN | Fixed to MediaPipe models | Demos, rapid prototyping, face landmarks |
+| App Lab Brick | QRB2210 Docker container | Low -- add one line to app.yaml | Fixed to Arduino's pre-built models | Standard tasks (object detection, motion) |
+| AI Hub TFLite | QRB2210 MPU native | Medium -- compile + install deps | Any model from AI Hub's catalog (~100+ models) | Optimized headless inference, Qualcomm-tuned models |
+| Hugging Face model | QRB2210 MPU native | Medium-High -- export to TFLite + install deps | TFLite-exportable models from Hugging Face Hub | Custom/niche tasks, research models (must convert to TFLite) |
+| Custom model (Edge Impulse, etc.) | QRB2210 MPU native | High -- train + export + deploy | Your own trained model | Domain-specific tasks, proprietary data |
+
+### Bringing a Hugging Face model
+
+Models on [Hugging Face Hub](https://huggingface.co/) that can be exported to TFLite format can run on the Uno Q's MPU using the same `tflite-runtime` infrastructure. Note: this project only includes a TFLite runtime -- ONNX models would require adding `onnxruntime` separately, which is not set up in this demo.
+
+The TFLite export workflow:
+
+1. **Export to TFLite.** Some Hugging Face vision models support export via Hugging Face `optimum`:
+   ```bash
+   pip install optimum[exporters]
+   optimum-cli export tflite --model google/vit-base-patch16-224 --quantize int8 vit_int8.tflite
+   ```
+   Not all architectures are supported by `optimum`'s TFLite exporter -- check [Hugging Face's supported architectures](https://huggingface.co/docs/optimum/exporters/tflite/overview) before assuming a model will export cleanly. Alternatively, use AI Hub to compile a Hugging Face model for the QRB2210 specifically -- AI Hub supports many popular architectures (MobileNet, EfficientNet, YOLO variants, ViT, DeepLab, Whisper, etc.) and handles the conversion and optimization in the cloud.
+
+2. **Drop the `.tflite` into `python/models/`.** The `face_detector_mpu.py` module auto-discovers `.tflite` files at boot. For models with different input/output signatures, you would need to modify `face_detector_mpu.py` to match (input shape, preprocessing, output parsing).
+
+3. **Run inference.** The same `tflite-runtime` that runs AI Hub models runs any valid TFLite model. No additional runtime is needed for TFLite files.
+
+The main consideration is model size and architecture. The QRB2210 has no NPU, so all inference runs on the CPU (or GPU delegate, though results vary). Large models (>50M parameters) will be impractically slow. Stick to mobile-optimized architectures designed for edge deployment: MobileNetV2/V3, EfficientNet-Lite, NanoDet, PicoDet, or quantized YOLO variants. Actual FPS depends heavily on the model's input resolution, operator mix, and pre/post-processing pipeline, so always benchmark on-device before committing to a model. As a rough guide, models under 5M parameters with 320x320 or smaller input tend to run comfortably on the A53 cores.
+
+### Bringing a custom Edge Impulse model
+
+[Edge Impulse](https://edgeimpulse.com/) is a platform for training custom ML models on your own data and deploying them to edge devices. This is the approach when you need to detect something specific that no pre-trained model covers -- your company's product defects, a specific gesture, a particular plant disease, etc.
+
+Edge Impulse supports TFLite export, which means models trained there can run on the Uno Q the same way AI Hub models do:
+
+1. **Train in Edge Impulse.** Collect data, label it, train a model using Edge Impulse Studio. Choose an architecture appropriate for the A53 (MobileNetV2 or a custom DSP block).
+
+2. **Export as TFLite.** Edge Impulse > Deployment > TensorFlow Lite (int8 quantized). Download the `.tflite` file.
+
+3. **Deploy to the Uno Q.** Copy the `.tflite` file to `python/models/`. Modify `face_detector_mpu.py` to match the model's input shape and output format (Edge Impulse models may output class probabilities rather than bounding boxes).
+
+4. **MCU integration stays the same.** The Python coordinator calls the same Bridge providers (`show_face`, `show_no_face`, `set_rgb`, `set_gpio`) regardless of which model produced the detection. The MCU does not care where the inference happened -- it only responds to Bridge commands.
+
+Edge Impulse also has a direct Arduino library export path (Arduino Library > Deployment), but that targets the STM32 MCU, not the QRB2210 MPU. For the Uno Q, the MCU is too constrained for most ML models (Cortex-M33, 786 KB SRAM). Use the TFLite export to the MPU side instead.
+
+### The decision tree
+
+```
+Do you need face landmarks (478 points, expressions, iris)?
+  YES → Browser-side MediaPipe (this demo's default)
+  NO  → Continue below
+
+Is there a pre-built App Lab Brick for your task?
+  YES → Use the Brick (one line in app.yaml, zero code)
+  NO  → Continue below
+
+Is the model available on Qualcomm AI Hub?
+  YES → Use AI Hub to compile an optimized TFLite for QRB2210
+  NO  → Continue below
+
+Is the model available on Hugging Face?
+  YES → Export to TFLite (optimum or manual), deploy to python/models/
+  NO  → Continue below
+
+Do you have your own training data?
+  YES → Train in Edge Impulse, export TFLite, deploy to python/models/
+  NO  → Check if a generic model exists elsewhere (TF Model Garden,
+        ONNX Model Zoo, etc.) and convert to TFLite
+```
+
+In all cases, the MCU layer (`sketch.ino`), the Bridge providers, the WebSocket events, and the Python coordinator structure remain the same. Only the inference source changes. This is the architectural advantage of the Uno Q's dual-processor design -- the AI model is decoupled from the real-time control layer.
 
 ## Links
 
@@ -800,4 +938,8 @@ The system always works without AI Hub models. Missing tflite-runtime, numpy, op
 - [Arduino Cloud](https://docs.arduino.cc/arduino-cloud/)
 - [Google MediaPipe Face Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker)
 - [Qualcomm AI Hub](https://aihub.qualcomm.com/)
+- [Qualcomm AI Hub Models](https://aihub.qualcomm.com/models)
+- [Hugging Face Hub](https://huggingface.co/models)
+- [Edge Impulse](https://edgeimpulse.com/)
+- [TensorFlow Lite Model Garden](https://www.tensorflow.org/lite/models)
 - [Buy Arduino Uno Q](https://store.arduino.cc/pages/uno-q)
