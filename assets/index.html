@@ -888,14 +888,21 @@
     let L = { ...PRESETS.full };
     presetEl.onchange = () => { L = { ...PRESETS[presetEl.value] }; };
 
-    // --- Device Simulation ---
+    // --- Device Simulation (browser-only) ---
     // Simulates hardware differences between the Uno Q (QRB2210) and
     // the higher-end Ventuno (QCS6490). The Uno Q profile adds frame
     // skipping and throttle delay to mimic its slower processing.
     // Ventuno enables pupil diameter measurement (needs faster inference)
-    // and supports up to 4 simultaneous faces. These settings only
-    // affect the browser UI — the actual inference speed depends on
-    // the hardware running the browser.
+    // and supports up to 4 simultaneous faces.
+    //
+    // SAFETY: This toggle is PURELY CLIENT-SIDE. It does NOT send any
+    // WebSocket or Bridge messages to the MPU/MCU. Switching profiles
+    // cannot change hardware state, toggle GPIO pins, or break the
+    // demo on actual Uno Q hardware. The only effects are:
+    //   1. Frame skip rate (throttling simulation)
+    //   2. Max faces displayed (2 vs 4, MediaPipe always detects up to 4)
+    //   3. Pupil diameter HUD rows (shown only in Ventuno mode)
+    //   4. Spec bar text and buy link
     const DEVICES = {
         unoq: {
             name: "Uno Q",

@@ -51,6 +51,19 @@ BOOT_START = time.time()
 
 mpu_detector = None
 
+_bridge_ready = False
+
+
+def safe_bridge_call(method, *args):
+    """Call a Bridge method with error handling. If the MCU hasn't
+    signalled mcu_ready yet or the Bridge raises, the error is logged
+    but never propagated — the demo keeps running in browser-only mode."""
+    try:
+        Bridge.call(method, *args)
+    except Exception as e:
+        logger.error(f"[BRIDGE] safe_bridge_call({method}) failed: {e}")
+
+
 # ── Terminal Formatting Helpers ──
 
 def divider():
@@ -432,29 +445,29 @@ def startup_sequence():
     ip = get_ip_address()
 
     logger.info(f"[STARTUP] Scrolling IP on LED matrix: {ip}")
-    Bridge.call("scroll_text", f"  IP: {ip}  ")
+    safe_bridge_call("scroll_text", f"  IP: {ip}  ")
     time.sleep(8)
 
     mem_total, mem_avail = get_mem_info()
-    Bridge.call("scroll_text", f"  RAM: {mem_avail}/{mem_total}MB  ")
+    safe_bridge_call("scroll_text", f"  RAM: {mem_avail}/{mem_total}MB  ")
     time.sleep(6)
 
-    Bridge.call("scroll_text", f"  {platform.machine()} {get_kernel_version()[:12]}  ")
+    safe_bridge_call("scroll_text", f"  {platform.machine()} {get_kernel_version()[:12]}  ")
     time.sleep(6)
 
     if mpu_detector and mpu_detector.available:
-        Bridge.call("scroll_text", "  AI: ON-DEVICE  ")
+        safe_bridge_call("scroll_text", "  AI: ON-DEVICE  ")
         time.sleep(4)
         started = mpu_detector.start()
         if started:
             logger.info("[STARTUP] On-device face detection started")
-            Bridge.call("set_rgb", "cyan")
+            safe_bridge_call("set_rgb", "cyan")
             time.sleep(1)
-            Bridge.call("set_rgb", "off")
+            safe_bridge_call("set_rgb", "off")
         else:
             logger.info("[STARTUP] On-device detection available but could not start capture")
 
-    Bridge.call("scroll_text", "  Face Demo Ready  ")
+    safe_bridge_call("scroll_text", "  Face Demo Ready  ")
     logger.info("[STARTUP] LED matrix boot sequence complete")
 
 startup_thread = threading.Thread(target=startup_sequence, daemon=True)
@@ -474,9 +487,9 @@ def on_mpu_faces(faces):
 
     if not mpu_last_face_present:
         logger.info(f"[AI-HUB] Face appeared (on-device) — {n} face(s)")
-        Bridge.call("flash_face", 3)
+        safe_bridge_call("flash_face", 3)
     else:
-        Bridge.call("show_face")
+        safe_bridge_call("show_face")
 
     mpu_last_face_present = True
 
@@ -491,7 +504,7 @@ def on_mpu_no_faces():
     global mpu_last_face_present
     if mpu_last_face_present:
         logger.info("[AI-HUB] Face lost (on-device)")
-        Bridge.call("show_no_face")
+        safe_bridge_call("show_no_face")
         face_state["faces_detected"] = 0
     mpu_last_face_present = False
 
@@ -505,6 +518,8 @@ if mpu_detector:
 def on_mcu_ready():
     """Called by the MCU sketch after Bridge.begin() completes on
     the STM32 side. Confirms the two processors are communicating."""
+    global _bridge_ready
+    _bridge_ready = True
     logger.info("[BRIDGE] MCU ready — STM32 <-> QRB2210 link confirmed")
     logger.info("[BRIDGE] MCU can now receive scroll_text, show_face, etc.")
 
@@ -527,9 +542,9 @@ def on_browser_connect(sid):
     logger.info(f"[WS] Sending initial state: {json.dumps(face_state)}")
     ui.send_message("state_update", json.dumps(face_state))
 
-    Bridge.call("set_rgb", "blue")
+    safe_bridge_call("set_rgb", "blue")
     time.sleep(0.3)
-    Bridge.call("set_rgb", "green")
+    safe_bridge_call("set_rgb", "green")
 
 ui.on_connect(on_browser_connect)
 
@@ -569,22 +584,22 @@ def on_face_data(sid, data):
         if not mpu_active:
             if face_now and not last_face_present:
                 logger.info(f"[FACE] Face appeared — {face_state['faces_detected']} face(s)")
-                Bridge.call("flash_face", 3)
+                safe_bridge_call("flash_face", 3)
                 expr = face_state["expression"]
                 if expr != "neutral":
                     time.sleep(0.5)
-                    Bridge.call("show_expression", expr)
+                    safe_bridge_call("show_expression", expr)
 
             elif face_now:
                 expr = face_state["expression"]
                 if expr != "neutral":
-                    Bridge.call("show_expression", expr)
+                    safe_bridge_call("show_expression", expr)
                 else:
-                    Bridge.call("show_face")
+                    safe_bridge_call("show_face")
 
             elif not face_now and last_face_present:
                 logger.info("[FACE] Face lost")
-                Bridge.call("show_no_face")
+                safe_bridge_call("show_no_face")
 
         last_face_present = face_now
 
@@ -595,16 +610,21 @@ ui.on_message("face_data", on_face_data)
 
 
 def on_device_switch(sid, data):
-    """Handle device profile toggle from the frontend UI. Forwards the
-    mode name to the MCU so it can scroll a confirmation message.
-    Also sets the RGB LED color to indicate the active profile."""
+    """Handle device profile toggle from the frontend UI.
+
+    NOTE: Currently unreachable — the frontend setDevice() function is
+    purely client-side and does not emit a 'device_switch' WebSocket
+    message. This handler exists so that if the frontend is later wired
+    up (or for programmatic testing), the MCU mode string is updated.
+    The MCU's setDeviceMode provider only stores the mode name — it does
+    not change any hardware behaviour, so this is always safe to call."""
     try:
         payload = json.loads(data) if isinstance(data, str) else data
         mode = payload.get("device", "uno_q")
         face_state["device_mode"] = mode
         logger.info(f"[MODE] Device mode switched to: {mode}")
-        Bridge.call("set_device_mode", mode)
-        Bridge.call("set_rgb", "blue" if mode == "uno_q" else "cyan")
+        safe_bridge_call("set_device_mode", mode)
+        safe_bridge_call("set_rgb", "blue" if mode == "uno_q" else "cyan")
     except Exception as e:
         logger.error(f"device_switch error: {e}")
 
@@ -634,7 +654,7 @@ def on_rgb_control(sid, data):
         payload = json.loads(data) if isinstance(data, str) else data
         color = payload.get("color", "off")
         logger.info(f"[RGB] Browser set color: {color}")
-        Bridge.call("set_rgb", color)
+        safe_bridge_call("set_rgb", color)
     except Exception as e:
         logger.error(f"rgb_control error: {e}")
 
@@ -647,7 +667,7 @@ def on_gpio_control(sid, data):
         pin = payload.get("pin", 0)
         state = payload.get("state", 0)
         logger.info(f"[GPIO] Browser set pin {pin} -> {state}")
-        Bridge.call("set_gpio", f"{pin}:{state}")
+        safe_bridge_call("set_gpio", f"{pin}:{state}")
     except Exception as e:
         logger.error(f"gpio_control error: {e}")
 
