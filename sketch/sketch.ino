@@ -41,13 +41,17 @@
 
 #include <ArduinoGraphics.h>
 #include <Arduino_LED_Matrix.h>
-#include "Arduino_RouterBridge.h"
+#include <Arduino_RouterBridge.h>
 
 Arduino_LED_Matrix matrix;
 
 // ── Pin Definitions ──
 // Adjust these if your Uno Q board revision maps them differently.
 // The STM32U585 on the Uno Q exposes standard Arduino header pins.
+
+#ifndef LED_BUILTIN
+#define LED_BUILTIN 13
+#endif
 
 #define STATUS_LED  LED_BUILTIN
 
@@ -145,9 +149,21 @@ void triggerRelay(bool on) {
     if (enableRelay) digitalWrite(PIN_RELAY, on ? HIGH : LOW);
 }
 
+void playTone(uint8_t pin, uint32_t freqHz, uint32_t durationMs) {
+    if (freqHz == 0) return;
+    uint32_t halfPeriod = 500000UL / freqHz;
+    uint32_t cycles = (freqHz * durationMs) / 1000;
+    for (uint32_t i = 0; i < cycles; i++) {
+        digitalWrite(pin, HIGH);
+        delayMicroseconds(halfPeriod);
+        digitalWrite(pin, LOW);
+        delayMicroseconds(halfPeriod);
+    }
+}
+
 void triggerBuzzer(int freqHz, int durationMs) {
     if (enableBuzzer) {
-        tone(PIN_BUZZER, freqHz, durationMs);
+        playTone(PIN_BUZZER, freqHz, durationMs);
     }
 }
 
@@ -158,7 +174,7 @@ void triggerAux(int pin, bool on) {
 // ── Serial Diagnostic Helpers ──
 
 void serialDivider() {
-    Serial.println("────────────────────────────────────────────────");
+    Serial.println("------------------------------------------------");
 }
 
 void serialSection(const char* title) {
@@ -341,17 +357,17 @@ void reportStatus() {
     report += " free_heap=" + String(freeMemory());
     Serial.print("[STATUS] ");
     Serial.println(report);
-    Bridge.call("mcu_status_report", report);
+    Bridge.call("mcu_status_report", report.c_str());
 }
 
-// Minimal freeMemory estimate for ARM Cortex-M.
-// On the STM32U585 this gives the gap between the heap top and
-// the stack pointer. Not perfectly accurate but useful for tracking
-// memory leaks during long-running sessions.
-extern "C" char* sbrk(int incr);
 int freeMemory() {
+#if defined(__ZEPHYR__)
+    return -1;
+#else
+    extern "C" char* sbrk(int incr);
     char top;
     return &top - reinterpret_cast<char*>(sbrk(0));
+#endif
 }
 
 // ── Setup ──
@@ -505,6 +521,6 @@ void loop() {
     //   static unsigned long lastHeartbeat = 0;
     //   if (millis() - lastHeartbeat >= 30000) {
     //       lastHeartbeat = millis();
-    //       reportStatus("");
+    //       reportStatus();
     //   }
 }
