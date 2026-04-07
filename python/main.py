@@ -35,8 +35,10 @@ import socket
 import time
 import threading
 import os
+import sys
 import platform
 import subprocess
+import signal
 
 try:
     from face_detector_mpu import FaceDetectorMPU, find_models
@@ -233,6 +235,46 @@ def print_folder_tree(root, prefix="", max_depth=3, current_depth=0):
                          max_depth, current_depth + 1)
 
 
+# ── Auto Model Setup ──
+
+def _auto_setup_models():
+    """Attempt to automatically set up TFLite models if python/models/
+    is empty. Tries running ai_hub_setup.py --compile, then --download.
+    Returns the result of find_models() after the attempt (may still
+    be empty if setup tools are not available)."""
+    setup_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai_hub_setup.py")
+    if not os.path.exists(setup_script):
+        logger.info("    ai_hub_setup.py not found — skipping auto-setup")
+        return {}
+
+    models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
+    os.makedirs(models_dir, exist_ok=True)
+
+    for action in ["--compile", "--download"]:
+        try:
+            logger.info(f"    Running: python ai_hub_setup.py {action} --model face_det_lite")
+            result = subprocess.run(
+                [sys.executable, setup_script, action, "--model", "face_det_lite"],
+                capture_output=True, text=True, timeout=120, cwd=os.path.dirname(setup_script)
+            )
+            if result.returncode == 0:
+                logger.info(f"    Auto-setup ({action}) succeeded")
+                from face_detector_mpu import find_models
+                return find_models()
+            else:
+                last_lines = (result.stdout + result.stderr).strip().split("\n")[-3:]
+                for line in last_lines:
+                    if line.strip():
+                        logger.info(f"    {line.strip()}")
+        except subprocess.TimeoutExpired:
+            logger.info(f"    Auto-setup ({action}) timed out after 120s")
+        except Exception as e:
+            logger.info(f"    Auto-setup ({action}) error: {e}")
+
+    logger.info("    Auto-setup could not produce a model — continuing in browser-only mode")
+    return {}
+
+
 # ── Boot Diagnostics ──
 # Run all checks before the app starts serving. This prints
 # everything to the terminal so you have a complete snapshot
@@ -366,14 +408,19 @@ def run_boot_diagnostics():
             kv("OpenCV", f"{'✓' if _cv2_available else '✗ not installed'}")
 
             models = find_models()
+            if not models:
+                kv("Models found", "0")
+                warn("No .tflite models in python/models/ — attempting auto-setup...")
+                models = _auto_setup_models()
+
             if models:
                 kv("Models found", len(models))
                 for name, info in models.items():
                     ok(f"{name} ({info['size_kb']} KB) — {info['path']}")
             else:
                 kv("Models found", "0")
-                warn("No .tflite models in python/models/")
-                logger.info("    Run: python ai_hub_setup.py --compile --model face_det_lite")
+                warn("No .tflite models available after auto-setup attempt")
+                logger.info("    Manual setup: python ai_hub_setup.py --compile --model face_det_lite")
 
             cam_dev, cam_idx = find_camera()
             kv("Camera device", f"{'✓ ' + cam_dev if cam_dev else '✗ not found'}")
@@ -515,15 +562,26 @@ if mpu_detector:
 
 # ── Bridge Providers (MCU -> MPU) ──
 
+def _send_mpu_ack():
+    """Send mpu_ack in a separate thread to avoid blocking the Bridge
+    read loop. Bridge.call() waits for a response, but the read loop
+    cannot process responses while it is executing a provider callback.
+    Dispatching to a thread breaks that deadlock."""
+    time.sleep(0.1)
+    safe_bridge_call("mpu_ack")
+
 def on_mcu_ready():
     """Called by the MCU sketch after Bridge.begin() completes on
     the STM32 side. Confirms the two processors are communicating.
-    Sends mpu_ack back so the MCU stops retrying."""
+    Sends mpu_ack back (via a background thread) so the MCU stops
+    retrying. The thread dispatch avoids a deadlock: Bridge.call()
+    inside a provider callback would block the read loop that needs
+    to process the response."""
     global _bridge_ready
     _bridge_ready = True
     logger.info("[BRIDGE] MCU ready — STM32 <-> QRB2210 link confirmed")
     logger.info("[BRIDGE] MCU can now receive scroll_text, show_face, etc.")
-    safe_bridge_call("mpu_ack")
+    threading.Thread(target=_send_mpu_ack, daemon=True).start()
 
 Bridge.provide("mcu_ready", on_mcu_ready)
 
@@ -722,9 +780,6 @@ ui.on_message("ai_toggle", on_ai_toggle)
 
 
 # ── Graceful Shutdown ──
-
-import signal
-import sys
 
 _shutting_down = False
 

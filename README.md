@@ -200,7 +200,7 @@ If you said "No" to one or more update prompts and the demo doesn't work:
 4. Reboot the board
 5. Re-import the demo `.zip`
 
-The MCU sketch includes an acknowledgement-driven retry mechanism -- it re-sends `mcu_ready` every 3 seconds for up to 3 minutes after boot. Once the MPU receives the signal, it sends `mpu_ack` back, and the MCU stops retrying. The Bridge connection establishes automatically as soon as both sides are ready.
+The MCU sketch includes an acknowledgement-driven retry mechanism -- it re-sends `mcu_ready` every 3 seconds for up to 3 minutes after boot. Once the MPU receives the signal, it dispatches `mpu_ack` from a background thread (to avoid deadlocking the Bridge read loop), and the MCU stops retrying. The Bridge connection establishes automatically as soon as both sides are ready.
 
 </details>
 
