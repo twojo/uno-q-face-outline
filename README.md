@@ -1059,6 +1059,124 @@ The QRB2210 is a quad-core Cortex-A53 @ 2.0 GHz with an Adreno GPU but **no Hexa
 
 For NPU-accelerated inference, consider the QCS6490 or QCS8550 (higher-tier boards with Hexagon HTP).
 
+## Reference Projects & Learnings
+
+This project was informed by two key reference implementations that demonstrate working Uno Q patterns:
+
+### DIY-ECG (diy-ecg-uno-Q)
+
+A real-time ECG acquisition and visualization system. Three-layer architecture matching our own:
+
+```
+  MCU (STM32U585)                MPU (QRB2210)               Browser (WebUI)
+  ──────────────                 ─────────────                ───────────────
+  ADC sampling at 200Hz          Bridge.call("ecg_get_frame") Socket.IO client
+  Ring buffer (200 samples)      IIR filters (HP/LP/notch)    WebGL plot (webgl-plot)
+  k_timer for precise timing     Adaptive mean + BPM detect   Ring buffer (2000 samples)
+  MsgPack binary frames          Delta payloads via WebSocket  CSV export
+  CRC-16/IBM validation          Threading with RLock          Auto-scaling Y axis
+```
+
+**Key patterns borrowed/validated:**
+
+| Pattern | ECG Implementation | Our Implementation |
+|---------|-------------------|-------------------|
+| Bridge RPC | `Bridge.provide("ecg_get_frame", handler)` returns `MsgPack::bin_t<uint8_t>` | `Bridge.provide("show_face", showFace)` (no params, reads global state) |
+| Zephyr timing | `k_timer_init()` + `atomic_t` for 200Hz sampling | `delay()` based (no high-freq sampling needed) |
+| WebUI Brick | `WebUI(assets_dir_path=...)` + `ui.on_message()`/`ui.send_message()` | Same pattern in `python/main.py` |
+| Error resilience | `try/except` around `Bridge.call()` with reconnect | `safe_bridge_call()` wrapper, never crashes |
+| Data flow | MCU→MPU poll (50ms) → MPU→Browser delta WS | Browser→MPU face telemetry (500ms) → MPU→MCU Bridge |
+| Ring buffers | Both MCU and MPU circular buffers | Browser-side `trackedFaces` array with TTL |
+
+**Noteworthy ECG techniques we could adopt:**
+- Binary frame protocol with CRC validation for reliable Bridge data transfer
+- Zephyr `k_timer` + `atomic_t` for interrupt-safe timing (vs `delay()`)
+- IIR filter implementation in pure Python (no numpy dependency)
+- WebGL rendering for high-performance real-time charts
+
+### Arduino Uno Q Projects (community collection)
+
+A comprehensive reference covering GenAI, peripherals, GPIO, debugging, and application development:
+
+```
+  ┌─────────────────────────────────────────────────────────┐
+  │  Arduino Uno Q Projects — Key Modules                   │
+  ├─────────────────────────────────────────────────────────┤
+  │  01. GenAI Support                                      │
+  │      ├─ Ollama local LLMs on QRB2210                   │
+  │      ├─ OpenAI API integration                         │
+  │      └─ Nanobot agent framework                        │
+  │  02. Peripheral Hardware                                │
+  │      ├─ WebCam via v4l2 + FFmpeg UDP streaming         │
+  │      └─ SPI OLED display (ST7789 driver)               │
+  │  03. Technical Setups                                   │
+  │      ├─ GPIO via Zephyr Devicetree                     │
+  │      │   └─ gpio_dt_spec + GPIO_DT_SPEC_GET_BY_IDX    │
+  │      └─ Servo control via Bridge                       │
+  │  04. Debugging                                          │
+  │      ├─ FTDI debug interface for STM32U585             │
+  │      └─ OpenOCD + VSCode debugging                     │
+  │  05. Application Development                            │
+  │      └─ OpenAI FaceInterpretor                         │
+  │          ├─ MediaPipe face mesh → landmark JSON         │
+  │          ├─ GPT-4o-mini vision analysis                │
+  │          ├─ Podman container for Python 3.12            │
+  │          ├─ MJPEG HTTP stream                          │
+  │          └─ SPI display output via Bridge              │
+  │  10. Tips & Tricks                                      │
+  │      ├─ LED matrix flickering fix (Zephyr boot state)  │
+  │      ├─ pyenv virtualenv for Python versions           │
+  │      └─ STM32U585 firmware restore procedure           │
+  └─────────────────────────────────────────────────────────┘
+```
+
+**Key patterns borrowed/validated:**
+
+| Pattern | Reference Implementation | Our Implementation |
+|---------|------------------------|-------------------|
+| GPIO via Devicetree | `GPIO_DT_SPEC_GET_BY_IDX(USER_NODE, digital_pin_gpios, N)` | `digitalWrite(PIN, state)` (Arduino abstraction) |
+| Bridge String params | `Bridge.provide("display_print", printFromPython)` with `String text` | `Bridge.provide("scroll_text", scrollText)` with `String text` |
+| SPI display driver | Custom ST7789 with 5x7 bitmap font + word wrapping | LED matrix via `Arduino_LED_Matrix` + grayscale frames (simpler API, no ArduinoGraphics) |
+| MediaPipe on-device | Python 3.12 in Podman, `cv2.VideoCapture("/dev/video2")` | Browser-side WASM (no container needed) |
+| AI integration | GPT-4o-mini with threaded worker + processing lock | Expression detection via blendshapes (no LLM) |
+| Camera access | `v4l2-ctl --list-devices`, `/dev/video2` | Browser `getUserMedia()` (USB webcam) |
+
+**Critical Zephyr/hardware learnings documented in reference:**
+
+1. **LED matrix flickering at boot** — STM32 data lines are undefined before sketch loads; random pixel noise is normal until firmware initializes the matrix
+2. **GPIO mapping is NOT static** — Pins are resolved via Zephyr Devicetree at compile time, not hardcoded integers. `gpio_dt_spec` contains port controller + pin + flags
+3. **Python version conflicts** — MediaPipe requires Python 3.12; Debian image ships 3.13. Solution: Podman containers or pyenv virtualenv
+4. **LLM response time** — Local Ollama models on QRB2210 take ~90 seconds per response. Design for async "slow brain" patterns
+5. **Camera streaming** — FFmpeg with `libx264 baseline` profile + `zerolatency` tuning gives lowest latency for UDP streaming
+6. **SPI display** — ST7789 via raw SPI at 10MHz works reliably; custom 5x7 font bitmaps in PROGMEM
+
+### Data Flow Comparison (All Three Projects)
+
+```
+  ┌────────────────────────────────────────────────────────────────────┐
+  │                    DATA FLOW PATTERNS                              │
+  ├────────────────────────────────────────────────────────────────────┤
+  │                                                                    │
+  │  Face Demo (this project):                                         │
+  │    Camera → Browser WASM → Canvas overlay                          │
+  │                         └→ WS → MPU → Bridge → MCU (LED/RGB)      │
+  │    Direction: Browser-first, push to hardware                      │
+  │                                                                    │
+  │  DIY-ECG:                                                          │
+  │    Sensor → MCU ADC → Ring buffer → Bridge RPC ← MPU poll          │
+  │                                                   └→ WS → Browser  │
+  │    Direction: Hardware-first, pull to browser                       │
+  │                                                                    │
+  │  FaceInterpretor:                                                  │
+  │    Camera → Podman (MediaPipe + OpenAI) → HTTP API ← MPU poll      │
+  │                                                      └→ Bridge     │
+  │                                                         → MCU     │
+  │                                                           (SPI)    │
+  │    Direction: Container-first, bridge to display                    │
+  │                                                                    │
+  └────────────────────────────────────────────────────────────────────┘
+```
+
 ## Credits
 
 - [Arduino App Lab](https://docs.arduino.cc/software/app-lab/)
@@ -1067,3 +1185,5 @@ For NPU-accelerated inference, consider the QCS6490 or QCS8550 (higher-tier boar
 - [Google MediaPipe](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker)
 - [Qualcomm AI Hub](https://aihub.qualcomm.com/)
 - Qualcomm QRB2210 Dragonwing SoC
+- [DIY-ECG Uno Q](https://github.com/diy-ecg/diy-ecg-uno-Q) — ECG acquisition reference
+- [Arduino Uno Q Projects](https://github.com/MartinsRepo/Arduino-Uno-Q-Projects) — Community reference collection
