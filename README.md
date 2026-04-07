@@ -149,9 +149,71 @@ All MCU functions are registered with `Bridge.provide("name", handler)` in `setu
 | `MediaPipe Face Landmarker` | Browser | 478-point face tracking (WASM) |
 | `WebUI Brick` | MPU | Serves frontend + WebSocket |
 
-## Delegate Note
+## Delegate Selection & Landmark Validation
 
-> **CPU delegate must be used first.** The Adreno 650 GPU delegate causes incorrect inference results despite WebGL working. MediaPipe defaults to CPU (WASM) which provides correct landmark positions.
+The Qualcomm QRB2210 includes an Adreno 650 GPU that supports WebGL — but GPU-accelerated inference through MediaPipe's GPU delegate produces **incorrect landmark positions** despite appearing to work. The landmarks have the right count (478) but are spatially wrong (collapsed, inverted, or drifted).
+
+### Strategy: CPU-First with Runtime Self-Check
+
+The app uses a **CPU-first** delegate strategy with automatic runtime validation:
+
+1. **Try CPU delegate first** — WASM-based inference is slower but always correct
+2. **Fall back to GPU** only if CPU fails to load
+3. **Validate the first 5 frames** of landmarks with geometric sanity checks
+4. **Auto-switch** if validation fails (GPU→CPU or CPU→GPU)
+5. **Continuous monitoring** every 60 seconds to detect degradation
+
+### Delegate State Machine
+
+```
+                         ┌──────────┐
+                         │ UNTESTED │
+                         └────┬─────┘
+                              │ first face detected
+                              v
+                        ┌───────────┐
+                   ┌───>│VALIDATING │<───────────────────┐
+                   │    └─────┬─────┘                    │
+                   │          │ 5 frames checked         │
+                   │    ┌─────┴──────┐                   │
+                   │    │            │                    │
+                   │  >=3 pass    >=3 fail               │
+                   │    │            │                    │
+                   │    v            v                    │
+                   │ ┌──────┐  ┌────────┐                │
+                   │ │PASSED│  │ FAILED │                │
+                   │ └──┬───┘  └───┬────┘                │
+                   │    │          │ auto-switch          │
+                   │    │          v                      │
+                   │    │    ┌───────────┐  reload        │
+                   │    │    │RECOVERING │──delegate──────┘
+                   │    │    └───────────┘
+                   │    │
+                   │    │ continuous check (60s)
+                   │    v
+                   │ ┌────────┐
+                   │ │DEGRADED│ (warn, no auto-switch)
+                   │ └────────┘
+                   └───────────────────── (manual retry)
+```
+
+### Landmark Sanity Checks (6 tests per frame)
+
+| # | Check | What it catches |
+|---|-------|-----------------|
+| 1 | Landmark count = 478 | Incomplete model load or corrupt output |
+| 2 | Bounding box span > 3% of frame | All landmarks collapsed to one point |
+| 3 | Out-of-bounds < 20 landmarks | Landmarks flying off-screen |
+| 4 | Nose tip near face center | Facial geometry scrambled |
+| 5 | Eye separation 2-50% of frame | Eyes overlapping or impossibly far |
+| 6 | Forehead above chin | Y-axis inverted inference |
+
+### Diagnostics
+
+The hidden diagnostics panel (toggle via title bar) shows real-time status:
+- **Landmark Sanity** row — current state (UNTESTED → VALIDATING → PASSED/FAILED)
+- **Face Landmarker Model** row — which delegate loaded and any reload events
+- Console logs prefixed with `[SANITY]` for detailed frame-by-frame validation
 
 ## Credits
 

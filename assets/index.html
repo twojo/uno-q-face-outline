@@ -384,6 +384,7 @@
         <div class="diag-row" id="dModel"><span class="diag-dot dot-wait"></span><span class="diag-label">Face Landmarker Model</span><span class="diag-detail" id="dModelInfo">waiting...</span></div>
         <div class="diag-row" id="dCamera"><span class="diag-dot dot-wait"></span><span class="diag-label">Camera Access</span><span class="diag-detail" id="dCameraInfo">waiting...</span></div>
         <div class="diag-row" id="dDetect"><span class="diag-dot dot-wait"></span><span class="diag-label">Face Detection</span><span class="diag-detail" id="dDetectInfo">waiting...</span></div>
+        <div class="diag-row" id="dSanity"><span class="diag-dot dot-wait"></span><span class="diag-label">Landmark Sanity</span><span class="diag-detail" id="dSanityInfo">waiting for first face...</span></div>
         <div class="diag-row" id="dCanvas"><span class="diag-dot dot-wait"></span><span class="diag-label">Canvas Rendering</span><span class="diag-detail" id="dCanvasInfo">waiting...</span></div>
     </div>
 
@@ -464,6 +465,207 @@
     }
 
     document.getElementById("specDel").textContent = usedDelegate;
+
+    // ── Landmark Sanity Validator ────────────────────────────────
+    // Validates that detected landmarks are geometrically plausible.
+    // GPU delegates (e.g. Adreno 650) can produce landmarks that
+    // "look right" in count (478) but are spatially wrong — all
+    // clustered in one corner, or z-values wildly off. This catches
+    // that and auto-switches to CPU if needed.
+    //
+    // State Machine:
+    //   UNTESTED → (first face) → VALIDATING → (pass 3/5 frames) → PASSED
+    //                                        → (fail 3/5 frames) → FAILED → auto-switch → RECOVERING
+    //   RECOVERING → (reload CPU) → VALIDATING → PASSED
+    //   PASSED → (continuous monitoring every 60s) → PASSED | DEGRADED
+
+    const SANITY = {
+        state: "UNTESTED",
+        framesChecked: 0,
+        framesPassed: 0,
+        framesFailed: 0,
+        framesToCheck: 5,
+        passThreshold: 3,
+        lastContinuousCheck: 0,
+        continuousIntervalMs: 60000,
+        switchAttempted: false,
+        failReasons: []
+    };
+
+    function validateLandmarks(landmarks) {
+        const checks = { passed: true, reasons: [] };
+        const n = landmarks.length;
+
+        // Check 1: Must have exactly 478 landmarks
+        if (n !== 478) {
+            checks.passed = false;
+            checks.reasons.push("count=" + n + " (expected 478)");
+            return checks;
+        }
+
+        // Check 2: Landmarks should span a reasonable portion of the frame
+        // A real face typically spans 15-90% of the frame width
+        let minX = 1, maxX = 0, minY = 1, maxY = 0;
+        for (let i = 0; i < n; i++) {
+            const lm = landmarks[i];
+            if (lm.x < minX) minX = lm.x;
+            if (lm.x > maxX) maxX = lm.x;
+            if (lm.y < minY) minY = lm.y;
+            if (lm.y > maxY) maxY = lm.y;
+        }
+        const spanX = maxX - minX;
+        const spanY = maxY - minY;
+
+        if (spanX < 0.03 || spanY < 0.03) {
+            checks.passed = false;
+            checks.reasons.push("collapsed: span=" + spanX.toFixed(3) + "x" + spanY.toFixed(3));
+        }
+
+        // Check 3: All landmarks should be within or near the frame (0-1 range, ±0.2 tolerance)
+        let outOfBounds = 0;
+        for (let i = 0; i < n; i++) {
+            const lm = landmarks[i];
+            if (lm.x < -0.2 || lm.x > 1.2 || lm.y < -0.2 || lm.y > 1.2) outOfBounds++;
+        }
+        if (outOfBounds > 20) {
+            checks.passed = false;
+            checks.reasons.push("OOB=" + outOfBounds + "/478");
+        }
+
+        // Check 4: Nose tip (landmark 1) should be roughly centered within the face bounding box
+        const nose = landmarks[1];
+        const faceCenterX = (minX + maxX) / 2;
+        const faceCenterY = (minY + maxY) / 2;
+        const noseDriftX = Math.abs(nose.x - faceCenterX) / (spanX || 0.001);
+        const noseDriftY = Math.abs(nose.y - faceCenterY) / (spanY || 0.001);
+        if (noseDriftX > 0.6 || noseDriftY > 0.6) {
+            checks.passed = false;
+            checks.reasons.push("nose-drift: dx=" + noseDriftX.toFixed(2) + " dy=" + noseDriftY.toFixed(2));
+        }
+
+        // Check 5: Eye separation should be plausible
+        // Left eye center ~landmark 468, right eye center ~landmark 473
+        const eyeL = landmarks[468];
+        const eyeR = landmarks[473];
+        const eyeDist = Math.sqrt(Math.pow(eyeL.x - eyeR.x, 2) + Math.pow(eyeL.y - eyeR.y, 2));
+        if (eyeDist < 0.02 || eyeDist > 0.5) {
+            checks.passed = false;
+            checks.reasons.push("eye-dist=" + eyeDist.toFixed(3) + " (expect 0.02-0.5)");
+        }
+
+        // Check 6: Vertical ordering — forehead (10) should be above chin (152)
+        const forehead = landmarks[10];
+        const chin = landmarks[152];
+        if (forehead.y > chin.y + 0.02) {
+            checks.passed = false;
+            checks.reasons.push("inverted: forehead.y=" + forehead.y.toFixed(3) + " > chin.y=" + chin.y.toFixed(3));
+        }
+
+        return checks;
+    }
+
+    async function switchToDelegate(newDelegate) {
+        console.log("[SANITY] Switching delegate to " + newDelegate + "...");
+        setDiag("dSanity", "warn", "Switching to " + newDelegate + " delegate...");
+        setDiag("dModel", "warn", "Reloading model with " + newDelegate + " delegate...");
+        try {
+            fl = await tryDelegate(newDelegate);
+            usedDelegate = newDelegate;
+            document.getElementById("specDel").textContent = newDelegate;
+            setDiag("dModel", "ok", "Reloaded with " + newDelegate + " delegate");
+            SANITY.state = "VALIDATING";
+            SANITY.framesChecked = 0;
+            SANITY.framesPassed = 0;
+            SANITY.framesFailed = 0;
+            SANITY.failReasons = [];
+            console.log("[SANITY] Delegate switched to " + newDelegate + ", re-validating...");
+        } catch (e) {
+            SANITY.state = "FAILED_PERMANENT";
+            console.error("[SANITY] Failed to switch to " + newDelegate + ":", e);
+            setDiag("dSanity", "fail", "Unrecoverable: " + newDelegate + " load failed — " + e.message.slice(0, 50));
+        }
+    }
+
+    function runSanityCheck(landmarks) {
+        const result = validateLandmarks(landmarks);
+
+        if (SANITY.state === "UNTESTED") {
+            SANITY.state = "VALIDATING";
+            console.log("[SANITY] First face detected — starting validation (" + SANITY.framesToCheck + " frames)");
+        }
+
+        if (SANITY.state === "VALIDATING") {
+            SANITY.framesChecked++;
+
+            if (result.passed) {
+                SANITY.framesPassed++;
+            } else {
+                SANITY.framesFailed++;
+                SANITY.failReasons.push(result.reasons.join(", "));
+                console.warn("[SANITY] Frame " + SANITY.framesChecked + "/" + SANITY.framesToCheck +
+                    " FAILED: " + result.reasons.join(", "));
+            }
+
+            setDiag("dSanity", "warn",
+                "Validating: " + SANITY.framesPassed + "/" + SANITY.framesChecked +
+                " passed (" + SANITY.framesToCheck + " needed)");
+
+            if (SANITY.framesChecked >= SANITY.framesToCheck) {
+                if (SANITY.framesPassed >= SANITY.passThreshold) {
+                    SANITY.state = "PASSED";
+                    SANITY.lastContinuousCheck = performance.now();
+                    const msg = usedDelegate + " delegate validated (" +
+                        SANITY.framesPassed + "/" + SANITY.framesToCheck + " frames OK)";
+                    console.log("[SANITY] " + msg);
+                    setDiag("dSanity", "ok", msg);
+                } else {
+                    SANITY.state = "FAILED";
+                    const msg = usedDelegate + " delegate FAILED validation (" +
+                        SANITY.framesPassed + "/" + SANITY.framesToCheck + " passed). " +
+                        "Issues: " + SANITY.failReasons.slice(0, 3).join("; ");
+                    console.error("[SANITY] " + msg);
+                    setDiag("dSanity", "fail", msg);
+
+                    if (!SANITY.switchAttempted && usedDelegate === "GPU") {
+                        SANITY.switchAttempted = true;
+                        SANITY.state = "RECOVERING";
+                        console.log("[SANITY] Auto-switching from GPU to CPU...");
+                        switchToDelegate("CPU");
+                    } else if (!SANITY.switchAttempted && usedDelegate === "CPU") {
+                        SANITY.switchAttempted = true;
+                        SANITY.state = "RECOVERING";
+                        console.log("[SANITY] CPU failed — trying GPU as last resort...");
+                        switchToDelegate("GPU");
+                    }
+                }
+            }
+            return;
+        }
+
+        if (SANITY.state === "PASSED") {
+            const now = performance.now();
+            if (now - SANITY.lastContinuousCheck >= SANITY.continuousIntervalMs) {
+                SANITY.lastContinuousCheck = now;
+                if (!result.passed) {
+                    SANITY.state = "DEGRADED";
+                    console.warn("[SANITY] Continuous check failed: " + result.reasons.join(", "));
+                    setDiag("dSanity", "warn", "Degraded: " + result.reasons.join(", "));
+                }
+            }
+        }
+
+        if (SANITY.state === "DEGRADED") {
+            const now = performance.now();
+            if (now - SANITY.lastContinuousCheck >= SANITY.continuousIntervalMs) {
+                SANITY.lastContinuousCheck = now;
+                if (result.passed) {
+                    SANITY.state = "PASSED";
+                    setDiag("dSanity", "ok", usedDelegate + " delegate recovered — landmarks OK");
+                    console.log("[SANITY] Recovered from DEGRADED state");
+                }
+            }
+        }
+    }
 
     const tess = FaceLandmarker.FACE_LANDMARKS_TESSELATION;
     const oval = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL;
@@ -758,6 +960,10 @@
         if (nFaces === 0) { hudPupilL = 0; hudPupilR = 0; hudBlinkL = 0; hudBlinkR = 0; }
 
         if (nFaces > maxFacesEverSeen) maxFacesEverSeen = nFaces;
+
+        if (nFaces > 0) {
+            runSanityCheck(faces[0]);
+        }
 
         if (nFaces > 0 && !firstFaceLogged) {
             firstFaceLogged = true;
