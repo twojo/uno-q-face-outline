@@ -1168,19 +1168,268 @@ Do you have your own training data?
 
 In all cases, the MCU layer (`sketch.ino`), the Bridge providers, the WebSocket events, and the Python coordinator structure remain the same. Only the inference source changes. This is the architectural advantage of the Uno Q's dual-processor design -- the AI model is decoupled from the real-time control layer.
 
+---
+
+## Where the Uno Q fits in Qualcomm's world
+
+Qualcomm is not just a phone chip company. As of 2025-2026, Qualcomm silicon ships across six major market segments, each with its own product line. The **Dragonwing** brand covers industrial and embedded IoT; the **Snapdragon** brand covers consumer and commercial products. Both share the same underlying IP (Kryo/Oryon CPUs, Adreno GPUs, Hexagon NPUs, FastConnect Wi-Fi/BT).
+
+The Uno Q's QRB2210 sits at the entry tier of the Dragonwing IoT line — the most accessible on-ramp into Qualcomm's ecosystem.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    QUALCOMM SILICON — FULL MARKET MAP (2025-2026)                │
+│                                                                                 │
+│    SNAPDRAGON (Consumer/Commercial)         DRAGONWING (Industrial/Embedded)    │
+│                                                                                 │
+│  ┌───────────────────────────────────┐    ┌───────────────────────────────────┐  │
+│  │  📱 MOBILE                        │    │  🏭 IoT (Q Series)                │  │
+│  │  Snapdragon 8 Elite (Gen 5)       │    │                                   │  │
+│  │  Snapdragon 7s / 6s / 4 Gen 3     │    │  QCS8550  (Q8) ─── High-end      │  │
+│  │  Powers: Samsung, OnePlus, Xiaomi │    │  QCS6490  (Q6) ─── Mid-tier       │  │
+│  │  Revenue: ~$27B/yr                │    │  QRB2210  (Q2) ─── Entry ◄── UNO Q│  │
+│  ├───────────────────────────────────┤    │                                   │  │
+│  │  💻 PC / COMPUTE                  │    │  Revenue: ~$6.6B/yr (all IoT)     │  │
+│  │  Snapdragon X2 Elite (Oryon Gen 3)│    ├───────────────────────────────────┤  │
+│  │  Snapdragon X Plus / X            │    │  🤖 ROBOTICS (IQ Series)          │  │
+│  │  Up to ~80 TOPS NPU, CoPilot+ PCs│    │                                   │  │
+│  │  Powers: Dell, Lenovo, HP, Acer   │    │  IQ10 ─── Humanoids, industrial   │  │
+│  ├───────────────────────────────────┤    │            AMRs (18-core, top-end)│  │
+│  │  🚗 AUTOMOTIVE                    │    │  IQ8  ─── Edge AI, robotics ◄──── │  │
+│  │  Snapdragon Cockpit Elite         │    │            VENTUNO Q              │  │
+│  │  Snapdragon Ride (ADAS)           │    │  IQ6  ─── Smart cameras, drones   │  │
+│  │  Digital Chassis platform         │    │                                   │  │
+│  │  Revenue: ~$4B/yr (+35% YoY)      │    │  Revenue: included in IoT total   │  │
+│  ├───────────────────────────────────┤    └───────────────────────────────────┘  │
+│  │  🥽 XR (AR/VR/MR)                 │                                          │
+│  │  Snapdragon XR2+ Gen 2            │    ┌───────────────────────────────────┐  │
+│  │  Powers: Meta Quest 3, Samsung    │    │  📡 NETWORKING / INFRA             │  │
+│  │  Galaxy XR, HTC Vive              │    │  5G RAN, Small Cells, Fixed       │  │
+│  │  Next: XR2 Gen 3 ("Project Matrix")│   │  Wireless Access, Wi-Fi 7         │  │
+│  └───────────────────────────────────┘    └───────────────────────────────────┘  │
+│                                                                                 │
+│  Total Qualcomm revenue (FY2025): ~$44B     Total QCT chip revenue: ~$38B       │
+│  (Source: Qualcomm FY2025 earnings. Segment figures are approximate.)           │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Uno Q vs Ventuno Q — the Arduino Qualcomm lineup
+
+Qualcomm announced its intent to acquire Arduino in October 2025. The combined entity is executing a two-board hardware strategy pairing Qualcomm silicon with the Arduino form factor and developer ecosystem.
+
+```
+                              ARDUINO × QUALCOMM BOARDS
+
+    ┌──────────────────────────────────┐    ┌──────────────────────────────────┐
+    │         ARDUINO UNO Q            │    │       ARDUINO VENTUNO Q          │
+    │         (Shipping now)           │    │    (Announced EW 2026, ~Q2 2026) │
+    ├──────────────────────────────────┤    ├──────────────────────────────────┤
+    │                                  │    │                                  │
+    │  MPU: Qualcomm QRB2210           │    │  MPU: Qualcomm Dragonwing IQ8    │
+    │       (Dragonwing Q2 Series)     │    │       (IQ-8275)                  │
+    │                                  │    │                                  │
+    │  CPU: 4x Cortex-A53 @ 2.0 GHz   │    │  CPU: 8-core Kryo (up to ~2.4GHz)│
+    │  GPU: Adreno 702                 │    │  GPU: Adreno                     │
+    │  NPU: None (0 TOPS)             │    │  NPU: Hexagon Tensor (~40 TOPS) │
+    │  RAM: 2-4 GB LPDDR4             │    │  RAM: 16 GB LPDDR5              │
+    │  Storage: 16-64 GB eMMC         │    │  Storage: 64 GB eMMC + M.2 NVMe │
+    │                                  │    │                                  │
+    │  MCU: STM32U585 (Cortex-M33)    │    │  MCU: STM32H5F5 (Cortex-M33)   │
+    │       786 KB SRAM               │    │       Higher SRAM + peripherals  │
+    │                                  │    │                                  │
+    │  OS:  Debian Linux + Zephyr     │    │  OS:  Ubuntu/Debian + Zephyr    │
+    │                                  │    │                                  │
+    │  Price: ~$90 (4 GB)             │    │  Price: ~$300 (expected)        │
+    │                                  │    │                                  │
+    │  Best for:                       │    │  Best for:                       │
+    │  - Learning & prototyping        │    │  - On-device LLMs / gen AI       │
+    │  - Sensor fusion + simple AI     │    │  - Computer vision + NPU accel.  │
+    │  - IoT gateways                  │    │  - Robotics & industrial edge    │
+    │  - Budget-conscious projects     │    │  - Multi-camera pipelines        │
+    └──────────────────────────────────┘    └──────────────────────────────────┘
+
+    Both boards share:
+    ├── Dual-brain architecture (MPU + MCU via RPC Bridge)
+    ├── Arduino App Lab + Bricks ecosystem
+    ├── Arduino IDE / Cloud compatibility
+    ├── Python (MPU) + C++ Sketch (MCU) programming model
+    └── Same Bridge API pattern (providers, WebSocket, etc.)
+```
+
+_Ventuno Q specs are based on the Embedded World 2026 announcement and may change before final production. Verify current details at [arduino.cc](https://www.arduino.cc/)._
+
+The Ventuno Q's ~40-TOPS NPU fundamentally changes what's possible. Models that are impractical on the Uno Q's CPU-only path (object segmentation, depth estimation, small language models, generative AI) become real-time workloads on the Ventuno Q. If you build on the Uno Q today and outgrow its capabilities, the same app architecture (Python coordinator, Bridge providers, sketch, App Lab) ports directly to the Ventuno Q — you change the target device in AI Hub and redeploy.
+
+---
+
+## The bigger picture: 2026-2027 and beyond
+
+_This section includes forward-looking observations based on publicly announced products, published roadmaps, and industry trends as of early 2026. Timelines, specs, and market projections are subject to change._
+
+The Uno Q exists at the intersection of several converging trends. Understanding where each piece of the ecosystem is headed helps you evaluate what to build today and what to plan for.
+
+### Qualcomm's acquisition strategy — building the full stack
+
+Qualcomm has moved beyond selling chips. Through a series of acquisitions and announced deals, it is assembling every layer of the edge AI stack:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                 QUALCOMM'S FULL-STACK EDGE AI ECOSYSTEM                         │
+│                 Assembled through acquisitions (2024-2025)                       │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐
+  │ SILICON          │  │ AI TOOLCHAIN     │  │ OS + FLEET MGMT │  │ DEVELOPER    │
+  │                  │  │                  │  │                  │  │ COMMUNITY    │
+  │ Qualcomm         │  │ Edge Impulse     │  │ Foundries.io     │  │ Arduino      │
+  │ (in-house)       │  │ (acquired        │  │ (acquired        │  │ (announced   │
+  │                  │  │  Mar 2025)       │  │  Mar 2024)       │  │  Oct 2025)   │
+  │ Snapdragon       │  │                  │  │                  │  │              │
+  │ Dragonwing       │  │ Train custom     │  │ FoundriesFactory │  │ 33M+         │
+  │ Hexagon NPU      │  │ ML models on     │  │ Linux OTA, fleet │  │ developers   │
+  │ Adreno GPU       │  │ your own data    │  │ management,      │  │ App Lab      │
+  │ Kryo/Oryon CPU   │  │                  │  │ DevSecOps, CI/CD │  │ Arduino Cloud│
+  │ AI Hub           │  │ Deploy to any    │  │                  │  │ Bricks       │
+  │ (cloud compile)  │  │ Qualcomm device  │  │ Secure boot,     │  │ IDE          │
+  │                  │  │ as TFLite        │  │ container mgmt   │  │ 30k+ business│
+  │                  │  │                  │  │                  │  │ customers    │
+  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘  └──────┬──────┘
+           │                     │                      │                   │
+           └─────────────────────┴──────────────────────┴───────────────────┘
+                                         │
+                              ┌──────────▼──────────┐
+                              │ THE VISION:          │
+                              │ One vendor for       │
+                              │ chip → model →       │
+                              │ OS → OTA → IDE →     │
+                              │ cloud → community    │
+                              └─────────────────────┘
+```
+
+This vertical integration means a developer building on the Uno Q today has a path from prototype to production fleet without leaving the Qualcomm/Arduino ecosystem:
+
+| Stage | Tool | What it does |
+|-------|------|-------------|
+| **Prototype** | Arduino IDE / App Lab | Write sketch + Python, test on single board |
+| **Train AI** | Edge Impulse | Train custom model on your data, export TFLite |
+| **Optimize** | AI Hub | Compile + quantize model for QRB2210 or IQ8 |
+| **Secure OS** | FoundriesFactory | Hardened Linux, secure boot, container isolation |
+| **Deploy fleet** | FoundriesFactory + Arduino Cloud | OTA updates to 10 or 10,000 boards |
+| **Monitor** | Arduino Cloud | Dashboard, alerts, remote management |
+
+### Arduino App Lab and Bricks — what's coming
+
+App Lab has evolved rapidly through 2026. Key milestones:
+
+| Version | Date | Additions |
+|---------|------|-----------|
+| 0.4.0 | Feb 2026 | Import/export (zip), firmware flasher, offline mode, syntax highlighting |
+| 0.5.x+ | Mid 2026 | Expected: expanded Brick catalog, improved AI model management, tighter Edge Impulse integration |
+
+The Bricks system is Arduino's answer to containerized AI services. Each Brick is a Docker container that runs on the MPU and exposes an API. As the Ventuno Q ships with 40-TOPS NPU and 16 GB RAM, expect Bricks to expand into more demanding workloads — LLM inference, multi-model pipelines, real-time video analytics — that are impractical on the Uno Q's hardware.
+
+### Edge AI and on-device LLMs — the industry trajectory
+
+The broader edge computing market is projected to grow from ~$25-30B (2026) to $250-350B by the early 2030s, driven by privacy requirements, latency constraints, and bandwidth costs that make cloud-only AI impractical for many applications.
+
+Key trends shaping the Uno Q's relevance:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                     EDGE AI LANDSCAPE — 2026 → 2028+                            │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  TODAY (2026)                          NEAR FUTURE (2027-2028)                  │
+│  ─────────                             ────────────────────                     │
+│                                                                                 │
+│  NPU becoming standard                NPU in every tier of silicon              │
+│  in mid/high-end chips                 (even entry-level IoT will               │
+│  (QCS6490, Snapdragon X2)              get dedicated AI accelerators)           │
+│                                                                                 │
+│  Small Language Models (SLMs)          On-device agents that reason,            │
+│  running on phones/PCs                 plan, and act autonomously               │
+│  (Phi-3, Gemma, Llama 3.2)            without cloud round-trips                │
+│                                                                                 │
+│  Edge Impulse + AI Hub =               Unified train → optimize →              │
+│  separate tools, converging            deploy pipeline (one tool)              │
+│                                                                                 │
+│  FoundriesFactory for                  Zero-touch provisioning:                │
+│  OTA + fleet security                  board boots, auto-joins fleet,          │
+│                                        pulls latest model + firmware           │
+│                                                                                 │
+│  Arduino community learning            Physical AI mainstream:                 │
+│  Qualcomm silicon                      hobbyist robots, smart home,            │
+│                                        agriculture, industrial QA              │
+│                                                                                 │
+│  Uno Q = CPU-only prototyping          Ventuno Q and successors =              │
+│  board for edge AI basics              production-grade edge AI with NPU       │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**What this means for the Uno Q specifically:**
+
+- **It is a learning and prototyping platform**, not a production AI inference engine. Its value is in teaching the architecture (dual-brain, Bridge, Bricks, App Lab) that scales up to the Ventuno Q and beyond.
+- **The code you write today is portable.** The Python coordinator, Bridge providers, sketch structure, and App Lab workflow are the same on the Ventuno Q. Only the AI model and its delegate path change.
+- **NPU is coming to every tier.** Future Q-series entry boards will likely include dedicated AI acceleration, making the CPU-only constraint of the QRB2210 a temporary limitation of this generation.
+- **Qualcomm's $1 trillion bet on physical AI** (their stated market projection for 2040) means continued investment in the Dragonwing line, the Arduino partnership, Edge Impulse integration, and FoundriesFactory — the ecosystem around the Uno Q will keep expanding.
+
+### Robotics and physical AI — where it's all going
+
+Qualcomm's vision of "physical AI" — AI that perceives, decides, and acts in the real world — is the thread connecting all of these acquisitions. The IQ10 (18-core, top-tier robotics processor unveiled at CES 2026) targets full-size humanoid robots and industrial AMRs. The IQ8 (in the Ventuno Q) targets mid-tier robotics and edge AI. The Q2/QRB2210 (in the Uno Q) is the education and prototyping entry point.
+
+```
+                         QUALCOMM PHYSICAL AI STACK
+
+                    ┌─────────────────────────────┐
+                    │      APPLICATIONS            │
+                    │  Humanoids, AMRs, Drones,    │
+                    │  Smart Cameras, IoT Sensors  │
+                    └──────────────┬───────────────┘
+                                   │
+                    ┌──────────────▼───────────────┐
+                    │      AI MODELS               │
+                    │  AI Hub, Edge Impulse,        │
+                    │  Hugging Face, MediaPipe      │
+                    └──────────────┬───────────────┘
+                                   │
+                    ┌──────────────▼───────────────┐
+                    │      SOFTWARE PLATFORM        │
+                    │  App Lab, Bricks, Arduino     │
+                    │  Cloud, FoundriesFactory      │
+                    └──────────────┬───────────────┘
+                                   │
+                    ┌──────────────▼───────────────┐
+                    │      SILICON                  │
+                    │                               │
+                    │  IQ10 ── Humanoid/Industrial  │
+                    │  IQ8  ── Edge AI/Robotics     │
+                    │  IQ6  ── Smart Cameras        │
+                    │  Q8   ── High-end IoT         │
+                    │  Q6   ── Mid-tier IoT         │
+                    │  Q2   ── Entry IoT ◄── UNO Q  │
+                    │                               │
+                    └─────────────────────────────┘
+```
+
+The face detection demo running on this Uno Q is a small example of this larger arc. The same architectural pattern — camera input, AI inference, Bridge to MCU, real-time actuation — is how a warehouse robot processes its environment, how a smart camera identifies defects on a production line, and how a drone navigates autonomously. The Uno Q teaches the pattern at an accessible price point and complexity level.
+
 ## Links
 
 - [Arduino Uno Q Hardware](https://docs.arduino.cc/hardware/uno-q/)
 - [UNO Q User Manual](https://docs.arduino.cc/tutorials/uno-q/user-manual/)
 - [UNO Q Pinout (PDF)](https://docs.arduino.cc/resources/pinouts/ABX00162-full-pinout.pdf)
 - [UNO Q Datasheet (PDF)](https://docs.arduino.cc/resources/datasheets/ABX00162-ABX00173-datasheet.pdf)
+- [Arduino Ventuno Q (Embedded World 2026)](https://blog.arduino.cc/)
 - [Arduino App Lab](https://docs.arduino.cc/software/app-lab/)
 - [App Lab Bricks](https://docs.arduino.cc/software/app-lab/tutorials/bricks)
 - [Arduino Cloud](https://docs.arduino.cc/arduino-cloud/)
 - [Google MediaPipe Face Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker)
 - [Qualcomm AI Hub](https://aihub.qualcomm.com/)
 - [Qualcomm AI Hub Models](https://aihub.qualcomm.com/models)
-- [Hugging Face Hub](https://huggingface.co/models)
+- [Qualcomm Dragonwing Platform](https://www.qualcomm.com/products/technology/processors)
 - [Edge Impulse](https://edgeimpulse.com/)
+- [Foundries.io / FoundriesFactory](https://foundries.io/)
+- [Hugging Face Hub](https://huggingface.co/models)
 - [TensorFlow Lite Model Garden](https://www.tensorflow.org/lite/models)
 - [Buy Arduino Uno Q](https://store.arduino.cc/pages/uno-q)
