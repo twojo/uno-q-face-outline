@@ -22,11 +22,11 @@
  */
 
 // ArduinoGraphics MUST come before Arduino_LED_Matrix
-#include "ArduinoGraphics.h"
-#include "Arduino_LED_Matrix.h"
-#include <Arduino_RouterBridge.h>
+#include <ArduinoGraphics.h>
+#include <Arduino_LED_Matrix.h>
+#include "Arduino_RouterBridge.h"
 
-ArduinoLEDMatrix matrix;
+Arduino_LED_Matrix matrix;
 
 #define STATUS_LED LED_BUILTIN
 

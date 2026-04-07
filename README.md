@@ -125,9 +125,11 @@ Uses Google MediaPipe Face Landmarker (478 landmarks, up to 4 faces) running ent
 |----------|---------|---------|
 | `mcu_ready` | — | MCU initialization complete |
 
-### MCU-Side Registration — `Bridge.provide()`
+### Bridge Registration
 
-All MCU functions are registered with `Bridge.provide("name", handler)` in `setup()`, making them callable from Python. The `loop()` is empty — the sketch is entirely event-driven via Bridge callbacks.
+**MCU side** (`sketch.ino` → `setup()`): All MCU functions are registered with `Bridge.provide("name", handler)`, making them callable from Python. The `loop()` is empty — the sketch is entirely event-driven via Bridge callbacks.
+
+**MPU side** (`python/main.py`): Python-side providers use `Bridge.provide("name", handler)` to expose functions the MCU can call. WebSocket handlers use `ui.on_message("event", handler)` (function-call registration, not decorators).
 
 ## WebSocket Events (Browser ↔ MPU)
 

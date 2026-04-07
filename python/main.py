@@ -12,7 +12,7 @@ Bricks used:
 On boot:
   1. Gets the device IP address
   2. Scrolls the IP on the 12x8 LED matrix via Bridge
-  3. Serves the WebUI frontend
+  3. WebUI brick auto-serves assets/ directory
   4. Listens for face telemetry from the browser
   5. Forwards face state to MCU for LED matrix display
 """
@@ -24,6 +24,7 @@ import socket
 import time
 import threading
 
+logger = Logger("face-demo")
 ui = WebUI()
 
 FACE_STATE = {
@@ -58,8 +59,8 @@ def startup_sequence():
     """Run on boot — scroll the IP address across the LED matrix."""
     time.sleep(2)
     ip = get_ip_address()
-    print(f"[App] Device IP: {ip}")
-    print(f"[App] Scrolling IP on LED matrix...")
+    logger.info(f"Device IP: {ip}")
+    logger.info("Scrolling IP on LED matrix...")
     Bridge.call("scroll_text", f"  IP: {ip}  ")
     time.sleep(8)
     Bridge.call("scroll_text", "  Face Demo Ready  ")
@@ -67,15 +68,22 @@ def startup_sequence():
 startup_thread = threading.Thread(target=startup_sequence, daemon=True)
 startup_thread.start()
 
+# ── MCU → MPU provider (sketch calls Python) ─────────────────────
+
+def on_mcu_ready():
+    logger.info("MCU reports ready")
+
+Bridge.provide("mcu_ready", on_mcu_ready)
+
 # ── WebSocket Handlers ───────────────────────────────────────────
 
-@ui.on_connect
 def on_browser_connect(sid):
     """Browser connected — push current state."""
-    print(f"[WebUI] Browser connected: {sid}")
+    logger.info(f"Browser connected: {sid}")
     ui.send_message("state_update", json.dumps(FACE_STATE))
 
-@ui.on_message("face_data")
+ui.on_connect(on_browser_connect)
+
 def on_face_data(sid, data):
     """
     Receive face tracking telemetry from the browser frontend.
@@ -116,9 +124,10 @@ def on_face_data(sid, data):
         last_face_state = face_now
 
     except Exception as e:
-        print(f"[WebUI] face_data error: {e}")
+        logger.error(f"face_data error: {e}")
 
-@ui.on_message("device_switch")
+ui.on_message("face_data", on_face_data)
+
 def on_device_switch(sid, data):
     """
     User toggled between Uno Q and Ventuno in the frontend.
@@ -128,30 +137,31 @@ def on_device_switch(sid, data):
         payload = json.loads(data) if isinstance(data, str) else data
         mode = payload.get("device", "uno_q")
         FACE_STATE["device_mode"] = mode
-        print(f"[WebUI] Device mode switched to: {mode}")
+        logger.info(f"Device mode switched to: {mode}")
         Bridge.call("set_device_mode", mode)
     except Exception as e:
-        print(f"[WebUI] device_switch error: {e}")
+        logger.error(f"device_switch error: {e}")
 
-@ui.on_message("capture_snapshot")
+ui.on_message("device_switch", on_device_switch)
+
 def on_capture_snapshot(sid, data):
     """
     User requested a snapshot capture from the frontend.
     Acknowledge and log the event.
     """
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    print(f"[WebUI] Snapshot captured at {timestamp}")
+    logger.info(f"Snapshot captured at {timestamp}")
     ui.send_message("snapshot_ack", json.dumps({
         "status": "ok",
         "timestamp": timestamp
     }))
 
-# ── Serve the WebUI ──────────────────────────────────────────────
+ui.on_message("capture_snapshot", on_capture_snapshot)
 
-ui.serve("./assets/index.html")
+# ── Run App ──────────────────────────────────────────────────────
 
-print("[App] Wojo's Uno Q Face Outline Demo — starting")
-print("[App] WebUI served from ./assets/index.html")
-print("[App] Waiting for browser connection...")
+logger.info("Wojo's Uno Q Face Outline Demo — starting")
+logger.info("WebUI auto-serves assets/ directory")
+logger.info("Waiting for browser connection...")
 
 App.run()

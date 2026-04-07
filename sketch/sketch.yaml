@@ -1,11 +1,12 @@
 profiles:
-  uno_q:
-    notes: "Arduino Uno Q — STM32U585 MCU profile"
-    fqbn: "STMicroelectronics:stm32:GenU5:pnum=ARDUINO_UNO_R4_Q"
+  default:
     platforms:
-      - platform: "STMicroelectronics:stm32 (2.8.1)"
-        platform_index_url: "https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json"
+      - platform: arduino:zephyr
     libraries:
-      - Arduino_RouterBridge
-      - Arduino_LED_Matrix
-      - ArduinoGraphics
+      - Arduino_RouterBridge (0.3.0)
+      - dependency: Arduino_RPClite (0.2.1)
+      - dependency: ArxContainer (0.7.0)
+      - dependency: ArxTypeTraits (0.3.2)
+      - dependency: DebugLog (0.8.4)
+      - dependency: MsgPack (0.4.2)
+default_profile: default
