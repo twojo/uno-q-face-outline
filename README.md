@@ -304,14 +304,14 @@ This project is designed to pull as few external resources as possible.
 
 | Library | Version | Notes |
 |---------|---------|-------|
-| `Arduino_RouterBridge` | 0.3.0 | Bridge RPC — the only library listed in sketch.yaml |
+| `Arduino_RouterBridge` | 0.4.1 | Bridge RPC — primary library in sketch.yaml |
+| `ArduinoGraphics` | 1.1.4 | Text/graphics on LED matrix — listed explicitly (App Lab doesn't auto-resolve it) |
 | `Arduino_RPClite` | 0.2.1 | Transitive dep of RouterBridge |
 | `ArxContainer` | 0.7.0 | Transitive dep of RouterBridge |
 | `ArxTypeTraits` | 0.3.2 | Transitive dep of RouterBridge |
 | `DebugLog` | 0.8.4 | Transitive dep of RouterBridge |
 | `MsgPack` | 0.4.2 | Transitive dep of RouterBridge |
-| `Arduino_LED_Matrix` | (platform) | Bundled with arduino:zephyr, not in sketch.yaml |
-| `ArduinoGraphics` | (platform) | Bundled with arduino:zephyr, not in sketch.yaml |
+| `Arduino_LED_Matrix` | (platform) | Bundled with arduino:zephyr board core — no separate entry needed |
 
 ### MPU (python/main.py) — Python
 
