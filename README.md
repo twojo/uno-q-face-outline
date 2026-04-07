@@ -315,7 +315,25 @@ This project is designed to pull as few external resources as possible.
 
 ### MPU (python/main.py) — Python
 
-Only the App Lab SDK (`arduino.app_utils`, `arduino.app_bricks.web_ui`) and Python stdlib. **Zero pip packages.**
+Core: App Lab SDK (`arduino.app_utils`, `arduino.app_bricks.web_ui`) + Python stdlib.
+
+Optional (for on-device AI face detection):
+
+| Package | Notes |
+|---------|-------|
+| `tflite-runtime` | TFLite inference engine — lightweight, runs on QRB2210 CPU/GPU |
+| `numpy` | Array operations for model input/output |
+| `opencv-python-headless` | Camera capture (`/dev/video0`) + image preprocessing |
+
+These are **not required** — the app falls back to browser-only MediaPipe if they're absent.
+
+For model compilation (dev machine only, not on the Uno Q):
+
+| Package | Notes |
+|---------|-------|
+| `qai-hub` | Qualcomm AI Hub SDK — compile models for QRB2210 in the cloud |
+| `qai_hub_models` | Pre-built model wrappers (face_det_lite, mediapipe_face, etc.) |
+| `torch` | PyTorch — needed for model tracing before compilation |
 
 ### Browser (assets/index.html) — CDN Resources
 
@@ -400,10 +418,93 @@ The hidden diagnostics panel (toggle via title bar) shows real-time status:
 - **Face Landmarker Model** row — which delegate loaded and any reload events
 - Console logs prefixed with `[SANITY]` for detailed frame-by-frame validation
 
+## On-Device Face Detection (Qualcomm AI Hub)
+
+The project supports **optional on-device face detection** via TFLite models compiled through [Qualcomm AI Hub](https://aihub.qualcomm.com/). When a `.tflite` model is present, the QRB2210 MPU runs face detection directly from the camera — bypassing the browser's MediaPipe WASM engine entirely.
+
+### Architecture
+
+```
+Without AI Hub (default):
+  Camera (browser) → MediaPipe WASM → JavaScript → WebSocket → MPU → Bridge → MCU
+
+With AI Hub (on-device):
+  Camera (v4l2) → TFLite (MPU) → face results ─┬→ Bridge → MCU (LED/RGB)
+                                                 └→ WebSocket → Browser (overlay)
+```
+
+### Supported Models
+
+| Model | ID | Size | Speed | License |
+|-------|----|------|-------|---------|
+| **Lightweight Face Detection** (recommended) | `face_det_lite` | ~965 KB (INT8) | ~194μs (S8E) | BSD-3-Clause |
+| **MediaPipe Face Detection** | `mediapipe_face` | ~4 MB | ~0.6ms (S23) | Apache-2.0 |
+
+### Quick Start
+
+```bash
+# 1. On your dev machine — compile model for QRB2210
+pip install qai-hub qai_hub_models torch
+qai-hub configure --api_token YOUR_TOKEN
+python python/ai_hub_setup.py --compile --model face_det_lite --device QRB2210
+
+# 2. Copy the .tflite file to the Uno Q
+scp python/models/face_det_lite.tflite unoq:~/face-demo/python/models/
+
+# 3. On the Uno Q — install runtime deps
+pip install tflite-runtime numpy opencv-python-headless
+
+# 4. Reboot the app — it auto-discovers the model
+```
+
+### Helper Script (`python/ai_hub_setup.py`)
+
+| Command | What it does |
+|---------|-------------|
+| `--check` | System readiness check (deps, auth, devices, existing models) |
+| `--list` | List supported models with status |
+| `--compile --model face_det_lite` | Compile via AI Hub cloud → download `.tflite` |
+| `--compile --quantize w8a8` | Compile with INT8 quantization (smaller, faster) |
+| `--download --model face_det_lite` | Download pre-built model (if available) |
+| `--verify models/face_det_lite.tflite` | Load, inspect, and test-run a model file |
+
+### Graceful Degradation
+
+The system always works without AI Hub models. Every component is optional:
+
+| Missing | Behavior |
+|---------|----------|
+| No `.tflite` model | Browser-only mode (MediaPipe WASM) |
+| No `tflite-runtime` | Browser-only mode |
+| No `opencv-python-headless` | Browser-only mode |
+| No camera (`/dev/video*`) | Model loaded but no capture — browser still works |
+| Model load fails | Error logged, browser-only mode |
+
+Boot diagnostics report the full AI Hub status in the `AI HUB — ON-DEVICE FACE DETECTION` section.
+
+### WebSocket Events (AI Hub)
+
+| Event | Direction | Payload |
+|-------|-----------|---------|
+| `mpu_face_data` | MPU → Browser | `{faces, source:"mpu", inference_ms, detections:[{box, score}]}` |
+| `ai_status_request` | Browser → MPU | `{}` (trigger status response) |
+| `ai_status` | MPU → Browser | `{available, status, model, running, fps, inference_ms, ...}` |
+| `ai_toggle` | Browser → MPU | `{enable: true/false}` (start/stop on-device detection) |
+
+### QRB2210 Performance Notes
+
+The QRB2210 is a quad-core Cortex-A53 @ 2.0 GHz with an Adreno GPU but **no Hexagon NPU**. TFLite runs on CPU/GPU. Expected performance:
+- `face_det_lite` (INT8): ~5-15ms per frame (CPU), ~60-100 FPS theoretical
+- `mediapipe_face`: ~10-25ms per frame (CPU), ~40-100 FPS theoretical
+- Camera capture at 640x480 @ 15 FPS is the practical bottleneck
+
+For NPU-accelerated inference, consider the QCS6490 or QCS8550 (higher-tier boards with Hexagon HTP).
+
 ## Credits
 
 - [Arduino App Lab](https://docs.arduino.cc/software/app-lab/)
 - [Arduino App Bricks](https://github.com/arduino/app-bricks-py)
 - [Arduino App Bricks Examples](https://github.com/arduino/app-bricks-examples)
 - [Google MediaPipe](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker)
+- [Qualcomm AI Hub](https://aihub.qualcomm.com/)
 - Qualcomm QRB2210 Dragonwing SoC

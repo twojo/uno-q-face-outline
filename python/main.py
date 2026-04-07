@@ -25,7 +25,8 @@
 #   7. Scroll IP + status on LED matrix
 #   8. Wait for browser connection
 #
-# Dependencies: only stdlib + App Lab SDK. No pip packages needed.
+# Dependencies: stdlib + App Lab SDK. Optional: tflite-runtime, numpy,
+# opencv-python-headless for on-device face detection via AI Hub models.
 
 from arduino.app_utils import *
 from arduino.app_bricks.web_ui import WebUI
@@ -37,10 +38,18 @@ import os
 import platform
 import subprocess
 
+try:
+    from face_detector_mpu import FaceDetectorMPU, find_models
+    _ai_hub_import_ok = True
+except ImportError:
+    _ai_hub_import_ok = False
+
 logger = Logger("face-demo")
 ui = WebUI()
 
 BOOT_START = time.time()
+
+mpu_detector = None
 
 # ── Terminal Formatting Helpers ──
 
@@ -325,6 +334,55 @@ def run_boot_diagnostics():
     else:
         fail("assets/index.html NOT FOUND — frontend will not load")
 
+    # --- AI Hub / On-Device Detection ---
+    section("AI HUB — ON-DEVICE FACE DETECTION")
+    global mpu_detector
+
+    if not _ai_hub_import_ok:
+        warn("face_detector_mpu module not available (import failed)")
+        kv("On-device detection", "DISABLED — browser-only mode")
+    else:
+        try:
+            from face_detector_mpu import (
+                _tflite_available, _tflite_backend,
+                _numpy_available, _cv2_available,
+                find_camera,
+            )
+            kv("TFLite runtime", f"{'✓ ' + _tflite_backend if _tflite_available else '✗ not installed'}")
+            kv("numpy", f"{'✓' if _numpy_available else '✗ not installed'}")
+            kv("OpenCV", f"{'✓' if _cv2_available else '✗ not installed'}")
+
+            models = find_models()
+            if models:
+                kv("Models found", len(models))
+                for name, info in models.items():
+                    ok(f"{name} ({info['size_kb']} KB) — {info['path']}")
+            else:
+                kv("Models found", "0")
+                warn("No .tflite models in python/models/")
+                logger.info("    Run: python ai_hub_setup.py --compile --model face_det_lite")
+
+            cam_dev, cam_idx = find_camera()
+            kv("Camera device", f"{'✓ ' + cam_dev if cam_dev else '✗ not found'}")
+
+            mpu_detector = FaceDetectorMPU(logger=logger)
+            init_ok = mpu_detector.initialize()
+
+            if init_ok:
+                status = mpu_detector.get_status_dict()
+                kv("Detector status", f"✓ {status['status']} — {status['detail']}")
+                kv("On-device detection", "AVAILABLE")
+            else:
+                status = mpu_detector.get_status_dict()
+                kv("Detector status", f"⚠ {status['status']} — {status['detail']}")
+                kv("On-device detection", "UNAVAILABLE — falling back to browser-only mode")
+                mpu_detector = None
+
+        except Exception as e:
+            warn(f"AI Hub init error: {e}")
+            kv("On-device detection", "DISABLED — browser-only mode")
+            mpu_detector = None
+
     # --- Boot Summary ---
     boot_elapsed = time.time() - BOOT_START
     section("BOOT DIAGNOSTICS COMPLETE")
@@ -332,6 +390,7 @@ def run_boot_diagnostics():
     kv("Primary IP", primary_ip)
     kv("DNS", "OK" if dns_result else "FAILED")
     kv("CDN reachable", "checked (see above)")
+    kv("On-device AI", "ACTIVE" if mpu_detector else "browser-only")
     logger.info("")
     logger.info("  Open your browser to:")
     logger.info(f"    http://{primary_ip}:<port>/")
@@ -383,11 +442,62 @@ def startup_sequence():
     Bridge.call("scroll_text", f"  {platform.machine()} {get_kernel_version()[:12]}  ")
     time.sleep(6)
 
+    if mpu_detector and mpu_detector.available:
+        Bridge.call("scroll_text", "  AI: ON-DEVICE  ")
+        time.sleep(4)
+        started = mpu_detector.start()
+        if started:
+            logger.info("[STARTUP] On-device face detection started")
+            Bridge.call("set_rgb", "cyan")
+            time.sleep(1)
+            Bridge.call("set_rgb", "off")
+        else:
+            logger.info("[STARTUP] On-device detection available but could not start capture")
+
     Bridge.call("scroll_text", "  Face Demo Ready  ")
     logger.info("[STARTUP] LED matrix boot sequence complete")
 
 startup_thread = threading.Thread(target=startup_sequence, daemon=True)
 startup_thread.start()
+
+
+# ── MPU Detector Callbacks ──
+# When on-device detection is active, face results from the MPU
+# bypass the browser entirely and go straight to the MCU.
+
+mpu_last_face_present = False
+
+def on_mpu_faces(faces):
+    global mpu_last_face_present
+    n = len(faces)
+    face_state["faces_detected"] = n
+
+    if not mpu_last_face_present:
+        logger.info(f"[AI-HUB] Face appeared (on-device) — {n} face(s)")
+        Bridge.call("flash_face", 3)
+    else:
+        Bridge.call("show_face")
+
+    mpu_last_face_present = True
+
+    ui.send_message("mpu_face_data", json.dumps({
+        "faces": n,
+        "source": "mpu",
+        "inference_ms": round(mpu_detector.last_inference_ms, 1) if mpu_detector else 0,
+        "detections": [{"box": f["box"], "score": round(f["score"], 3)} for f in faces],
+    }))
+
+def on_mpu_no_faces():
+    global mpu_last_face_present
+    if mpu_last_face_present:
+        logger.info("[AI-HUB] Face lost (on-device)")
+        Bridge.call("show_no_face")
+        face_state["faces_detected"] = 0
+    mpu_last_face_present = False
+
+if mpu_detector:
+    mpu_detector.on_faces(on_mpu_faces)
+    mpu_detector.on_no_faces(on_mpu_no_faces)
 
 
 # ── Bridge Providers (MCU -> MPU) ──
@@ -430,12 +540,19 @@ def on_face_data(sid, data):
     count, blink count, dominant expression, pupil diameters, and
     head pose angles.
 
+    When on-device detection is active, browser telemetry is ignored
+    for MCU hardware control (LED/RGB) to avoid conflicting updates.
+    The face_state dict is still updated for UI consistency.
+
     State transitions drive LED matrix + RGB LED updates:
       - No face -> face: flash smiley 3x, RGB green, relay ON
       - Face present:    show expression bitmap, RGB color-coded
       - Face -> no face: show X pattern, RGB red, relay OFF
     """
     global last_face_present
+
+    mpu_active = mpu_detector and mpu_detector.running
+
     try:
         payload = json.loads(data) if isinstance(data, str) else data
 
@@ -449,24 +566,25 @@ def on_face_data(sid, data):
 
         face_now = face_state["faces_detected"] > 0
 
-        if face_now and not last_face_present:
-            logger.info(f"[FACE] Face appeared — {face_state['faces_detected']} face(s)")
-            Bridge.call("flash_face", 3)
-            expr = face_state["expression"]
-            if expr != "neutral":
-                time.sleep(0.5)
-                Bridge.call("show_expression", expr)
+        if not mpu_active:
+            if face_now and not last_face_present:
+                logger.info(f"[FACE] Face appeared — {face_state['faces_detected']} face(s)")
+                Bridge.call("flash_face", 3)
+                expr = face_state["expression"]
+                if expr != "neutral":
+                    time.sleep(0.5)
+                    Bridge.call("show_expression", expr)
 
-        elif face_now:
-            expr = face_state["expression"]
-            if expr != "neutral":
-                Bridge.call("show_expression", expr)
-            else:
-                Bridge.call("show_face")
+            elif face_now:
+                expr = face_state["expression"]
+                if expr != "neutral":
+                    Bridge.call("show_expression", expr)
+                else:
+                    Bridge.call("show_face")
 
-        elif not face_now and last_face_present:
-            logger.info("[FACE] Face lost")
-            Bridge.call("show_no_face")
+            elif not face_now and last_face_present:
+                logger.info("[FACE] Face lost")
+                Bridge.call("show_no_face")
 
         last_face_present = face_now
 
@@ -536,10 +654,67 @@ def on_gpio_control(sid, data):
 ui.on_message("gpio_control", on_gpio_control)
 
 
+# ── AI Hub Status from Browser ──
+
+def on_ai_status_request(sid, data):
+    """Return on-device AI detection status to the browser."""
+    if mpu_detector:
+        status = mpu_detector.get_status_dict()
+    else:
+        status = {
+            "available": False,
+            "status": "disabled",
+            "detail": "No TFLite model or runtime — browser-only mode",
+            "model": None,
+            "running": False,
+            "fps": 0,
+            "inference_ms": 0,
+            "frame_count": 0,
+            "detect_count": 0,
+            "tflite_backend": None,
+            "faces": 0,
+        }
+    ui.send_message("ai_status", json.dumps(status))
+
+ui.on_message("ai_status_request", on_ai_status_request)
+
+
+def on_ai_toggle(sid, data):
+    """Start/stop on-device face detection from browser toggle."""
+    if not mpu_detector:
+        ui.send_message("ai_status", json.dumps({
+            "available": False,
+            "status": "disabled",
+            "detail": "No TFLite model or runtime",
+        }))
+        return
+
+    try:
+        payload = json.loads(data) if isinstance(data, str) else data
+        enable = payload.get("enable", False)
+
+        if enable and not mpu_detector.running:
+            started = mpu_detector.start()
+            logger.info(f"[AI-HUB] On-device detection {'started' if started else 'failed to start'}")
+        elif not enable and mpu_detector.running:
+            mpu_detector.stop()
+            logger.info("[AI-HUB] On-device detection stopped by browser")
+
+        ui.send_message("ai_status", json.dumps(mpu_detector.get_status_dict()))
+    except Exception as e:
+        logger.error(f"ai_toggle error: {e}")
+
+ui.on_message("ai_toggle", on_ai_toggle)
+
+
 # ── Start ──
 
 boot_total = time.time() - BOOT_START
 logger.info(f"Total boot time: {boot_total:.2f}s")
+if mpu_detector and mpu_detector.available:
+    logger.info(f"On-device AI: READY ({mpu_detector.status_detail})")
+else:
+    logger.info("On-device AI: browser-only mode (no model/runtime)")
 logger.info("Starting WebUI brick — waiting for browser connections...")
 logger.info("")
 App.run()
