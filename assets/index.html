@@ -153,6 +153,7 @@
         .hud-tr { top: 0; right: 0; border-radius: 0 0 0 6px; text-align: right; }
         .hud-bl { bottom: 0; left: 0; border-radius: 0 6px 0 0; }
         .hud-br { bottom: 0; right: 0; border-radius: 6px 0 0 0; text-align: right; }
+        .hud-bc { bottom: 0; left: 50%; transform: translateX(-50%); border-radius: 6px 6px 0 0; white-space: nowrap; }
 
         .hud-row {
             display: flex;
@@ -357,6 +358,10 @@
             <div class="hud-row"><span class="hud-k">Uptime</span><span class="hud-v" id="hUp">00:00</span></div>
             <div class="hud-row"><span class="hud-k">Frames</span><span class="hud-v" id="hFrames">0</span></div>
             <div class="hud-row"><span class="hud-k">Detect</span><span class="hud-v" id="hDetects">0</span></div>
+        </div>
+
+        <div class="hud hud-bc on" id="hudSys" style="font-size:8px;opacity:0.7;">
+            <span class="hud-v" id="hSysLine" style="font-size:8px;letter-spacing:0.03em;">SYS: loading...</span>
         </div>
     </div>
 
@@ -710,6 +715,100 @@
     ctx.textAlign = "center";
     ctx.fillText("CANVAS OK — WAITING FOR FACE...", cvs.width / 2, cvs.height / 2);
     setDiag("dCanvas", "ok", cvs.width + "x" + cvs.height + " — drawing test passed");
+
+    const sysStats = {
+        cpu_pct: 0, ram_pct: 0, ram_used_mb: 0, ram_total_mb: 0,
+        ip: "...", disk_pct: 0, cpu_temp_c: null, py_rss_mb: 0,
+        cpu_count: 0, net_ifaces: {}, lastFetch: 0
+    };
+    const SYS_POLL_MS = 2000;
+
+    async function pollSysStats() {
+        try {
+            const r = await fetch("/api/stats");
+            if (!r.ok) {
+                document.getElementById("hSysLine").textContent = "SYS: server error (" + r.status + ")";
+                return;
+            }
+            const d = await r.json();
+            Object.assign(sysStats, d);
+            sysStats.lastFetch = performance.now();
+
+            const parts = [];
+            parts.push("CPU " + d.cpu_pct.toFixed(0) + "%" + (d.cpu_count ? " \u00D7" + d.cpu_count : ""));
+            parts.push("RAM " + d.ram_used_mb + "/" + d.ram_total_mb + "MB (" + d.ram_pct.toFixed(0) + "%)");
+            parts.push("IP " + d.ip);
+            if (d.cpu_temp_c !== null) parts.push("Temp " + d.cpu_temp_c.toFixed(0) + "\u00B0C");
+            parts.push("Disk " + d.disk_pct.toFixed(0) + "%");
+            parts.push("Flask " + d.py_rss_mb + "MB");
+
+            document.getElementById("hSysLine").textContent = parts.join("  \u2502  ");
+        } catch (e) {
+            document.getElementById("hSysLine").textContent = "SYS: offline";
+        }
+    }
+    pollSysStats();
+    setInterval(pollSysStats, SYS_POLL_MS);
+
+    function drawSysOverlay(ctx, w, h) {
+        if (!sysStats.lastFetch) return;
+
+        ctx.save();
+        ctx.translate(w - 8, 60);
+        ctx.scale(-1, 1);
+
+        ctx.font = "10px 'JetBrains Mono', monospace";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+
+        const lines = [];
+        lines.push("CPU " + sysStats.cpu_pct.toFixed(0) + "% \u00D7" + sysStats.cpu_count);
+        lines.push("RAM " + sysStats.ram_used_mb + "/" + sysStats.ram_total_mb + "MB");
+
+        const barW = 50, barH = 4;
+        const cpuFrac = Math.min(sysStats.cpu_pct / 100, 1);
+        const ramFrac = Math.min(sysStats.ram_pct / 100, 1);
+
+        const lineH = 14;
+        const totalH = lines.length * lineH + 2 * lineH + 12;
+        const bgW = 160;
+
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.beginPath();
+        ctx.roundRect(-4, -4, bgW, totalH, 4);
+        ctx.fill();
+
+        let y = 0;
+
+        ctx.fillStyle = "rgba(200,220,255,0.55)";
+        ctx.fillText(lines[0], 0, y);
+        y += lineH;
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
+        ctx.fillRect(0, y, barW, barH);
+        ctx.fillStyle = cpuFrac > 0.8 ? "rgba(255,80,80,0.7)" : "rgba(80,200,120,0.6)";
+        ctx.fillRect(0, y, barW * cpuFrac, barH);
+        y += lineH;
+
+        ctx.fillStyle = "rgba(200,220,255,0.55)";
+        ctx.fillText(lines[1], 0, y);
+        y += lineH;
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
+        ctx.fillRect(0, y, barW, barH);
+        ctx.fillStyle = ramFrac > 0.8 ? "rgba(255,80,80,0.7)" : "rgba(100,160,255,0.6)";
+        ctx.fillRect(0, y, barW * ramFrac, barH);
+        y += lineH;
+
+        ctx.fillStyle = "rgba(200,220,255,0.45)";
+        ctx.fillText("IP " + sysStats.ip, 0, y);
+        y += lineH;
+        if (sysStats.cpu_temp_c !== null) {
+            ctx.fillText("Temp " + sysStats.cpu_temp_c.toFixed(0) + "\u00B0C", 0, y);
+            y += lineH;
+        }
+        ctx.fillText("Disk " + sysStats.disk_pct.toFixed(0) + "%  Flask " + sysStats.py_rss_mb + "MB", 0, y);
+
+        ctx.restore();
+    }
 
     const FACE_COLORS = [
         { mesh: "rgba(120,160,255,0.55)", edge: "rgba(90,160,255,0.95)",  feat: "rgba(100,180,255,1)", iris: "rgba(0,220,255,1)",  dot: "rgba(90,160,255,0.7)",  tag: "#7799ff" },
@@ -1199,6 +1298,8 @@
             if (renderErrors <= 5) console.error("Render error #" + renderErrors + ":", e);
             setDiag("dCanvas", "fail", "RENDER ERROR #" + renderErrors + ": " + (e.message || e).slice(0, 100));
         }
+
+        drawSysOverlay(ctx, vw, vh);
 
         if (now - lastHud >= 500) {
             lastHud = now;
