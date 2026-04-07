@@ -780,6 +780,95 @@ A standard TFLite model already benefits from TFLite's built-in optimized kernel
 
 The QRB2210 in the Uno Q has **no NPU** -- only CPU and Adreno 702 GPU. That means AI Hub's main value for this board is operator fusion and optional quantization, not NPU offloading. You can still see meaningful improvements (the included `ai_hub_setup.py` helper supports `--quantize` for INT8 quantization), but you are not getting the dramatic NPU-accelerated inference that higher-tier Qualcomm boards offer.
 
+**AI Hub workflow:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                        QUALCOMM AI HUB WORKFLOW                                 │
+│                     aihub.qualcomm.com/get-started                               │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+  YOUR MODEL                    AI HUB CLOUD                      TARGET DEVICE
+ ┌──────────┐              ┌─────────────────────┐              ┌──────────────┐
+ │ PyTorch  │              │                     │              │              │
+ │ ONNX     │─── upload ──→│  1. OPTIMIZE        │              │  Uno Q       │
+ │ TF/Keras │              │     Quantize (INT8) │              │  (QRB2210)   │
+ │ JAX      │              │     Prune / Fuse ops│              │              │
+ └──────────┘              │                     │              │  or any      │
+                           │  2. COMPILE         │              │  Snapdragon  │
+                           │     Target: QRB2210 │── download ─→│  device      │
+                           │     Runtime: TFLite │  .tflite     │              │
+                           │     or QNN / DLC    │  .dlc        │              │
+                           │                     │              │              │
+                           │  3. PROFILE         │              │              │
+                           │     Latency / FPS   │              │              │
+                           │     Memory usage    │              │              │
+                           │     Layer-by-layer   │              │              │
+                           └─────────────────────┘              └──────────────┘
+                                     │
+                            Runs on 50+ hosted
+                            Qualcomm devices
+                            (no local hardware
+                            needed for profiling)
+```
+
+The key insight: you can profile your model on the QRB2210 _in the cloud_ before you even have the hardware. AI Hub maintains a fleet of hosted Qualcomm devices for remote profiling.
+
+### Where the QRB2210 fits in the Qualcomm lineup
+
+The QRB2210 is Qualcomm's entry-tier IoT processor. Understanding where it sits in the product line helps you evaluate whether to upgrade to a higher-tier board for NPU-accelerated inference, or whether the QRB2210's CPU-only path is sufficient for your workload.
+
+```
+QUALCOMM DRAGONWING IoT PROCESSOR LINEUP
+
+  Performance
+  & AI (TOPS)
+       ▲
+       │
+ ~48   │                                              ┌─────────────┐
+       │                                              │  QCS8550    │
+       │                                              │  "Q8 Series"│
+       │                                              │  ~48 TOPS   │
+       │                                              │  Hexagon    │
+       │                                              │  NPU        │
+       │                                              └─────────────┘
+       │
+ ~12   │                        ┌─────────────┐
+       │                        │  QCS6490    │
+       │                        │  "Q6 Series"│
+       │                        │  ~12 TOPS   │
+       │                        │  Hexagon    │
+       │                        │  DSP + HTA  │
+       │                        └─────────────┘
+       │
+   0   │  ┌─────────────┐
+       │  │  QRB2210  ◄─── YOU ARE HERE (Arduino Uno Q)
+       │  │  "Q2 Series"│
+       │  │  0 TOPS     │
+       │  │  CPU + GPU   │
+       │  │  only        │
+       │  └─────────────┘
+       │
+       └──────────────────────────────────────────────────────────► Cost / Power
+              ~$25                  ~$80                  ~$150+
+           2-5W TDP             5-10W TDP             10-15W TDP
+```
+
+| Feature | QRB2210 (Uno Q) | QCS6490 | QCS8550 |
+|---------|----------------|---------|---------|
+| **Series** | Q2 (Dragonwing) | Q6 (Dragonwing) | Q8 (Dragonwing) |
+| **CPU** | 4x Cortex-A53 @ 2.0 GHz | Kryo 670 (big.LITTLE) | Kryo (big.LITTLE) |
+| **GPU** | Adreno 702 | Adreno 643 | Adreno 740 |
+| **NPU** | None (0 TOPS) | Hexagon DSP + HTA (up to ~12 TOPS) | Hexagon NPU (up to ~48 TOPS) |
+| **RAM** | 2-4 GB LPDDR4 | Up to 8 GB LPDDR4X | Up to 16 GB LPDDR5X |
+| **AI inference** | CPU/GPU TFLite only | NPU-accelerated (QNN, SNPE) | NPU-accelerated (QNN) |
+| **Use case** | Entry IoT, prototyping, education | Mid-tier edge AI, smart cameras | High-end edge AI, robotics, automotive |
+| **Arduino board** | Uno Q | -- | -- |
+
+_Note: QCS6490 and QCS8550 specs are approximate and may vary by SKU. Consult [Qualcomm's product pages](https://www.qualcomm.com/products/technology/processors) for exact specifications. TOPS figures represent peak theoretical throughput._
+
+For this demo, the QRB2210's CPU inference is more than adequate -- face detection at 15+ FPS is sufficient for real-time tracking. If you need to run larger models (object detection, segmentation, pose estimation, LLMs) at production speeds, the QCS6490 or QCS8550 with NPU offloading is the upgrade path. AI Hub compiles for all three chips, so your model workflow stays the same -- only the target device changes.
+
 ### Why this demo uses browser-side MediaPipe instead of AI Hub
 
 This demo defaults to Google MediaPipe running in the browser via WASM for several reasons:
@@ -799,6 +888,39 @@ The `python/face_detector_mpu.py` module and `python/ai_hub_setup.py` helper imp
 Camera (v4l2/USB) → OpenCV capture → TFLite inference (CPU) → face results
                                                                ├→ Bridge → MCU (LED/RGB)
                                                                └→ WebSocket → Browser (overlay)
+```
+
+**TFLite on-device inference architecture:**
+
+The diagram below shows how TFLite models execute on the QRB2210. The current code in `face_detector_mpu.py` uses the default CPU interpreter (XNNPACK) -- no GPU or NPU delegates are enabled. GPU and Hexagon delegates are shown for reference as potential upgrade paths, but the GPU delegate has been observed to produce spatially incorrect results for face landmark models on Adreno GPUs, and the Hexagon delegate requires NPU hardware not present on the QRB2210.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/tensorflow/tensorflow/master/tensorflow/lite/g3doc/images/convert/workflow.svg" alt="TensorFlow Lite conversion and inference workflow" width="700">
+</p>
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    TFLite RUNTIME ON QRB2210                             │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  .tflite model file                                                      │
+│       │                                                                  │
+│       ▼                                                                  │
+│  ┌──────────────┐     ┌──────────────────────────────────────────┐       │
+│  │  TFLite      │     │  Delegates (hardware acceleration)       │       │
+│  │  Interpreter │────→│                                          │       │
+│  │              │     │  ┌──────────┐  ┌───────┐  ┌──────────┐  │       │
+│  │  - Load model│     │  │ XNNPACK  │  │ GPU   │  │ Hexagon  │  │       │
+│  │  - Allocate  │     │  │ (CPU)    │  │ (Adreno│  │ (NPU)   │  │       │
+│  │  - Invoke    │     │  │          │  │  702)  │  │          │  │       │
+│  └──────────────┘     │  │ DEFAULT ✓│  │ avail. │  │  N/A ✗   │  │       │
+│                       │  └──────────┘  └───────┘  └──────────┘  │       │
+│                       └──────────────────────────────────────────┘       │
+│                                                                          │
+│  On QRB2210: XNNPACK (CPU) is the reliable path.                         │
+│  GPU delegate works for some models but NOT for MediaPipe landmarks.     │
+│  Hexagon delegate requires NPU hardware (QCS6490/QCS8550 only).          │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 This path is useful when:
@@ -869,6 +991,38 @@ Or add it through the App Lab UI. Each Brick deploys as a container on the QRB22
 
 Models on [Hugging Face Hub](https://huggingface.co/) that can be exported to TFLite format can run on the Uno Q's MPU using the same `tflite-runtime` infrastructure. Note: this project only includes a TFLite runtime -- ONNX models would require adding `onnxruntime` separately, which is not set up in this demo.
 
+**Hugging Face model discovery and deployment workflow:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      HUGGING FACE → UNO Q PIPELINE                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  HUGGING FACE HUB                CONVERSION                   UNO Q (QRB2210)
+ ┌─────────────────┐         ┌─────────────────┐          ┌──────────────────┐
+ │  huggingface.co │         │                 │          │                  │
+ │                 │         │  Option A:      │          │  python/models/  │
+ │  500k+ models   │         │  optimum-cli    │          │    model.tflite  │
+ │  ┌───────────┐  │         │  export tflite  │          │                  │
+ │  │ PyTorch   │──┼── A ───→│  --quantize int8│── scp ─→│  tflite-runtime  │
+ │  │ TF/Keras  │  │         │                 │          │  auto-discovers  │
+ │  │ JAX       │  │         ├─────────────────┤          │  at boot         │
+ │  │ ONNX      │  │         │                 │          │                  │
+ │  └───────────┘  │         │  Option B:      │          │  Modify face_    │
+ │                 │── B ───→│  AI Hub compile  │── scp ─→│  detector_mpu.py │
+ │  Filter by:     │         │  for QRB2210    │          │  for new model's │
+ │  - Task type    │         │  (optimized)     │          │  I/O signature   │
+ │  - Model size   │         │                 │          │                  │
+ │  - Framework    │         └─────────────────┘          └──────────────────┘
+ └─────────────────┘
+                          ⚠ Not all HF architectures
+                            support TFLite export.
+                            Check optimum docs first.
+                          ⚠ ONNX models cannot run
+                            on the Uno Q (no ONNX
+                            runtime in this project).
+```
+
 The TFLite export workflow:
 
 1. **Export to TFLite.** Some Hugging Face vision models support export via Hugging Face `optimum`:
@@ -888,6 +1042,45 @@ The main consideration is model size and architecture. The QRB2210 has no NPU, s
 
 [Edge Impulse](https://edgeimpulse.com/) is a platform for training custom ML models on your own data and deploying them to edge devices. This is the approach when you need to detect something specific that no pre-trained model covers -- your company's product defects, a specific gesture, a particular plant disease, etc.
 
+**Edge Impulse end-to-end workflow:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     EDGE IMPULSE STUDIO WORKFLOW                            │
+│                       edgeimpulse.com/studio                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+  │  1. DATA  │    │ 2. IMPULSE│    │ 3. TRAIN │    │ 4. TEST  │    │ 5. DEPLOY│
+  │  COLLECT  │───→│  DESIGN   │───→│          │───→│          │───→│          │
+  │           │    │           │    │          │    │          │    │          │
+  │ Upload    │    │ Signal    │    │ Neural   │    │ Live     │    │ TFLite   │
+  │ images,   │    │ processing│    │ network  │    │ classifi-│    │ (int8)   │
+  │ audio,    │    │ block     │    │ training │    │ cation   │    │          │
+  │ sensor    │    │ (FFT,     │    │ (transfer│    │ test on  │    │ Arduino  │
+  │ data      │    │  spectro- │    │  learning│    │ device   │    │ Library  │
+  │           │    │  gram,    │    │  or from │    │ or test  │    │ (C++)    │
+  │ Label it  │    │  image    │    │  scratch)│    │ dataset  │    │          │
+  │           │    │  resize)  │    │          │    │          │    │ WebAssem-│
+  └──────────┘    │           │    │ Choose:  │    └──────────┘    │ bly      │
+                  │ Learning  │    │ MobileNet│                   │          │
+                  │ block     │    │ V2, V1   │                   │ C/C++    │
+                  │ (NN       │    │ custom   │                   │ SDK      │
+                  │  classif.)│    │ DSP+NN   │                   └──────────┘
+                  └──────────┘    └──────────┘                        │
+                                                                      │
+                                                           ┌──────────▼──────────┐
+                                                           │  FOR UNO Q:          │
+                                                           │  Use TFLite export   │
+                                                           │  (runs on QRB2210    │
+                                                           │   MPU, not STM32)    │
+                                                           │                      │
+                                                           │  ⚠ Arduino Library   │
+                                                           │  export targets MCU  │
+                                                           │  (too small for ML)  │
+                                                           └──────────────────────┘
+```
+
 Edge Impulse supports TFLite export, which means models trained there can run on the Uno Q the same way AI Hub models do:
 
 1. **Train in Edge Impulse.** Collect data, label it, train a model using Edge Impulse Studio. Choose an architecture appropriate for the A53 (MobileNetV2 or a custom DSP block).
@@ -899,6 +1092,54 @@ Edge Impulse supports TFLite export, which means models trained there can run on
 4. **MCU integration stays the same.** The Python coordinator calls the same Bridge providers (`show_face`, `show_no_face`, `set_rgb`, `set_gpio`) regardless of which model produced the detection. The MCU does not care where the inference happened -- it only responds to Bridge commands.
 
 Edge Impulse also has a direct Arduino library export path (Arduino Library > Deployment), but that targets the STM32 MCU, not the QRB2210 MPU. For the Uno Q, the MCU is too constrained for most ML models (Cortex-M33, 786 KB SRAM). Use the TFLite export to the MPU side instead.
+
+### All platforms at a glance
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                      AI MODEL ECOSYSTEM FOR UNO Q                               │
+│                      Where each platform fits                                    │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+  ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
+  │   GOOGLE          │   │   QUALCOMM        │   │   ARDUINO         │
+  │   MediaPipe       │   │   AI Hub          │   │   App Lab Bricks  │
+  │                   │   │                   │   │                   │
+  │   Pre-trained     │   │   100+ optimized  │   │   Containerized   │
+  │   face/hand/pose  │   │   models for      │   │   AI services     │
+  │   models          │   │   Snapdragon      │   │   (YOLOX, motion) │
+  │                   │   │   silicon          │   │                   │
+  │   Runs in BROWSER │   │   Runs on MPU     │   │   Runs on MPU     │
+  │   via WASM        │   │   (tflite-runtime)│   │   (Docker)        │
+  │                   │   │                   │   │                   │
+  │   Zero setup      │   │   Medium setup    │   │   Low setup       │
+  └────────┬─────────┘   └────────┬─────────┘   └────────┬─────────┘
+           │                      │                       │
+           ▼                      ▼                       ▼
+  ┌──────────────────────────────────────────────────────────────────┐
+  │                     PYTHON COORDINATOR (main.py)                 │
+  │                                                                  │
+  │   Receives face/object data from ANY source above                │
+  │   Sends commands via Bridge → MCU (LED matrix, RGB, GPIO)        │
+  │   Sends updates via WebSocket → Browser (UI overlay)             │
+  └──────────────────────────────────────────────────────────────────┘
+           │                      │
+           ▼                      ▼
+  ┌──────────────────┐   ┌──────────────────┐
+  │  HUGGING FACE     │   │  EDGE IMPULSE     │
+  │                   │   │                   │
+  │  500k+ community  │   │  Train on YOUR    │
+  │  models           │   │  custom data      │
+  │                   │   │                   │
+  │  Export to TFLite │   │  Export to TFLite │
+  │  via optimum-cli  │   │  (int8 quantized) │
+  │  or AI Hub        │   │                   │
+  │                   │   │  Best for domain- │
+  │  Best for niche   │   │  specific tasks   │
+  │  research models  │   │  (defects, custom │
+  │                   │   │   gestures, etc.) │
+  └──────────────────┘   └──────────────────┘
+```
 
 ### The decision tree
 
