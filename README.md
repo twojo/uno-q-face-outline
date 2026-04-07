@@ -9,9 +9,9 @@ Uses Google MediaPipe Face Landmarker (478 landmarks, up to 4 faces) running ent
 - **Face Mesh & Outline** — real-time 478-point landmark overlay with configurable mesh, contour, iris, and oval rendering
 - **Expression Emojis** — detects smile, surprise, eyebrow raise, and maps to emoji overlay
 - **Blink Detection** — real-time blink counter with EAR (Eye Aspect Ratio) algorithm
-- **Pupil Diameter** — iris circle overlay with estimated diameter in mm (Ventuno mode)
+- **Pupil Diameter** — iris circle overlay with estimated diameter in mm (always enabled)
 - **Head Pose** — yaw/pitch estimation from landmark geometry
-- **Device Simulation** — toggle between Uno Q (throttled: 2 faces, frame skip) and Ventuno (full speed: 4 faces, pupil measurement)
+- **Adaptive Performance** — auto-skips frames when FPS drops below threshold, recovers when performance improves; perf badge shows OPTIMAL/AUTO-THROTTLED
 - **LED Matrix Display** — built-in 12x8 LED matrix shows:
   - `"UNO"` splash → `"BOOTING..."` → `"BRIDGE OK"` on startup
   - Device IP, RAM stats, and kernel version scrolling on boot
@@ -84,6 +84,568 @@ The responsibilities are split as follows:
 └─────────────────────────────────────────────┘
 ```
 
+## State Diagrams & Flow Charts
+
+This section provides visual documentation of every major subsystem — the states they pass through, what triggers transitions, and how the pieces connect end-to-end.
+
+### 1. Full System Boot Sequence
+
+Both processors boot in parallel. The MCU completes first (no OS) and waits for Bridge; the MPU runs Linux, starts the Python runtime, then connects.
+
+```
+  MCU (STM32U585)                                MPU (QRB2210 Linux)
+  ──────────────                                  ──────────────────
+  Power-on                                        Power-on
+    │                                               │
+    ├─ Serial.begin(115200)                         ├─ Linux kernel boot
+    ├─ Print banner + specs                         ├─ Python runtime start
+    ├─ Configure GPIO pins                          │
+    ├─ matrix.begin()                               ├─ Import App Lab SDK
+    ├─ Show smiley bitmap (1.2s)                    ├─ System diagnostics:
+    ├─ Show boot icon (0.8s)                        │   ├─ CPU/RAM/disk check
+    │                                               │   ├─ Network interfaces
+    ├─ RGB self-test (R→G→B, 300ms each)            │   ├─ DNS resolution test
+    │                                               │   ├─ CDN reachability
+    ├─ Bridge.begin()                               │   └─ Project file tree
+    ├─ Register 9 Bridge providers                  │
+    ├─ Show checkmark bitmap (0.8s)                 ├─ Bridge.begin()
+    ├─ Bridge.call("mcu_ready") ──────────────────> ├─ Receive mcu_ready
+    │                                               │   └─ _bridge_ready = True
+    ├─ Set RGB red (idle, waiting)                  │
+    │                                               │
+    │  <────────────────────── Bridge.call() ─────  ├─ safe_bridge_call("scroll_text", IP)
+    ├─ Show smiley (scroll_text handler)            ├─ safe_bridge_call("scroll_text", RAM)
+    │  <────────────────────── Bridge.call() ─────  ├─ safe_bridge_call("scroll_text", kernel)
+    ├─ Show smiley (scroll_text handler)            │
+    │                                               ├─ Start WebUI Brick
+    │                                               │   └─ Serve assets/index.html
+    │  <────────────────────── Bridge.call() ─────  ├─ safe_bridge_call("scroll_text", "Face Demo Ready")
+    ├─ Show smiley (scroll_text handler)            │
+    │                                               ├─ WebSocket server ready
+    │                                               ├─ Log "BOOT COMPLETE"
+    │                                               │
+    └─ Idle — waiting for Bridge events             └─ Idle — waiting for WS/Bridge
+
+  Note: The scrollText MCU handler currently displays frame_smiley
+  rather than scrolling text — text scrolling requires ArduinoGraphics
+  font rendering which is not yet implemented for the Zephyr platform.
+```
+
+### 2. Camera Initialization Flow
+
+The browser requests camera access through a multi-step process with error handling at each stage.
+
+```
+  ┌────────────┐
+  │  Page Load │
+  └─────┬──────┘
+        │
+        v
+  ┌─────────────────────┐
+  │ navigator.mediaDevices│
+  │   .getUserMedia()    │
+  └─────┬───────────┬────┘
+        │           │
+     SUCCESS      ERROR
+        │           │
+        v           v
+  ┌──────────┐  ┌──────────────────────────┐
+  │ Got      │  │ Check error type:         │
+  │ Stream   │  │  NotAllowedError         │
+  └────┬─────┘  │   → "Permission denied"  │
+       │        │  NotFoundError            │
+       v        │   → "No camera found"    │
+  ┌──────────┐  │  Other                   │
+  │ Get track│  │   → Generic error msg    │
+  │ settings │  └───────────┬──────────────┘
+  └────┬─────┘              │
+       │                    v
+       ├─ label         ┌────────────────────────┐
+       ├─ resolution    │ Show camera-error       │
+       ├─ frameRate     │ overlay with:           │
+       ├─ facingMode    │  • Step-by-step fix     │
+       ├─ megapixels    │  • Uno Q setup link     │
+       │                │  • Permission guide     │
+       v                └────────────────────────┘
+  ┌──────────────┐
+  │ cam.srcObject│
+  │ = stream     │
+  └──────┬───────┘
+         │ onloadeddata
+         v
+  ┌──────────────┐
+  │ Init         │
+  │ FaceLandmarker│
+  └──────┬───────┘
+         │ onReady
+         v
+  ┌──────────────┐
+  │ Start draw() │
+  │ render loop  │
+  └──────────────┘
+```
+
+### 3. Face Detection & Rendering Pipeline
+
+Every animation frame passes through this pipeline. The adaptive performance system may skip frames to maintain smooth rendering.
+
+```
+  requestAnimationFrame(draw)
+        │
+        v
+  ┌─────────────────┐     YES
+  │ cam paused/ended ├──────────> return (skip)
+  │ or no model?     │
+  └────────┬────────┘
+           │ NO
+           v
+  ┌─────────────────┐     YES
+  │ Same video frame ├──────────> return (skip)
+  │ as last time?    │
+  └────────┬────────┘
+           │ NO
+           v
+  ┌──────────────────────┐   YES
+  │ PERF.skipFrames > 0  ├────────> increment counters, return
+  │ && not our turn?     │
+  └────────┬─────────────┘
+           │ NO
+           v
+  ┌──────────────────────┐
+  │ fl.detectForVideo()  │ ◄── MediaPipe WASM inference
+  │ (478 landmarks/face) │
+  └────────┬─────────────┘
+           │
+           v
+  ┌──────────────────────┐
+  │ Cap faces to          │
+  │ MAX_FACES (4)         │
+  └────────┬─────────────┘
+           │
+           v
+  ┌──────────────────────┐
+  │ matchFaces()          │ ◄── Persistent ID assignment
+  │ • sorted min-distance │     (see Face Tracking Lifecycle)
+  │ • adaptive thresholds │
+  │ • 800ms TTL survivors │
+  └────────┬─────────────┘
+           │
+           v
+  ┌──────────────────────┐
+  │ For each face:        │
+  │  ├─ Draw mesh/outline │
+  │  ├─ Draw iris overlay │
+  │  ├─ Measure pupils    │
+  │  ├─ Calculate blinks  │
+  │  ├─ Detect expression │
+  │  ├─ Draw emoji icons  │
+  │  ├─ Estimate head pose│
+  │  ├─ Draw landmark dots│
+  │  └─ Draw face label   │
+  └────────┬─────────────┘
+           │
+           v
+  ┌──────────────────────┐
+  │ drawSysOverlay()      │ ◄── CPU/RAM/temp stats on canvas
+  └────────┬─────────────┘
+           │
+           v
+  ┌──────────────────────┐
+  │ updateAdaptivePerf()  │ ◄── Check FPS, adjust skip
+  └────────┬─────────────┘
+           │
+           v
+  ┌──────────────────────┐
+  │ Update HUD (every     │ ◄── faces, FPS, latency, pupils,
+  │ 500ms)                │     blinks, yaw/pitch, uptime
+  └────────┬─────────────┘
+           │
+           v
+  ┌──────────────────────┐
+  │ Emit face_data via    │ ◄── WebSocket to MPU (every 500ms)
+  │ WebSocket (throttled) │
+  └──────────────────────┘
+```
+
+### 4. Adaptive Performance State Machine
+
+The system monitors FPS over a sliding window and auto-adjusts frame skipping to prevent the UI from becoming unresponsive on slower hardware.
+
+```
+                      ┌─────────────────────┐
+                      │     OPTIMAL          │
+                      │  skipFrames = 0      │
+                      │  All frames processed│
+                      │  Badge: "OPTIMAL"    │
+                      └──────────┬───────────┘
+                                 │
+                                 │ avg FPS < 8
+                                 │ (over 3+ samples)
+                                 │
+                                 v
+                      ┌─────────────────────┐
+                      │   AUTO-THROTTLED     │
+                      │  skipFrames = 1      │
+                      │  Every other frame   │
+                      │  Badge: "THROTTLED"  │
+                      └──────────┬───────────┘
+                                 │
+                                 │ avg FPS > 14
+                                 │ (sustained recovery)
+                                 │
+                                 v
+                      ┌─────────────────────┐
+                      │     OPTIMAL          │
+                      │  FPS history cleared │
+                      │  Full speed resumed  │
+                      └─────────────────────┘
+
+  Parameters:
+  ┌────────────────────────────────────┐
+  │ lowFpsThreshold   : 8 FPS         │
+  │ highFpsThreshold  : 14 FPS        │
+  │ fpsWindowSize     : 5 samples     │
+  │ checkInterval     : 2000ms        │
+  │ Min samples needed: 3             │
+  └────────────────────────────────────┘
+
+  Hysteresis gap (8→14) prevents rapid toggling between states.
+```
+
+### 5. Face Tracking Lifecycle
+
+Each detected face is assigned a persistent ID and tracked across frames using sorted global-minimum distance matching.
+
+```
+  New face detected in frame
+        │
+        v
+  ┌──────────────────────────────┐
+  │ matchFaces() distance check   │
+  │ Compare centroid to all       │
+  │ known tracked faces           │
+  └──────┬────────────┬──────────┘
+         │            │
+    MATCHED         UNMATCHED
+    (dist < threshold)   │
+         │            │
+         v            v
+  ┌──────────────┐  ┌──────────────────┐
+  │ Update        │  │ Assign new ID     │
+  │ existing face │  │ nextFaceId++      │
+  │ • new centroid│  │ Pick color from   │
+  │ • reset TTL  │  │ palette (4 colors)│
+  │ • update box │  │ Record birth time │
+  └──────┬───────┘  └────────┬─────────┘
+         │                   │
+         └─────────┬─────────┘
+                   │
+                   v
+  ┌───────────────────────────┐
+  │ TRACKED (active)           │
+  │ • Label: "Face N · 12s"   │
+  │ • Unique color overlay    │
+  │ • Blink/pupil/expression  │
+  └──────────┬────────────────┘
+             │
+             │ face disappears
+             │ from detection
+             v
+  ┌───────────────────────────┐
+  │ MISSING (TTL countdown)    │
+  │ • 800ms grace period      │
+  │ • Face may reappear       │
+  └──────┬────────────┬───────┘
+         │            │
+     REAPPEARS    TTL EXPIRES
+     (< 800ms)    (> 800ms)
+         │            │
+         v            v
+  ┌──────────────┐  ┌──────────────┐
+  │ RECOVERED     │  │ EXPIRED       │
+  │ Resume track  │  │ Remove from   │
+  │ Same ID/color │  │ tracked list  │
+  │ Reset TTL     │  │ ID retired    │
+  └──────────────┘  └──────────────┘
+
+  Distance Matching Details:
+  ┌─────────────────────────────────────────────┐
+  │ • Threshold scales with face width          │
+  │ • Sorted by global minimum distance         │
+  │ • Greedy assignment (closest pair first)     │
+  │ • Max tracked faces: 4 (MAX_FACES)          │
+  │ • Colors: blue, orange, green, purple       │
+  └─────────────────────────────────────────────┘
+```
+
+### 6. Bridge Communication Flow (MCU ↔ MPU ↔ Browser)
+
+Three layers communicate via two different protocols: WebSocket (browser↔MPU) and Bridge RPC (MPU↔MCU). The WebSocket layer is provided by the App Lab WebUI Brick runtime — the browser-side emit/on calls are handled by the Bricks SDK, not custom JavaScript in `assets/index.html`.
+
+```
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                  BROWSER (via WebUI Brick SDK)                  │
+  │                                                                 │
+  │  MediaPipe ──> face data ──> Brick emit("face_data")            │
+  │  User click ──> RGB button ──> Brick emit("rgb_control")        │
+  │  User click ──> GPIO toggle ──> Brick emit("gpio_control")      │
+  │  User click ──> capture ──> Brick emit("capture_snapshot")      │
+  │                                                                 │
+  │  Brick on("state_update") ──> update UI                         │
+  │  Brick on("snapshot_ack") ──> show confirmation                 │
+  │                                                                 │
+  │  (These calls use the App Lab WebUI Brick runtime. In the       │
+  │   Replit preview, the browser runs standalone without the       │
+  │   Brick SDK — face detection and rendering are fully local.)    │
+  └──────────────────────────┬──────────────────────────────────────┘
+                             │ WebSocket
+                             │ (JSON messages)
+                             v
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                     MPU (Python)                                │
+  │                                                                 │
+  │  on_face_data():                                                │
+  │    ├─ Update face_state dict                                    │
+  │    ├─ Determine expression                                     │
+  │    ├─ safe_bridge_call("show_face") or ("show_no_face")         │
+  │    ├─ safe_bridge_call("show_expression", expr)                 │
+  │    └─ safe_bridge_call("flash_face", 3) on new face            │
+  │                                                                 │
+  │  on_rgb_control():                                              │
+  │    └─ safe_bridge_call("set_rgb", color)                        │
+  │                                                                 │
+  │  on_gpio_control():                                             │
+  │    └─ safe_bridge_call("set_gpio", "pin:state")                 │
+  │                                                                 │
+  │  safe_bridge_call(method, *args):                               │
+  │    ├─ try: Bridge.call(method, *args)                           │
+  │    └─ except: log error, never crash                            │
+  │  (_bridge_ready flag set by mcu_ready — informational only)     │
+  └──────────────────────────┬──────────────────────────────────────┘
+                             │ Bridge RPC
+                             │ (MsgPack over serial)
+                             v
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                     MCU (Arduino)                               │
+  │                                                                 │
+  │  9 Bridge.provide() handlers:                                   │
+  │    scroll_text(msg)    ──> matrix.textScrollSpeed(100)          │
+  │    show_face()         ──> smiley bitmap + RGB green + relay ON │
+  │    show_no_face()      ──> X bitmap + RGB red + relay OFF       │
+  │    flash_face(count)   ──> rapid bitmap flash + buzzer          │
+  │    show_expression(e)  ──> expression bitmap + RGB color        │
+  │    set_device_mode(m)  ──> store mode string (no HW change)     │
+  │    set_rgb(color)      ──> parse color → set R/G/B pins         │
+  │    set_gpio(pin:state) ──> validate allowlist → digitalWrite    │
+  │    report_status()     ──> Bridge.call("mcu_status_report")     │
+  └─────────────────────────────────────────────────────────────────┘
+```
+
+### 7. RGB LED State Machine
+
+The onboard RGB LED provides visual status without requiring a screen. LED4 is active-low (LOW=ON, HIGH=OFF).
+
+```
+  ┌────────────────┐
+  │   POWER ON      │
+  └───────┬────────┘
+          │
+          v
+  ┌────────────────┐  300ms   ┌────────────────┐  300ms   ┌────────────────┐
+  │   RED           ├────────>│   GREEN         ├────────>│   BLUE          │
+  │   (self-test)   │         │   (self-test)   │         │   (self-test)   │
+  └────────────────┘          └────────────────┘          └───────┬────────┘
+                                                                  │
+                                                                  v
+                                                          ┌────────────────┐
+                                                          │   RED           │
+                                                          │   (idle/ready)  │
+                                                          └───────┬────────┘
+                                                                  │
+                                              ┌───────────────────┤
+                                              │                   │
+                                      face detected          no face
+                                              │                   │
+                                              v                   v
+                                      ┌──────────────┐   ┌──────────────┐
+                                      │   GREEN       │   │   RED         │
+                                      │   (tracking)  │   │   (idle)      │
+                                      └──────┬───────┘   └──────────────┘
+                                             │
+                                     expression detected
+                                             │
+                                ┌────────────┼────────────┐
+                                │            │            │
+                                v            v            v
+                         ┌──────────┐ ┌──────────┐ ┌──────────┐
+                         │  GREEN    │ │  BLUE     │ │  YELLOW   │
+                         │  (smile)  │ │(surprise) │ │ (eyebrow) │
+                         └──────────┘ └──────────┘ └──────────┘
+
+  Note: LED4 is active-low — LOW = ON, HIGH = OFF.
+  Any color can be set programmatically via Bridge.call("set_rgb", "color").
+  Supported: red, green, blue, yellow, cyan, magenta, white, off.
+```
+
+### 8. Overlay Rendering Order
+
+Each frame draws layers in a specific order. The overlay preset controls which layers are visible.
+
+```
+  Canvas (cleared each frame)
+  ─────────────────────────────────────
+  Layer 0: Video frame (via cam element)
+  ─────────────────────────────────────
+  Layer 1: Face mesh tessellation         ◄── toggleable
+  Layer 2: Face contour / jawline         ◄── toggleable
+  Layer 3: Eye outline connections        ◄── toggleable
+  Layer 4: Eyebrow connections            ◄── toggleable
+  Layer 5: Lip connections                ◄── toggleable
+  Layer 6: Face oval (outer contour)      ◄── toggleable
+  Layer 7: Iris connections + pupil ring  ◄── toggleable
+  Layer 8: Iris diameter measurement      ◄── always (when iris visible)
+  Layer 9: Landmark dots (478 per face)   ◄── toggleable
+  Layer 10: Emoji expression indicators   ◄── toggleable
+  Layer 11: Blink flash (hot pink)        ◄── triggered on blink
+  Layer 12: Face label ("Face N · 12s")   ◄── always
+  ─────────────────────────────────────
+  Layer 13: System stats overlay          ◄── always (top-right)
+  Layer 14: HUD ticker (bottom-center)    ◄── always
+  ─────────────────────────────────────
+
+  Overlay Presets (from PRESETS object in code):
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ Preset              │ Mesh │ Outline │ Eyes │ Brows │ Lips │ Iris │Dots│Emoji│
+  ├─────────────────────┼──────┼─────────┼──────┼───────┼──────┼──────┼────┼─────┤
+  │ Full Mesh+Features  │  ✓   │    ✓    │  ✓   │   ✓   │  ✓   │  ✓   │ ✓  │  ✓  │
+  │ Outline+Features    │  ✗   │    ✓    │  ✓   │   ✓   │  ✓   │  ✓   │ ✗  │  ✓  │
+  │ Mesh Only           │  ✓   │    ✗    │  ✗   │   ✗   │  ✗   │  ✗   │ ✗  │  ✗  │
+  │ Dots Only           │  ✗   │    ✗    │  ✗   │   ✗   │  ✗   │  ✗   │ ✓  │  ✗  │
+  │ Minimal             │  ✗   │    ✓    │  ✗   │   ✗   │  ✗   │  ✓   │ ✗  │  ✗  │
+  │ Outline+Emojis      │  ✗   │    ✓    │  ✗   │   ✗   │  ✓   │  ✗   │ ✗  │  ✓  │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  Note: Iris measurement and pupil diameter display are always active
+  when the iris layer is enabled in the current preset.
+```
+
+### 9. Delegate Selection & Validation Flow
+
+The face landmarker delegate (CPU vs GPU) is selected at load time and continuously validated to catch inference issues.
+
+```
+  ┌────────────────┐
+  │   App Start     │
+  └───────┬────────┘
+          │
+          v
+  ┌────────────────────┐
+  │ Try CPU delegate    │ ◄── preferred (always correct)
+  │ (WASM inference)    │
+  └───┬────────────┬───┘
+      │            │
+   SUCCESS       FAIL
+      │            │
+      v            v
+  ┌──────────┐  ┌──────────────────┐
+  │ CPU       │  │ Try GPU delegate  │
+  │ loaded    │  │ (WebGL/Adreno)   │
+  └────┬─────┘  └──┬──────────┬────┘
+       │            │          │
+       │         SUCCESS     FAIL
+       │            │          │
+       │            v          v
+       │      ┌──────────┐  ┌─────────┐
+       │      │ GPU       │  │ FATAL   │
+       │      │ loaded    │  │ No      │
+       │      └────┬─────┘  │ delegate│
+       │           │        └─────────┘
+       └─────┬─────┘
+             │
+             v
+  ┌──────────────────────────┐
+  │ UNTESTED                  │
+  │ Waiting for first face... │
+  └──────────┬───────────────┘
+             │ first face detected
+             v
+  ┌──────────────────────────┐
+  │ VALIDATING                │
+  │ Run 6 sanity checks on    │
+  │ each of next 5 frames:    │
+  │  1. Count = 478           │
+  │  2. Bounding box > 3%     │
+  │  3. Out-of-bounds < 20    │
+  │  4. Nose near center      │
+  │  5. Eye separation 2-50%  │
+  │  6. Forehead above chin   │
+  └──────────┬───────────────┘
+             │ 5 frames checked
+             │
+      ┌──────┴──────┐
+      │             │
+   >= 3 PASS     >= 3 FAIL
+      │             │
+      v             v
+  ┌────────┐  ┌─────────────┐
+  │ PASSED  │  │ FAILED       │
+  └───┬────┘  │ Auto-switch  │
+      │       │ delegate &   │
+      │       │ reload model │
+      │       └──────────────┘
+      │
+      │ continuous check every 60s
+      v
+  ┌───────────────────────┐
+  │ Re-validate 5 frames   │
+  │ If degraded: warn      │
+  │ (no auto-switch)       │
+  └───────────────────────┘
+```
+
+### 10. WebSocket Telemetry Flow
+
+Face data flows from the browser to the MPU, which drives MCU hardware responses. Telemetry is throttled to prevent flooding.
+
+```
+  Browser (every 500ms when faces present)
+  ──────────────────────────────────────────
+  emit("face_data", {
+    faces: 2,
+    blinks: {left: 0.1, right: 0.1},
+    expression: "smile",
+    pupilL: 4.2,
+    pupilR: 4.1,
+    yaw: -5.3,
+    pitch: 2.1
+  })
+        │
+        │ WebSocket
+        v
+  MPU (python/main.py :: on_face_data)
+  ──────────────────────────────────────────
+  1. Parse JSON payload
+  2. Update face_state dict:
+     ├─ face_count, blink_l/r, expression
+     ├─ pupil_l/r_mm, yaw, pitch
+     └─ last_update timestamp
+  3. Determine state transition:
+     │
+     ├─ No face → Face appeared (new detection)
+     │   ├─ Bridge: flash_face(3)
+     │   ├─ Bridge: show_face()
+     │   └─ Bridge: set_rgb("green")
+     │
+     ├─ Face → Face (ongoing, expression changed)
+     │   ├─ Bridge: show_expression(expr)
+     │   └─ Bridge: set_rgb(expr_color)
+     │
+     └─ Face → No face (all faces lost)
+         ├─ Bridge: show_no_face()
+         └─ Bridge: set_rgb("red")
+  4. Emit state_update to browser (optional)
+```
+
 ## Project Structure
 
 ```
@@ -133,21 +695,19 @@ The responsibilities are split as follows:
 
 | State | Display |
 |-------|---------|
-| **Boot step 1** | Static text `"UNO"` |
-| **Boot step 2** | Scrolls `"BOOTING..."` |
-| **Boot step 3** | Checkmark bitmap (✓) |
-| **Boot step 4** | Scrolls `"BRIDGE OK"` |
-| **Startup 1** | Scrolls `"IP: 192.168.x.x"` |
-| **Startup 2** | Scrolls `"RAM: 3800/4096MB"` |
-| **Startup 3** | Scrolls kernel version |
-| **Waiting** | Scrolls `"Face Demo Ready"` |
+| **Boot step 1** | Smiley face bitmap (1.2s splash) |
+| **Boot step 2** | Boot icon bitmap (0.8s) |
+| **Boot step 3** | RGB self-test (R→G→B, 300ms each) |
+| **Boot step 4** | Checkmark bitmap (✓) after Bridge init |
+| **Startup 1-3** | Smiley bitmap (on scroll_text calls from MPU) |
+| **Waiting** | Smiley bitmap (on `"Face Demo Ready"` scroll_text call) |
 | **Face detected (new)** | Rapid flash smiley 3x → hold smiley (+ buzzer beep if enabled) |
 | **Face detected (ongoing)** | Smiley bitmap (or expression bitmap) |
 | **Expression: smile** | Smiley face bitmap (mouth curve) |
 | **Expression: surprise** | O-mouth + wide eyes bitmap |
 | **Expression: eyebrow** | Raised eyebrows + neutral mouth |
 | **No face** | X pattern |
-| **Device switch** | Scrolls `"Mode: uno_q"` or `"Mode: ventuno"` |
+| **Mode change** | Scrolls `"Mode: uno_q"` (programmatic only) |
 
 ## RGB LED Status Colors
 
@@ -266,7 +826,7 @@ The MPU runs a full system diagnostic before the app starts:
 | `show_no_face` | — | Display X pattern + red RGB + relay OFF |
 | `flash_face` | `3` (count) | Rapidly flash face bitmap N times + buzzer beep |
 | `show_expression` | `"smile"`, `"surprise"`, `"eyebrow"` | Show expression bitmap + expression-specific RGB color |
-| `set_device_mode` | `"uno_q"` or `"ventuno"` | Switch device mode, scroll confirmation |
+| `set_device_mode` | `"uno_q"` (string) | Store mode string (no hardware change — programmatic/test use only) |
 | `set_rgb` | `"red"`, `"green"`, `"blue"`, `"yellow"`, `"cyan"`, `"magenta"`, `"white"`, `"off"` | Set RGB LED color |
 | `set_gpio` | `"7:1"` (pin:state) | Set any digital pin HIGH/LOW |
 | `report_status` | — | Request MCU status report (uptime, faces, memory) |
@@ -289,7 +849,6 @@ The MPU runs a full system diagnostic before the app starts:
 | Event | Direction | Payload |
 |-------|-----------|---------|
 | `face_data` | Browser → MPU | `{faces, blinks, expression, pupilL, pupilR, yaw, pitch}` |
-| `device_switch` | Browser → MPU | `{"device": "uno_q"}` or `{"device": "ventuno"}` |
 | `capture_snapshot` | Browser → MPU | Snapshot request |
 | `rgb_control` | Browser → MPU | `{"color": "green"}` — sets MCU RGB LED (App Lab WebSocket only) |
 | `gpio_control` | Browser → MPU | `{"pin": 7, "state": 1}` — toggles MCU GPIO (App Lab WebSocket only) |
