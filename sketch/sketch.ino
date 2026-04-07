@@ -282,6 +282,8 @@ void showExpression(String expr) {
 }
 
 void setDeviceMode(String mode) {
+    // Kept for programmatic/testing use — no frontend toggle exists.
+    // Only stores the mode string; does not change hardware behaviour.
     deviceMode = mode;
     Serial.print("[MODE] Device mode changed to: ");
     Serial.println(mode);

@@ -609,26 +609,6 @@ def on_face_data(sid, data):
 ui.on_message("face_data", on_face_data)
 
 
-def on_device_switch(sid, data):
-    """Handle device profile toggle from the frontend UI.
-
-    NOTE: Currently unreachable — the frontend setDevice() function is
-    purely client-side and does not emit a 'device_switch' WebSocket
-    message. This handler exists so that if the frontend is later wired
-    up (or for programmatic testing), the MCU mode string is updated.
-    The MCU's setDeviceMode provider only stores the mode name — it does
-    not change any hardware behaviour, so this is always safe to call."""
-    try:
-        payload = json.loads(data) if isinstance(data, str) else data
-        mode = payload.get("device", "uno_q")
-        face_state["device_mode"] = mode
-        logger.info(f"[MODE] Device mode switched to: {mode}")
-        safe_bridge_call("set_device_mode", mode)
-        safe_bridge_call("set_rgb", "blue" if mode == "uno_q" else "cyan")
-    except Exception as e:
-        logger.error(f"device_switch error: {e}")
-
-ui.on_message("device_switch", on_device_switch)
 
 
 def on_capture_snapshot(sid, data):

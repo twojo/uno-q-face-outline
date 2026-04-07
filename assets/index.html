@@ -236,52 +236,55 @@
 
         .controls select:focus { border-color: var(--blue); }
 
-        .device-toggle {
-            display: flex;
-            background: var(--surface);
+        .camera-error {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(17,24,39,0.95);
             border: 1px solid var(--border);
-            border-radius: 8px;
-            overflow: hidden;
-            position: relative;
+            border-radius: 12px;
+            padding: 32px 40px;
+            text-align: center;
+            max-width: 500px;
+            z-index: 100;
         }
-        .device-btn {
-            padding: 8px 18px;
-            font-family: inherit;
-            font-size: 12px;
-            font-weight: 600;
-            border: none;
-            cursor: pointer;
-            background: transparent;
+        .camera-error h2 { color: #ef4444; margin-bottom: 12px; font-size: 18px; }
+        .camera-error p { color: var(--text-secondary); font-size: 13px; line-height: 1.6; margin-bottom: 8px; }
+        .camera-error a { color: #60a5fa; text-decoration: none; }
+        .camera-error a:hover { text-decoration: underline; }
+        .camera-error .cam-steps { text-align: left; margin: 12px 0; padding-left: 20px; }
+        .camera-error .cam-steps li { margin-bottom: 6px; color: var(--text-secondary); font-size: 12px; }
+        .camera-specs-chip {
+            display: inline-block;
+            background: rgba(50,83,220,0.15);
+            border: 1px solid rgba(50,83,220,0.3);
+            border-radius: 6px;
+            padding: 2px 8px;
+            font-size: 10px;
+            color: #93c5fd;
+            font-family: 'JetBrains Mono', monospace;
+            margin: 2px;
+        }
+        .perf-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 9px;
+            font-family: 'JetBrains Mono', monospace;
+            padding: 2px 8px;
+            border-radius: 6px;
+            margin-left: 8px;
+        }
+        .perf-optimal { background: rgba(16,185,129,0.15); color: #34d399; }
+        .perf-throttled { background: rgba(245,158,11,0.15); color: #fbbf24; }
+        .upgrade-hint {
+            font-size: 10px;
             color: var(--muted);
-            transition: all 0.25s;
-            white-space: nowrap;
+            margin-left: 12px;
         }
-        .device-btn.active-unoq {
-            background: var(--blue);
-            color: #fff;
-        }
-        .device-btn.active-ventuno {
-            background: linear-gradient(135deg, #059669, #10b981);
-            color: #fff;
-            text-shadow: 0 0 8px rgba(16,185,129,0.5);
-        }
-        .device-btn:not([class*="active"]):hover {
-            background: rgba(255,255,255,0.05);
-            color: var(--text);
-        }
-        .device-badge {
-            font-size: 7px;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            padding: 1px 4px;
-            border-radius: 3px;
-            margin-left: 4px;
-            vertical-align: middle;
-        }
-        .badge-perf {
-            background: rgba(16,185,129,0.2);
-            color: #34d399;
-        }
+        .upgrade-hint a { color: #60a5fa; text-decoration: none; }
+        .upgrade-hint a:hover { text-decoration: underline; }
 
         .diag {
             margin-top: 14px;
@@ -348,12 +351,15 @@
     </div>
 
     <div class="specs-bar" id="specsBar">
-        <div class="spec-chip"><span class="spec-k">SoC</span> <span class="spec-v" id="specSoc">QRB2210</span></div>
-        <div class="spec-chip"><span class="spec-k">CPU</span> <span class="spec-v" id="specCpu">Cortex-A53 1.4GHz</span></div>
-        <div class="spec-chip"><span class="spec-k">MCU</span> <span class="spec-v" id="specMcu">STM32H747</span></div>
-        <div class="spec-chip"><span class="spec-k">RAM</span> <span class="spec-v" id="specRam">4GB</span></div>
-        <div class="spec-chip"><span class="spec-k">Faces</span> <span class="spec-v" id="specFaces">2</span></div>
+        <div class="spec-chip"><span class="spec-k">SoC</span> <span class="spec-v">QRB2210</span></div>
+        <div class="spec-chip"><span class="spec-k">CPU</span> <span class="spec-v">Cortex-A53 1.4GHz</span></div>
+        <div class="spec-chip"><span class="spec-k">MCU</span> <span class="spec-v">STM32U585</span></div>
+        <div class="spec-chip"><span class="spec-k">RAM</span> <span class="spec-v">4GB</span></div>
+        <div class="spec-chip"><span class="spec-k">Faces</span> <span class="spec-v" id="specFaces">4</span></div>
         <div class="spec-chip"><span class="spec-k">Del</span> <span class="spec-v" id="specDel">CPU</span></div>
+        <div class="spec-chip" id="specCamChip" style="display:none"><span class="spec-k">Cam</span> <span class="spec-v" id="specCam">--</span></div>
+        <span class="perf-indicator perf-optimal" id="perfBadge">OPTIMAL</span>
+        <span class="upgrade-hint">Need more power? <a href="https://www.arduino.cc/product-ventuno-q" target="_blank" rel="noopener">Ventuno Q</a></span>
     </div>
 
     <div class="viewport">
@@ -378,8 +384,8 @@
             <div class="hud-row"><span class="hud-k">Pitch</span><span class="hud-v" id="hPitch">--</span></div>
             <div class="hud-row"><span class="hud-k">Blink L</span><span class="hud-v" id="hBlinkL">--</span></div>
             <div class="hud-row"><span class="hud-k">Blink R</span><span class="hud-v" id="hBlinkR">--</span></div>
-            <div class="hud-row" id="hPupilRowL" style="display:none"><span class="hud-k" style="color:#ff4040">Pupil L</span><span class="hud-v" id="hPupilL" style="color:#ff4040">--</span></div>
-            <div class="hud-row" id="hPupilRowR" style="display:none"><span class="hud-k" style="color:#ff4040">Pupil R</span><span class="hud-v" id="hPupilR" style="color:#ff4040">--</span></div>
+            <div class="hud-row" id="hPupilRowL"><span class="hud-k" style="color:#ff4040">Pupil L</span><span class="hud-v" id="hPupilL" style="color:#ff4040">--</span></div>
+            <div class="hud-row" id="hPupilRowR"><span class="hud-k" style="color:#ff4040">Pupil R</span><span class="hud-v" id="hPupilR" style="color:#ff4040">--</span></div>
         </div>
 
         <div class="hud hud-br on" id="hudBR">
@@ -403,10 +409,6 @@
             <option value="minimal">Minimal</option>
             <option value="emojis">Outline + Emojis</option>
         </select>
-        <div class="device-toggle">
-            <button class="device-btn active-unoq" id="btnUnoQ" onclick="setDevice('unoq')">Uno Q</button>
-            <button class="device-btn" id="btnVentuno" onclick="setDevice('ventuno')">Ventuno</button>
-        </div>
     </div>
 
     <div class="diag" id="diagPanel" style="display:none">
@@ -732,20 +734,96 @@
 
     let du = new DrawingUtils(ctx);
 
+    let cameraStream = null;
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        cameraStream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
             audio: false
         });
-        cam.srcObject = stream;
+        cam.srcObject = cameraStream;
         await new Promise(r => { cam.onloadeddata = r; });
         await cam.play();
         await new Promise(r => setTimeout(r, 200));
+
         const vw = cam.videoWidth, vh = cam.videoHeight;
+        const mp = ((vw * vh) / 1000000).toFixed(1);
         document.getElementById("hRes").textContent = vw + "\u00D7" + vh;
-        setDiag("dCamera", "ok", vw + "x" + vh + " — playing, currentTime=" + cam.currentTime.toFixed(2));
+
+        const track = cameraStream.getVideoTracks()[0];
+        const settings = track.getSettings();
+        const caps = track.getCapabilities ? track.getCapabilities() : {};
+        const camLabel = track.label || "Unknown Camera";
+
+        const fpsActual = settings.frameRate ? Math.round(settings.frameRate) : "?";
+        const fpsMax = caps.frameRate && caps.frameRate.max ? Math.round(caps.frameRate.max) : null;
+        const maxW = caps.width && caps.width.max ? caps.width.max : null;
+        const maxH = caps.height && caps.height.max ? caps.height.max : null;
+        const maxRes = (maxW && maxH) ? (maxW + "x" + maxH + " (" + ((maxW*maxH)/1000000).toFixed(1) + "MP)") : null;
+        const facingMode = settings.facingMode || "user";
+
+        let camSpecParts = [vw + "x" + vh + " (" + mp + "MP)", fpsActual + "fps"];
+        if (maxRes) camSpecParts.push("max " + maxRes);
+        camSpecParts.push(facingMode);
+
+        const camSpecStr = camSpecParts.join(" | ");
+        const diagDetail = camLabel + " — " + camSpecStr;
+        setDiag("dCamera", "ok", diagDetail);
+
+        document.getElementById("specCam").textContent = vw + "x" + vh + " " + mp + "MP " + fpsActual + "fps";
+        document.getElementById("specCamChip").style.display = "";
+
+        console.log("[CAMERA] Device: " + camLabel);
+        console.log("[CAMERA] Active: " + vw + "x" + vh + " @ " + fpsActual + "fps (" + mp + "MP)");
+        console.log("[CAMERA] Facing: " + facingMode);
+        if (maxRes) console.log("[CAMERA] Max resolution: " + maxRes);
+        if (fpsMax) console.log("[CAMERA] Max framerate: " + fpsMax + "fps");
+        console.log("[CAMERA] Settings:", JSON.stringify(settings));
+        if (Object.keys(caps).length > 0) console.log("[CAMERA] Capabilities:", JSON.stringify(caps));
+
     } catch (e) {
-        setDiag("dCamera", "fail", e.message || String(e));
+        const errMsg = e.message || String(e);
+        const isNotFound = e.name === "NotFoundError" || e.name === "DevicesNotFoundError" ||
+                           errMsg.includes("Requested device not found") || errMsg.includes("no device");
+        const isDenied = e.name === "NotAllowedError" || e.name === "PermissionDeniedError";
+
+        let diagMsg = errMsg;
+        if (isNotFound) diagMsg = "No camera detected — plug in a USB webcam";
+        else if (isDenied) diagMsg = "Camera permission denied — allow access in browser settings";
+
+        setDiag("dCamera", "fail", diagMsg);
+
+        const viewport = document.querySelector(".viewport");
+        const errorDiv = document.createElement("div");
+        errorDiv.className = "camera-error";
+
+        if (isNotFound) {
+            errorDiv.innerHTML = '<h2>No Camera Detected</h2>' +
+                '<p>This demo requires a webcam to track faces in real time.</p>' +
+                '<ol class="cam-steps">' +
+                '<li>Plug a <strong>USB webcam</strong> into any USB port on the Uno Q (or your computer)</li>' +
+                '<li>Wait 2-3 seconds for the device to be recognized</li>' +
+                '<li>Refresh this page to retry camera detection</li>' +
+                '</ol>' +
+                '<p style="font-size:11px;color:var(--muted)">Compatible with any UVC-class USB camera. ' +
+                'Recommended: 720p or higher, 30fps capable.</p>' +
+                '<p style="margin-top:12px"><a href="https://docs.arduino.cc/tutorials/uno-q/getting-started/" target="_blank">Uno Q Setup Guide</a> · ' +
+                '<a href="https://store.arduino.cc/collections/arduino-days-promo/products/uno-q-4gb" target="_blank">Get Uno Q</a></p>';
+        } else if (isDenied) {
+            errorDiv.innerHTML = '<h2>Camera Access Denied</h2>' +
+                '<p>The browser blocked camera access. To fix this:</p>' +
+                '<ol class="cam-steps">' +
+                '<li>Click the <strong>camera icon</strong> in your browser\'s address bar</li>' +
+                '<li>Select <strong>"Allow"</strong> for camera access</li>' +
+                '<li>Refresh this page</li>' +
+                '</ol>' +
+                '<p style="font-size:11px;color:var(--muted)">On the Uno Q, make sure the browser is running with camera permissions enabled.</p>';
+        } else {
+            errorDiv.innerHTML = '<h2>Camera Error</h2>' +
+                '<p>' + errMsg + '</p>' +
+                '<p style="font-size:11px;color:var(--muted)">Try unplugging and reconnecting the camera, then refresh.</p>';
+        }
+
+        viewport.appendChild(errorDiv);
         throw e;
     }
 
@@ -888,77 +966,24 @@
     let L = { ...PRESETS.full };
     presetEl.onchange = () => { L = { ...PRESETS[presetEl.value] }; };
 
-    // --- Device Simulation (browser-only) ---
-    // Simulates hardware differences between the Uno Q (QRB2210) and
-    // the higher-end Ventuno (QCS6490). The Uno Q profile adds frame
-    // skipping and throttle delay to mimic its slower processing.
-    // Ventuno enables pupil diameter measurement (needs faster inference)
-    // and supports up to 4 simultaneous faces.
-    //
-    // SAFETY: This toggle is PURELY CLIENT-SIDE. It does NOT send any
-    // WebSocket or Bridge messages to the MPU/MCU. Switching profiles
-    // cannot change hardware state, toggle GPIO pins, or break the
-    // demo on actual Uno Q hardware. The only effects are:
-    //   1. Frame skip rate (throttling simulation)
-    //   2. Max faces displayed (2 vs 4, MediaPipe always detects up to 4)
-    //   3. Pupil diameter HUD rows (shown only in Ventuno mode)
-    //   4. Spec bar text and buy link
-    const DEVICES = {
-        unoq: {
-            name: "Uno Q",
-            chip: "Qualcomm QRB2210",
-            cpu: "Cortex-A53 @ 1.4GHz",
-            ram: "4GB",
-            skipFrames: 2,
-            extraDelay: 35,
-            maxFaces: 2
-        },
-        ventuno: {
-            name: "Ventuno",
-            chip: "Qualcomm QCS6490",
-            cpu: "Kryo 670 @ 2.7GHz",
-            ram: "8GB",
-            skipFrames: 0,
-            extraDelay: 0,
-            maxFaces: 4
-        }
+    // --- Adaptive Performance ---
+    // No artificial throttling. The demo runs at maximum capability.
+    // If the device can't keep up (FPS drops below threshold), the
+    // system automatically starts skipping frames to maintain smooth
+    // rendering. When performance recovers, it returns to full speed.
+    // All features (pupil measurement, 4-face tracking) are always on.
+    const PERF = {
+        skipFrames: 0,
+        fpsHistory: [],
+        fpsWindowSize: 5,
+        lowFpsThreshold: 8,
+        highFpsThreshold: 14,
+        isThrottled: false,
+        checkInterval: 2000,
+        lastCheck: 0,
     };
-    let currentDevice = 'unoq';
     let frameSkipCounter = 0;
-    let lastThrottleEnd = 0;
-
-    const DEVICE_SPECS = {
-        unoq: {
-            soc: 'QRB2210', cpu: 'Cortex-A53 1.4GHz', mcu: 'STM32H747', ram: '4GB',
-            buyText: 'Get Uno Q 4GB',
-            buyLink: 'https://store.arduino.cc/collections/arduino-days-promo/products/uno-q-4gb'
-        },
-        ventuno: {
-            soc: 'QCS6490', cpu: 'Kryo 670 2.7GHz', mcu: 'STM32H747', ram: '8GB',
-            buyText: 'Ventuno Info',
-            buyLink: 'https://www.arduino.cc/product-ventuno-q'
-        }
-    };
-
-    window.setDevice = function(dev) {
-        if (!DEVICES[dev]) return;
-        currentDevice = dev;
-        document.getElementById('btnUnoQ').className = 'device-btn' + (dev === 'unoq' ? ' active-unoq' : '');
-        document.getElementById('btnVentuno').className = 'device-btn' + (dev === 'ventuno' ? ' active-ventuno' : '');
-        var d = DEVICES[dev], s = DEVICE_SPECS[dev];
-        document.getElementById('specSoc').textContent = s.soc;
-        document.getElementById('specCpu').textContent = s.cpu;
-        document.getElementById('specMcu').textContent = s.mcu;
-        document.getElementById('specRam').textContent = s.ram;
-        document.getElementById('specFaces').textContent = d.maxFaces;
-        var buyEl = document.getElementById('buyLink');
-        buyEl.textContent = s.buyText;
-        buyEl.href = s.buyLink;
-        document.getElementById('hPupilRowL').style.display = dev === 'ventuno' ? '' : 'none';
-        document.getElementById('hPupilRowR').style.display = dev === 'ventuno' ? '' : 'none';
-        frameSkipCounter = 0;
-        lastThrottleEnd = 0;
-    };
+    const MAX_FACES = 4;
 
     let cW = cvs.width, cH = cvs.height;
     let fpsCnt = 0, fpsT = 0, fps = 0, total = 0;
@@ -969,7 +994,7 @@
     let hudBlinkL = 0, hudBlinkR = 0;
     let hudPupilL = 0, hudPupilR = 0;
 
-    // --- Pupil Diameter Measurement (Ventuno only) ---
+    // --- Pupil Diameter Measurement ---
     // Estimates iris diameter in millimeters using the ratio of iris
     // pixel radius to frame width, scaled by an assumed sensor FOV of
     // ~280mm at the subject distance. This is approximate — accurate
@@ -1086,10 +1111,38 @@
     }
 
     // --- Main Render Loop ---
-    // Runs via requestAnimationFrame (~60fps on desktop, throttled on
-    // Uno Q). Each frame: skip check → detect faces → draw overlays →
-    // update HUD. The loop is self-correcting: it skips frames when
-    // the video hasn't advanced and applies device-specific throttling.
+    // Runs via requestAnimationFrame at full speed. No artificial throttling.
+    // Adaptive performance: if FPS drops below threshold, the system auto-
+    // skips frames to maintain smooth rendering. When FPS recovers, it goes
+    // back to processing every frame. All features are always enabled.
+    function updateAdaptivePerf(now) {
+        if (now - PERF.lastCheck < PERF.checkInterval) return;
+        PERF.lastCheck = now;
+        if (fps > 0) {
+            PERF.fpsHistory.push(fps);
+            if (PERF.fpsHistory.length > PERF.fpsWindowSize)
+                PERF.fpsHistory.shift();
+        }
+        if (PERF.fpsHistory.length < 3) return;
+        const avgFps = PERF.fpsHistory.reduce((a, b) => a + b, 0) / PERF.fpsHistory.length;
+        const badge = document.getElementById("perfBadge");
+
+        if (!PERF.isThrottled && avgFps < PERF.lowFpsThreshold && avgFps > 0) {
+            PERF.skipFrames = 1;
+            PERF.isThrottled = true;
+            console.log("[PERF] Auto-throttle ON — avg FPS " + avgFps.toFixed(1) + " < " + PERF.lowFpsThreshold);
+            badge.textContent = "AUTO-THROTTLED";
+            badge.className = "perf-indicator perf-throttled";
+        } else if (PERF.isThrottled && avgFps > PERF.highFpsThreshold) {
+            PERF.skipFrames = 0;
+            PERF.isThrottled = false;
+            PERF.fpsHistory = [];
+            console.log("[PERF] Auto-throttle OFF — avg FPS " + avgFps.toFixed(1) + " > " + PERF.highFpsThreshold);
+            badge.textContent = "OPTIMAL";
+            badge.className = "perf-indicator perf-optimal";
+        }
+    }
+
     function draw() {
         requestAnimationFrame(draw);
 
@@ -1098,10 +1151,8 @@
         if (cam.currentTime === lastVideoTime) return;
         lastVideoTime = cam.currentTime;
 
-        const dev = DEVICES[currentDevice];
-
         frameSkipCounter++;
-        if (dev.skipFrames > 0 && (frameSkipCounter % (dev.skipFrames + 1)) !== 0) {
+        if (PERF.skipFrames > 0 && (frameSkipCounter % (PERF.skipFrames + 1)) !== 0) {
             total++;
             fpsCnt++;
             return;
@@ -1117,11 +1168,6 @@
 
         const nowMs = performance.now();
 
-        if (dev.extraDelay > 0 && lastThrottleEnd > 0) {
-            const elapsed = nowMs - lastThrottleEnd;
-            if (elapsed < dev.extraDelay) return;
-        }
-
         const before = performance.now();
         let res;
         try {
@@ -1134,7 +1180,6 @@
             return;
         }
         latMs = performance.now() - before;
-        lastThrottleEnd = performance.now();
 
         ctx.clearRect(0, 0, vw, vh);
         total++;
@@ -1143,7 +1188,7 @@
         if (now - fpsT >= 1000) { fps = Math.round(fpsCnt * 1000 / (now - fpsT)); fpsCnt = 0; fpsT = now; }
 
         let faces = res && res.faceLandmarks ? res.faceLandmarks : [];
-        if (faces.length > dev.maxFaces) faces = faces.slice(0, dev.maxFaces);
+        if (faces.length > MAX_FACES) faces = faces.slice(0, MAX_FACES);
         nFaces = faces.length;
         if (nFaces === 0) { hudPupilL = 0; hudPupilR = 0; hudBlinkL = 0; hudBlinkR = 0; }
 
@@ -1253,15 +1298,13 @@
                     if (FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS) drawConns(FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, clr.iris, 4.5);
                     if (FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS) drawConns(FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS, clr.iris, 4.5);
 
-                    if (currentDevice === 'ventuno') {
-                        var irisR = measureIris(lm, 468, [469, 470, 471, 472], vw, vh);
-                        var irisL = measureIris(lm, 473, [474, 475, 476, 477], vw, vh);
-                        drawPupilOverlay(ctx, irisR, "R");
-                        drawPupilOverlay(ctx, irisL, "L");
-                        if (i === 0) {
-                            hudPupilL = irisL ? irisL.diamMm : 0;
-                            hudPupilR = irisR ? irisR.diamMm : 0;
-                        }
+                    var irisR = measureIris(lm, 468, [469, 470, 471, 472], vw, vh);
+                    var irisL = measureIris(lm, 473, [474, 475, 476, 477], vw, vh);
+                    drawPupilOverlay(ctx, irisR, "R");
+                    drawPupilOverlay(ctx, irisL, "L");
+                    if (i === 0) {
+                        hudPupilL = irisL ? irisL.diamMm : 0;
+                        hudPupilR = irisR ? irisR.diamMm : 0;
                     }
                 }
 
@@ -1390,22 +1433,22 @@
 
         drawSysOverlay(ctx, vw, vh);
 
+        updateAdaptivePerf(now);
+
         if (now - lastHud >= 500) {
             lastHud = now;
             document.getElementById("hFaces").textContent = nFaces + (nFaces === 1 ? " face" : " faces");
             document.getElementById("hPts").textContent = nFaces > 0 ? (478 * nFaces).toLocaleString() : "--";
             document.getElementById("hFps").textContent = fps;
             document.getElementById("hLat").textContent = Math.round(latMs) + "ms";
-            document.getElementById("hDev").textContent = DEVICES[currentDevice].name;
+            document.getElementById("hDev").textContent = "Uno Q";
             document.getElementById("hUp").textContent = fmtUptime(now - startTime);
             document.getElementById("hFrames").textContent = total.toLocaleString();
             document.getElementById("hDetects").textContent = totalDetectCalls.toLocaleString();
             document.getElementById("hBlinkL").textContent = hudBlinkL.toFixed(2);
             document.getElementById("hBlinkR").textContent = hudBlinkR.toFixed(2);
-            if (currentDevice === 'ventuno') {
-                document.getElementById("hPupilL").textContent = hudPupilL > 0 ? "~" + hudPupilL.toFixed(1) + "mm" : "--";
-                document.getElementById("hPupilR").textContent = hudPupilR > 0 ? "~" + hudPupilR.toFixed(1) + "mm" : "--";
-            }
+            document.getElementById("hPupilL").textContent = hudPupilL > 0 ? "~" + hudPupilL.toFixed(1) + "mm" : "--";
+            document.getElementById("hPupilR").textContent = hudPupilR > 0 ? "~" + hudPupilR.toFixed(1) + "mm" : "--";
 
             let listHtml = "";
             for (const t of trackedFaces) {
