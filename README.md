@@ -16,6 +16,91 @@ This face tracking demo uses all of it. The browser-side AI model runs on the QR
 
 For full pinout details, datasheet, schematics, and CAD files, see the [official hardware page](https://docs.arduino.cc/hardware/uno-q/) and the [UNO Q User Manual](https://docs.arduino.cc/tutorials/uno-q/user-manual/).
 
+## Compute Architecture: What Runs Where
+
+The Uno Q has four distinct compute blocks. Understanding which one handles which part of this demo -- and why -- is the key to understanding how to build on top of it.
+
+![QRB2210 block diagram](https://www.qualcomm.com/content/dam/qcomm-martech/dm-assets/images/pdp/block_diagram/image/QRB2210-diagram.svg)
+
+| Block | Silicon | Clock | Role in this demo |
+|-------|---------|-------|-------------------|
+| **CPU** | Quad-core Arm Cortex-A53 (Kryo) | 2.0 GHz | Runs Debian Linux, Python coordinator, Docker containers for Bricks, and the Chromium browser that executes MediaPipe WASM face detection |
+| **GPU** | Qualcomm Adreno 702 | 845 MHz | OpenGL ES 3.1, Vulkan 1.1, OpenCL 2.0. Available for WebGL rendering and TFLite GPU delegate, but MediaPipe's GPU delegate produces spatially incorrect landmarks on Adreno -- so this demo defaults to CPU |
+| **DSP** | Dual-core Qualcomm Hexagon | -- | Handles audio signal processing and always-on low-power tasks. Not directly used by this demo, but available for keyword detection or audio-triggered face capture in future extensions |
+| **MCU** | STM32U585 Arm Cortex-M33 | 160 MHz | Runs Arduino sketch on Zephyr OS. Drives the 13x8 LED matrix, RGB LED, status LED, and GPIO pins. Receives commands from the MPU via Bridge RPC. No AI workload -- purely real-time I/O |
+
+The QRB2210 has **no dedicated TPU or NPU** (no TOPS rating). AI inference relies on the CPU and GPU through framework runtimes like TFLite and WASM. This is an intentional tradeoff -- the QRB2210 is Qualcomm's entry-tier IoT processor, optimized for low power and cost rather than raw ML throughput. For NPU-accelerated inference, Qualcomm's higher-tier processors (QCS6490, QCS8550) include the Hexagon Tensor Processor, but those are not available in the UNO form factor today.
+
+**How inference works in this demo:**
+
+```
+  Browser (Chromium on QRB2210)
+      |
+      v
+  MediaPipe Face Landmarker
+  loaded as WASM module
+      |
+      v
+  CPU delegate (default)          GPU delegate (fallback)
+  Cortex-A53 WASM execution       Adreno 702 via WebGL
+  ~5-15ms per frame               Available but produces
+  Always correct landmarks        spatially incorrect landmarks
+      |                           Auto-detected and rejected
+      v                           by 6-point validation
+  478 landmarks per face          (see State Diagram 9)
+  Up to 4 faces simultaneously
+      |
+      v
+  Canvas overlay rendering
+  (uses GPU for compositing)
+```
+
+The optional on-device TFLite path (AI Hub) runs on the MPU side, bypassing the browser entirely. It captures frames from a USB camera via OpenCV, runs `face_det_lite` INT8 through `tflite-runtime` on the CPU, and sends bounding boxes to the browser via WebSocket. This path is useful when the browser is on a remote device and you want detection to happen on the Uno Q itself.
+
+## Performance Bottlenecks
+
+Where the system slows down and what limits throughput at each stage:
+
+```
+  Stage                          Typical Latency       Bottleneck
+  ─────────────────────────────────────────────────────────────────
+  USB camera capture             ~67ms (15 FPS)        UVC webcam frame rate
+  MediaPipe WASM inference       ~5-15ms               CPU (4x A53 cores)
+  Canvas rendering (per face)    ~1-2ms                GPU compositing
+  WebSocket emit (throttled)     500ms interval        Intentional throttle
+  Bridge RPC (MPU -> MCU)        ~2-5ms                Serial transport
+  LED matrix update              <1ms                  SPI to matrix driver
+  ─────────────────────────────────────────────────────────────────
+  Browser-side (camera to overlay)  ~75-90ms           Camera is the ceiling
+  Full loop (camera to LED)         ~500-575ms         WebSocket throttle
+```
+
+Browser-side rendering (overlay on screen) happens at full frame rate -- the camera frame is the ceiling there. But the MCU hardware response (LED matrix, RGB LED, GPIO) is gated by the 500ms WebSocket telemetry throttle, so the end-to-end latency from camera frame to physical LED change is ~500-575ms. This throttle is intentional to avoid flooding the Bridge RPC channel.
+
+The camera is the dominant bottleneck. The QRB2210's dual ISPs support up to 25 MP at 30 FPS through MIPI-CSI, but this demo uses a standard USB webcam over UVC, which typically delivers 640x480 at 15 FPS. Attaching the [UNO Media Carrier](https://docs.arduino.cc/hardware/uno-media-carrier/) and a MIPI-CSI camera would roughly double the available frame rate and unlock higher resolution input.
+
+The adaptive performance system (State Diagram 4) compensates for CPU contention. When other processes compete for the A53 cores -- Docker containers, system services, additional Bricks -- FPS drops below 8 and the app automatically skips every other frame rather than dropping quality. Recovery to full speed happens when sustained FPS exceeds 14.
+
+Memory is rarely the bottleneck. The 2 GB variant runs this demo comfortably. The 4 GB variant is recommended if you plan to run multiple Bricks simultaneously (object detection + face tracking + web UI) or use the board as a standalone single-board computer with a desktop environment.
+
+## Beyond Face Tracking: Industrial and Pro Applications
+
+This demo is a face tracking proof-of-concept, but the architecture it demonstrates -- browser-side AI inference, Python coordination, real-time MCU control, and Bridge RPC -- applies directly to [Arduino Pro](https://www.arduino.cc/pro/) industrial use cases. The Uno Q's dual-processor design and App Lab workflow are built for exactly this kind of edge AI deployment.
+
+**Access control and visitor management.** Replace the LED matrix feedback with a relay on D7 to control a door strike or turnstile. When a new face appears, the MPU calls `flash_face(3)` on the MCU (rapid LED flash + buzzer alert), then subsequent face-present updates call `show_face()` which sets the relay pin HIGH. When the face disappears, `show_no_face()` drops the relay. Enable the relay by setting `enableRelay = true` in `sketch.ino`. Add Arduino Cloud logging (see below) to maintain a persistent visitor log with timestamps and screenshots.
+
+**Occupancy monitoring.** The persistent face count (`MAX_FACES = 4`) and tracking lifecycle (State Diagram 5) already count concurrent faces and track duration. Forward the face count to a building management system via the MPU's Wi-Fi to control HVAC, lighting, or elevator dispatch based on real-time occupancy.
+
+**Safety compliance.** Swap the MediaPipe face model for an object detection model (the App Lab `arduino:object_detection` Brick uses YOLOX-Nano) to detect PPE, hard hats, safety vests, or missing guards. The MCU can drive a warning buzzer on D5 and a red status light via the RGB LED when non-compliance is detected.
+
+**Quality inspection.** Mount a MIPI-CSI camera via the Media Carrier and point it at a production line. Use the same architecture -- vision model in the browser or via TFLite on the MPU, defect classification in Python, pass/fail signal to MCU GPIO for reject actuators. The Modulino Distance sensor can trigger inspection only when a part is at the correct position.
+
+**Operator presence detection.** In machinery safety, an operator must be present for a machine to run. The face tracking lifecycle's 800ms TTL (State Diagram 5) provides a presence/absence signal with sub-second latency. Wire D7 to a safety interlock relay. Face detected = machine enabled. Face lost for 800ms = machine stop. The MCU handles this at Zephyr real-time priority, independent of Linux process scheduling.
+
+**Retail analytics and smart signage.** Count foot traffic, measure dwell time (tracked face duration), and estimate audience demographics. The multi-face tracking with persistent IDs means you can distinguish between a new visitor and a returning one within a session. Forward aggregated data to Arduino Cloud dashboards for store managers.
+
+**Agriculture and environmental monitoring.** Replace the camera-based AI model with sensor-based Bricks. The Modulino Movement sensor detects equipment vibration. The Modulino Distance sensor monitors fill levels. The MCU drives actuators (pumps, valves, alerts) via GPIO. The same App Lab workflow, Bridge RPC, and Arduino Cloud integration apply -- only the Brick and the model change.
+
 ## The App Lab and Bricks Experience
 
 The [Arduino App Lab](https://docs.arduino.cc/software/app-lab/) is a unified development environment that lets you combine Arduino sketches, Python scripts, and containerized Linux applications into a single workflow. You do not need to manually set up a toolchain, configure a cross-compiler, or wire up a web server -- App Lab and Bricks handle all of that.
