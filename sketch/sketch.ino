@@ -2,94 +2,59 @@
 //
 // SPDX-License-Identifier: MIT
 
-// Wojo's Uno Q Face Outline Demo — MCU Sketch
+// Wojo's Uno Q Face Outline Demo -- MCU Sketch
 //
 // This sketch runs on the STM32U585 microcontroller inside the Uno Q.
 // It receives commands from the Linux MPU via the Router Bridge and
-// drives the built-in 12x8 LED matrix, RGB LED, and status LED to
+// drives the built-in 13x8 LED matrix, RGB LEDs, and status LED to
 // reflect the current face tracking state.
 //
 // The MCU is entirely event-driven: all work happens inside Bridge
 // provider callbacks. loop() stays empty because there is nothing
-// to poll — the Bridge handles its own thread for incoming calls.
+// to poll -- the Bridge handles its own thread for incoming calls.
 //
-// ── Startup Sequence ──
-// The boot process is deliberately verbose to help diagnose issues
-// on the Uno Q, which can be picky with connectivity. Each step
-// reports its status to both Serial and the LED matrix so you can
-// tell what's happening even without a terminal connected.
-//
+// -- Startup Sequence --
 //   1. Serial init + banner with board specs
 //   2. Pin configuration (status LED, RGB, GPIO placeholders)
-//   3. LED matrix init + "UNO" splash
-//   4. RGB LED self-test (red → green → blue → off)
+//   3. LED matrix init + smiley splash
+//   4. RGB LED self-test (red -> green -> blue -> off)
 //   5. Bridge init + provider registration
-//   6. Report memory, pin states, and provider count to Serial
-//   7. Scroll "BRIDGE OK" on matrix + notify MPU
+//   6. Report pin states and provider count to Serial
+//   7. Show checkmark on matrix + notify MPU
 //
-// ── Hardware Outputs ──
-//   - 12x8 LED matrix: bitmaps, scrolling text, status messages
+// -- Hardware Outputs --
+//   - 13x8 LED matrix: grayscale bitmaps, status patterns
 //   - Status LED (LED_BUILTIN): solid = face present, off = no face
-//   - RGB LED (pins 11/12/13 or configurable): boot self-test,
-//     face-detected pulse, expression color coding
+//   - RGB LEDs: LED4 (digital on/off) for status colors
 //   - GPIO placeholders: digital pins reserved for relay, buzzer,
 //     external LED strip, or Modulino accessories
 //
-// Note: ArduinoGraphics.h MUST be included before Arduino_LED_Matrix.h
-// or text scrolling silently fails. This is a known include-order
-// dependency in the ArduinoGraphics + LED Matrix stack.
+// Aligned with official app-bricks-examples conventions (April 2026).
+// No ArduinoGraphics -- the Zephyr platform does not support it.
 
-#include <ArduinoGraphics.h>
 #include <Arduino_LED_Matrix.h>
 #include <Arduino_RouterBridge.h>
 
 Arduino_LED_Matrix matrix;
 
-// ── Pin Definitions ──
-// Adjust these if your Uno Q board revision maps them differently.
-// The STM32U585 on the Uno Q exposes standard Arduino header pins.
-
-#ifndef LED_BUILTIN
-#define LED_BUILTIN 13
-#endif
-
+// -- Pin Definitions --
+// On the Uno Q, LED4 is a simple digital ON/OFF RGB LED.
+// LED_BUILTIN maps to LED3_R. LED4_R/G/B are LED_BUILTIN+3/4/5.
+// HIGH = OFF, LOW = ON for LED4 (active-low).
 #define STATUS_LED  LED_BUILTIN
+#define PIN_LED_R   (LED_BUILTIN + 3)
+#define PIN_LED_G   (LED_BUILTIN + 4)
+#define PIN_LED_B   (LED_BUILTIN + 5)
 
-// RGB LED — some Uno Q boards have an onboard RGB LED on these pins.
-// If your board doesn't, you can wire external LEDs to these pins
-// with 220-ohm resistors. Set to -1 to disable any channel.
-#define PIN_LED_R   11
-#define PIN_LED_G   12
-#define PIN_LED_B   13
+// -- GPIO Placeholders --
+// Reserved but NOT activated by default. Set enable flags to true
+// and uncomment the corresponding code to use them.
+#define PIN_RELAY    D7
+#define PIN_EXT_LED  D6
+#define PIN_BUZZER   D5
+#define PIN_AUX_1    D4
+#define PIN_AUX_2    D3
 
-// ── GPIO Placeholders ──
-// These pins are reserved but NOT activated by default. Uncomment
-// the corresponding code in setup() and the Bridge providers to
-// enable them. Each placeholder shows how to wire common accessories.
-//
-// PIN_RELAY (D7):    Modulino Relay or generic 5V relay module.
-//                    HIGH = relay energized. Use for lamps, buzzers,
-//                    solenoids, or any load that triggers on face detection.
-//
-// PIN_EXT_LED (D6):  External LED strip data pin (e.g., WS2812B NeoPixel).
-//                    Requires Adafruit_NeoPixel library if used.
-//
-// PIN_BUZZER (D5):   Piezo buzzer for audible face-detected alert.
-//                    Use tone(PIN_BUZZER, freq, duration) to beep.
-//
-// PIN_AUX_1 (D4):   General-purpose digital output. Use for Modulino
-//                    accessories, servo triggers, or custom circuits.
-//
-// PIN_AUX_2 (D3):   General-purpose digital output (PWM capable).
-//                    Good for dimming an LED or driving a small motor.
-#define PIN_RELAY    7
-#define PIN_EXT_LED  6
-#define PIN_BUZZER   5
-#define PIN_AUX_1    4
-#define PIN_AUX_2    3
-
-// Set to true to enable each GPIO placeholder at boot.
-// When false, the pin is configured but never driven.
 bool enableRelay   = false;
 bool enableExtLed  = false;
 bool enableBuzzer  = false;
@@ -102,49 +67,96 @@ unsigned long bootTime = 0;
 unsigned long faceCount = 0;
 unsigned long lastFaceTransition = 0;
 
-// ── 12x8 LED Matrix Bitmap Patterns (packed uint32_t format) ──
-// Each frame is 3 x uint32_t = 96 bits = 12 cols x 8 rows.
-// Bits are packed MSB-first, left-to-right, top-to-bottom.
-// The Zephyr platform's Arduino_LED_Matrix uses loadFrame() with
-// this format. Design your own at: https://ledmatrix-editor.arduino.cc
+// -- 13x8 LED Matrix Bitmap Patterns (flat uint8_t grayscale) --
+// Each frame is 104 values (8 rows x 13 columns).
+// Values: 0 = off, 7 = brightest (3-bit grayscale).
+// Use matrix.draw() to display. Requires setGrayscaleBits(3).
 
-const uint32_t frame_smiley[] = { 0x00030c30, 0xc0008014, 0x023fc000 };
-const uint32_t frame_surprise[] = { 0x00030c49, 0x230c0000, 0xf00900f0 };
-const uint32_t frame_no_face[] = { 0x80140220, 0x41081082, 0x04402801 };
-const uint32_t frame_blank[] = { 0x00000000, 0x00000000, 0x00000000 };
-const uint32_t frame_eyebrows[] = { 0x71c00030, 0xc30c0000, 0x003fc000 };
-const uint32_t frame_check[] = { 0x00000200, 0x40084102, 0x20140080 };
+uint8_t frame_smiley[104] = {
+    0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,7,7,0,0,0,7,7,0,0,0,
+    0,0,0,7,7,0,0,0,7,7,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,
+    7,0,0,0,0,0,0,0,0,0,0,0,7,
+    0,7,0,0,0,0,0,0,0,0,0,7,0,
+    0,0,7,7,7,7,7,7,7,7,7,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0
+};
 
-// ── RGB LED Helpers ──
-// The Uno Q's RGB LED can be used for at-a-glance status:
-//   Red    = error or no face
-//   Green  = face detected / system healthy
-//   Blue   = processing / Bridge active
-//   Off    = idle or RGB disabled
-// These are simple digital writes (on/off). For PWM dimming,
-// switch to analogWrite() on PWM-capable pins.
+uint8_t frame_surprise[104] = {
+    0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,7,7,0,0,0,7,7,0,0,0,
+    0,0,7,0,0,7,0,7,0,0,7,0,0,
+    0,0,0,7,7,0,0,0,7,7,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,7,7,7,7,7,0,0,0,0,
+    0,0,0,0,7,0,0,0,7,0,0,0,0,
+    0,0,0,0,7,7,7,7,7,0,0,0,0
+};
 
+uint8_t frame_no_face[104] = {
+    7,0,0,0,0,0,0,0,0,0,0,0,7,
+    0,7,0,0,0,0,0,0,0,0,0,7,0,
+    0,0,7,0,0,0,0,0,0,0,7,0,0,
+    0,0,0,7,0,0,0,0,0,7,0,0,0,
+    0,0,0,7,0,0,0,0,0,7,0,0,0,
+    0,0,7,0,0,0,0,0,0,0,7,0,0,
+    0,7,0,0,0,0,0,0,0,0,0,7,0,
+    7,0,0,0,0,0,0,0,0,0,0,0,7
+};
+
+uint8_t frame_blank[104] = {0};
+
+uint8_t frame_eyebrows[104] = {
+    0,0,7,7,7,0,0,0,7,7,7,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,7,7,0,0,0,7,7,0,0,0,
+    0,0,0,7,7,0,0,0,7,7,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,7,7,7,7,7,7,7,7,7,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0
+};
+
+uint8_t frame_check[104] = {
+    0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,7,0,
+    0,0,0,0,0,0,0,0,0,0,7,0,0,
+    0,0,0,0,0,0,0,0,0,7,0,0,0,
+    0,7,0,0,0,0,0,0,7,0,0,0,0,
+    0,0,7,0,0,0,0,7,0,0,0,0,0,
+    0,0,0,7,0,0,7,0,0,0,0,0,0,
+    0,0,0,0,7,7,0,0,0,0,0,0,0
+};
+
+uint8_t frame_boot[104] = {
+    0,0,0,0,0,7,7,7,0,0,0,0,0,
+    0,0,0,0,7,0,0,0,7,0,0,0,0,
+    0,0,0,0,7,0,0,0,7,0,0,0,0,
+    0,0,0,0,0,7,7,7,0,0,0,0,0,
+    0,0,0,0,0,7,7,7,0,0,0,0,0,
+    0,0,0,0,7,0,0,0,7,0,0,0,0,
+    0,0,0,0,7,0,0,0,7,0,0,0,0,
+    0,0,0,0,0,7,7,7,0,0,0,0,0
+};
+
+// -- RGB LED Helpers --
+// LED4 on the Uno Q is active-low: LOW = ON, HIGH = OFF.
 void setRGB(bool r, bool g, bool b) {
-    if (PIN_LED_R >= 0) digitalWrite(PIN_LED_R, r ? HIGH : LOW);
-    if (PIN_LED_G >= 0) digitalWrite(PIN_LED_G, g ? HIGH : LOW);
-    if (PIN_LED_B >= 0) digitalWrite(PIN_LED_B, b ? HIGH : LOW);
+    digitalWrite(PIN_LED_R, r ? LOW : HIGH);
+    digitalWrite(PIN_LED_G, g ? LOW : HIGH);
+    digitalWrite(PIN_LED_B, b ? LOW : HIGH);
 }
 
 void rgbOff() { setRGB(false, false, false); }
 
-// Brief RGB pulse — useful for non-blocking visual feedback.
-// Shows the color for `ms` milliseconds then turns off.
 void rgbPulse(bool r, bool g, bool b, int ms) {
     setRGB(r, g, b);
     delay(ms);
     rgbOff();
 }
 
-// ── GPIO Placeholder Helpers ──
-// These functions wrap the placeholder pins so you can quickly
-// enable them in the Bridge providers below. Each checks its
-// enable flag before driving the pin.
-
+// -- GPIO Placeholder Helpers --
 void triggerRelay(bool on) {
     if (enableRelay) digitalWrite(PIN_RELAY, on ? HIGH : LOW);
 }
@@ -167,11 +179,7 @@ void triggerBuzzer(int freqHz, int durationMs) {
     }
 }
 
-void triggerAux(int pin, bool on) {
-    digitalWrite(pin, on ? HIGH : LOW);
-}
-
-// ── Serial Diagnostic Helpers ──
+// -- Serial Diagnostic Helpers --
 
 void serialDivider() {
     Serial.println("------------------------------------------------");
@@ -185,8 +193,7 @@ void serialSection(const char* title) {
     serialDivider();
 }
 
-// Report a single diagnostic line with a label and value.
-void serialKV(const char* key, const String& value) {
+void serialKV(const char* key, String value) {
     Serial.print("  ");
     Serial.print(key);
     for (int i = strlen(key); i < 22; i++) Serial.print(" ");
@@ -202,24 +209,11 @@ void serialKV(const char* key, unsigned long value) {
     serialKV(key, String(value));
 }
 
-// ── Bridge Providers ──
+// -- Bridge Providers --
 // Each function below is registered with Bridge.provide() in setup(),
 // making it callable from the Python side via Bridge.call().
 // Provider callbacks run on a separate thread from loop(), so keep
 // them short and avoid blocking for extended periods.
-
-void scrollText(const char* text) {
-    Serial.print("[MATRIX] Scrolling: ");
-    Serial.println(text);
-    matrix.beginDraw();
-    matrix.stroke(0xFFFFFFFF);
-    matrix.textScrollSpeed(60);
-    matrix.textFont(Font_5x7);
-    matrix.beginText(12, 1, 0xFFFFFF);
-    matrix.println(text);
-    matrix.endText(SCROLL_LEFT);
-    matrix.endDraw();
-}
 
 void showFace() {
     if (!facePresent) {
@@ -232,10 +226,10 @@ void showFace() {
         Serial.println("s");
     }
     facePresent = true;
-    digitalWrite(STATUS_LED, HIGH);
+    digitalWrite(STATUS_LED, LOW);
     setRGB(false, true, false);
     triggerRelay(true);
-    matrix.loadFrame(frame_smiley);
+    matrix.draw(frame_smiley);
 }
 
 void showNoFace() {
@@ -246,83 +240,76 @@ void showNoFace() {
         Serial.println("s");
     }
     facePresent = false;
-    digitalWrite(STATUS_LED, LOW);
+    digitalWrite(STATUS_LED, HIGH);
     setRGB(true, false, false);
     triggerRelay(false);
-    matrix.loadFrame(frame_no_face);
+    matrix.draw(frame_no_face);
 }
 
 void flashFace(int count) {
     Serial.print("[MATRIX] Flash face x");
     Serial.println(count);
     for (int i = 0; i < count; i++) {
-        matrix.loadFrame(frame_smiley);
+        matrix.draw(frame_smiley);
         setRGB(false, true, false);
         delay(80);
-        matrix.loadFrame(frame_blank);
+        matrix.draw(frame_blank);
         rgbOff();
         delay(80);
     }
-    matrix.loadFrame(frame_smiley);
+    matrix.draw(frame_smiley);
     setRGB(false, true, false);
     triggerBuzzer(1000, 100);
 }
 
-void showExpression(const char* expr) {
+void showExpression(String expr) {
     Serial.print("[EXPR] ");
     Serial.println(expr);
 
-    String e(expr);
-    if (e == "surprise") {
-        matrix.loadFrame(frame_surprise);
+    if (expr == "surprise") {
+        matrix.draw(frame_surprise);
         setRGB(false, false, true);
-    } else if (e == "eyebrow") {
-        matrix.loadFrame(frame_eyebrows);
+    } else if (expr == "eyebrow") {
+        matrix.draw(frame_eyebrows);
         setRGB(true, true, false);
-    } else if (e == "smile") {
-        matrix.loadFrame(frame_smiley);
+    } else if (expr == "smile") {
+        matrix.draw(frame_smiley);
         setRGB(false, true, false);
     } else {
-        scrollText(expr);
+        matrix.draw(frame_smiley);
         setRGB(true, false, true);
     }
 }
 
-void setDeviceMode(const char* mode) {
+void setDeviceMode(String mode) {
     deviceMode = mode;
     Serial.print("[MODE] Device mode changed to: ");
     Serial.println(mode);
-    String msg = " Mode: ";
-    msg += mode;
-    msg += " ";
-    scrollText(msg.c_str());
 }
 
-void setRgbFromPython(const char* color) {
+void setRgbFromPython(String color) {
     Serial.print("[RGB] Set color: ");
     Serial.println(color);
-    String c(color);
-    if (c == "red")        setRGB(true, false, false);
-    else if (c == "green") setRGB(false, true, false);
-    else if (c == "blue")  setRGB(false, false, true);
-    else if (c == "yellow") setRGB(true, true, false);
-    else if (c == "cyan")  setRGB(false, true, true);
-    else if (c == "magenta") setRGB(true, false, true);
-    else if (c == "white") setRGB(true, true, true);
-    else if (c == "off")   rgbOff();
+    if (color == "red")         setRGB(true, false, false);
+    else if (color == "green")  setRGB(false, true, false);
+    else if (color == "blue")   setRGB(false, false, true);
+    else if (color == "yellow") setRGB(true, true, false);
+    else if (color == "cyan")   setRGB(false, true, true);
+    else if (color == "magenta")setRGB(true, false, true);
+    else if (color == "white")  setRGB(true, true, true);
+    else if (color == "off")    rgbOff();
 }
 
-void setGpioFromPython(const char* payload) {
+void setGpioFromPython(String payload) {
     Serial.print("[GPIO] Command: ");
     Serial.println(payload);
-    String p(payload);
-    int sep = p.indexOf(':');
+    int sep = payload.indexOf(':');
     if (sep < 0) {
         Serial.println("[GPIO] Bad format (expected pin:state)");
         return;
     }
-    int pin = p.substring(0, sep).toInt();
-    int state = p.substring(sep + 1).toInt();
+    int pin = payload.substring(0, sep).toInt();
+    int state = payload.substring(sep + 1).toInt();
 
     bool allowed = false;
     if (pin == PIN_RELAY   && enableRelay)  allowed = true;
@@ -345,8 +332,6 @@ void setGpioFromPython(const char* payload) {
     digitalWrite(pin, state ? HIGH : LOW);
 }
 
-// Report MCU status back to the MPU — called periodically or on demand.
-// Returns a summary string with uptime, face count, memory, and pin states.
 void reportStatus() {
     unsigned long upSec = (millis() - bootTime) / 1000;
     String report = "";
@@ -354,98 +339,76 @@ void reportStatus() {
     report += " faces_total=" + String(faceCount);
     report += " face_now=" + String(facePresent ? 1 : 0);
     report += " mode=" + deviceMode;
-    report += " free_heap=" + String(freeMemory());
     Serial.print("[STATUS] ");
     Serial.println(report);
     Bridge.call("mcu_status_report", report.c_str());
 }
 
-int freeMemory() {
-#if defined(__ZEPHYR__)
-    return -1;
-#else
-    extern "C" char* sbrk(int incr);
-    char top;
-    return &top - reinterpret_cast<char*>(sbrk(0));
-#endif
+void scrollText(String text) {
+    Serial.print("[MATRIX] Text: ");
+    Serial.println(text);
+    matrix.draw(frame_smiley);
 }
 
-// ── Setup ──
-// The setup sequence is intentionally verbose. Each step prints its
-// status to Serial and shows progress on the LED matrix. This is
-// critical on the Uno Q because the board can be picky with USB
-// connections and Bridge initialization timing.
-
+// -- Setup --
 void setup() {
     bootTime = millis();
     Serial.begin(115200);
-
-    // Wait briefly for Serial to connect. On the Uno Q, the USB-C
-    // connection through the QRB2210 hub can take a moment.
     delay(500);
 
-    // ── Banner ──
+    // -- Banner --
     serialSection("WOJO'S UNO Q FACE OUTLINE DEMO");
     serialKV("Firmware", "Face Demo v1.0");
     serialKV("Board", "Arduino Uno Q");
     serialKV("MCU", "STM32U585 (Cortex-M33)");
     serialKV("SoC (MPU side)", "Qualcomm QRB2210");
-    serialKV("LED Matrix", "12x8 built-in");
+    serialKV("LED Matrix", "13x8 built-in");
     serialKV("Compile date", __DATE__);
     serialKV("Compile time", __TIME__);
     serialKV("Arduino core", String(ARDUINO));
 
-    // ── Pin Setup ──
+    // -- Pin Setup --
     serialSection("PIN CONFIGURATION");
 
     pinMode(STATUS_LED, OUTPUT);
-    digitalWrite(STATUS_LED, LOW);
-    serialKV("STATUS_LED", String(STATUS_LED) + " (OUTPUT, LOW)");
+    digitalWrite(STATUS_LED, HIGH);
+    serialKV("STATUS_LED", String(STATUS_LED) + " (OUTPUT, OFF)");
 
-    if (PIN_LED_R >= 0) { pinMode(PIN_LED_R, OUTPUT); digitalWrite(PIN_LED_R, LOW); }
-    if (PIN_LED_G >= 0) { pinMode(PIN_LED_G, OUTPUT); digitalWrite(PIN_LED_G, LOW); }
-    if (PIN_LED_B >= 0) { pinMode(PIN_LED_B, OUTPUT); digitalWrite(PIN_LED_B, LOW); }
-    serialKV("RGB LED R/G/B", String(PIN_LED_R) + "/" + String(PIN_LED_G) + "/" + String(PIN_LED_B));
+    pinMode(PIN_LED_R, OUTPUT);
+    pinMode(PIN_LED_G, OUTPUT);
+    pinMode(PIN_LED_B, OUTPUT);
+    rgbOff();
+    serialKV("RGB LED4 R/G/B", String(PIN_LED_R) + "/" + String(PIN_LED_G) + "/" + String(PIN_LED_B));
 
-    // Configure GPIO placeholders as OUTPUT but don't drive them
-    // unless their enable flag is set.
     pinMode(PIN_RELAY, OUTPUT);   digitalWrite(PIN_RELAY, LOW);
     pinMode(PIN_EXT_LED, OUTPUT); digitalWrite(PIN_EXT_LED, LOW);
     pinMode(PIN_BUZZER, OUTPUT);  digitalWrite(PIN_BUZZER, LOW);
     pinMode(PIN_AUX_1, OUTPUT);   digitalWrite(PIN_AUX_1, LOW);
     pinMode(PIN_AUX_2, OUTPUT);   digitalWrite(PIN_AUX_2, LOW);
 
-    serialKV("PIN_RELAY (D7)", enableRelay ? "ENABLED" : "disabled (placeholder)");
-    serialKV("PIN_EXT_LED (D6)", enableExtLed ? "ENABLED" : "disabled (placeholder)");
-    serialKV("PIN_BUZZER (D5)", enableBuzzer ? "ENABLED" : "disabled (placeholder)");
-    serialKV("PIN_AUX_1 (D4)", enableAux1 ? "ENABLED" : "disabled (placeholder)");
-    serialKV("PIN_AUX_2 (D3)", enableAux2 ? "ENABLED" : "disabled (placeholder)");
+    serialKV("PIN_RELAY (D7)", enableRelay ? "ENABLED" : "disabled");
+    serialKV("PIN_EXT_LED (D6)", enableExtLed ? "ENABLED" : "disabled");
+    serialKV("PIN_BUZZER (D5)", enableBuzzer ? "ENABLED" : "disabled");
+    serialKV("PIN_AUX_1 (D4)", enableAux1 ? "ENABLED" : "disabled");
+    serialKV("PIN_AUX_2 (D3)", enableAux2 ? "ENABLED" : "disabled");
 
-    // ── LED Matrix Init ──
+    // -- LED Matrix Init --
     serialSection("LED MATRIX INIT");
-    Serial.println("  Initializing 12x8 LED matrix...");
+    Serial.println("  Initializing 13x8 LED matrix...");
 
     matrix.begin();
     matrix.setGrayscaleBits(3);
+    matrix.clear();
 
-    // Show a brief splash. Font_4x6 fits "UNO" in 12 columns.
-    matrix.beginDraw();
-    matrix.stroke(0xFFFFFFFF);
-    matrix.textFont(Font_4x6);
-    matrix.beginText(0, 1, 0xFFFFFF);
-    matrix.println("UNO");
-    matrix.endText();
-    matrix.endDraw();
-    Serial.println("  Matrix OK — showing 'UNO' splash");
+    matrix.draw(frame_smiley);
+    Serial.println("  Matrix OK -- showing smiley splash");
     delay(1200);
 
-    // Show scrolling boot status on the matrix
-    scrollText("  BOOTING...  ");
-    Serial.println("  Matrix scrolled 'BOOTING...'");
+    matrix.draw(frame_boot);
+    Serial.println("  Matrix showing boot icon");
+    delay(800);
 
-    // ── RGB LED Self-Test ──
-    // Cycle through red, green, blue so you can visually confirm
-    // all three channels are wired correctly.
+    // -- RGB LED Self-Test --
     serialSection("RGB LED SELF-TEST");
     Serial.println("  Red...");
     rgbPulse(true, false, false, 300);
@@ -455,16 +418,13 @@ void setup() {
     rgbPulse(false, false, true, 300);
     Serial.println("  RGB self-test complete");
 
-    // ── Bridge Init ──
+    // -- Bridge Init --
     serialSection("BRIDGE INITIALIZATION");
     Serial.println("  Starting Router Bridge (MCU <-> MPU)...");
-    Serial.println("  This connects the STM32 to the QRB2210 Linux side.");
 
     Bridge.begin();
     Serial.println("  Bridge.begin() OK");
 
-    // Register all providers. Each becomes callable from Python via
-    // Bridge.call("name", args).
     Serial.println("  Registering Bridge providers...");
 
     Bridge.provide("scroll_text",     scrollText);
@@ -482,45 +442,25 @@ void setup() {
     Serial.println("    flash_face, show_expression, set_device_mode,");
     Serial.println("    set_rgb, set_gpio, report_status");
 
-    // ── Boot Summary ──
+    // -- Boot Summary --
     serialSection("BOOT COMPLETE");
     serialKV("Boot time", String(millis() - bootTime) + "ms");
-    serialKV("Free memory", String(freeMemory()) + " bytes");
     serialKV("Device mode", deviceMode);
     serialKV("Face present", "no");
     serialKV("RGB LED", "off (ready)");
-    serialKV("GPIO placeholders", "configured (all LOW)");
     Serial.println();
     Serial.println("  Waiting for MPU connection...");
-    Serial.println("  (Python main.py should call Bridge.call('mcu_ready'))");
     serialDivider();
     Serial.println();
 
-    // Show checkmark on matrix to indicate successful boot
-    matrix.loadFrame(frame_check);
+    matrix.draw(frame_check);
     delay(800);
 
-    // Scroll final status on the matrix
-    scrollText("  BRIDGE OK  ");
-
-    // Notify the MPU that the MCU is ready to receive commands.
     Bridge.call("mcu_ready");
     Serial.println("[MCU] mcu_ready sent to MPU");
 
-    // Settle into idle state — red RGB until a face is detected
     setRGB(true, false, false);
 }
 
 void loop() {
-    // Nothing here. All work is handled by Bridge provider callbacks.
-    //
-    // If you want to add periodic tasks (heartbeat, watchdog, sensor
-    // polling), you can add them here with millis()-based timing.
-    // Example:
-    //
-    //   static unsigned long lastHeartbeat = 0;
-    //   if (millis() - lastHeartbeat >= 30000) {
-    //       lastHeartbeat = millis();
-    //       reportStatus();
-    //   }
 }
