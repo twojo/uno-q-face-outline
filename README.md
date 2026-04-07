@@ -768,9 +768,46 @@ Designed to pull as few external resources as possible.
 
 **Replit preview only (app.py):** `flask` and `psutil`. Both excluded from the App Lab project via `.gitignore`.
 
-## Where AI Models Come From: AI Hub, Bricks, Hugging Face, and Custom Models
+## Where AI Models Come From
 
-This demo uses Google MediaPipe in the browser, but the Uno Q can run models from many different sources. Understanding which source to use -- and why -- depends on where you want inference to happen, how much optimization you need, and whether you want to bring your own model.
+### What this demo uses: MediaPipe in the browser
+
+This demo runs Google MediaPipe Face Landmarker entirely in the browser via WASM. No AI models run on the Uno Q's MPU — the board serves the web page (via the `arduino:web_ui` Brick), receives face data over WebSocket, and drives the LED matrix and RGB LED through Bridge providers. This is the recommended approach for App Lab demos on the Uno Q because it requires zero model setup and works immediately after zip import.
+
+### What else works on the Uno Q today: App Lab Bricks
+
+App Lab Bricks are the other Uno Q-native AI option. These are containerized services that Arduino provides — you add one line to `app.yaml` and the Brick runs as a Docker container on the QRB2210:
+
+| Brick | What it does | Model | Uno Q compatible |
+|-------|-------------|-------|:---:|
+| `arduino:web_ui` | Serves web content + WebSocket messaging | (no AI model) | Yes (this demo uses it) |
+| `arduino:object_detection` | Detects objects in camera frames | YOLOX-Nano | Yes |
+| `arduino:motion_detection` | Detects motion in video stream | Frame differencing | Yes |
+
+To add a Brick, edit `app.yaml`:
+
+```yaml
+bricks:
+  - arduino:web_ui
+  - arduino:object_detection
+```
+
+Or add it through the App Lab UI. Each Brick deploys as a container on the QRB2210 and exposes an API to your Python code. Bricks are the easiest way to add AI capabilities to an Uno Q project beyond browser-side MediaPipe.
+
+### Why browser-side MediaPipe is the right choice for this demo
+
+1. **Zero setup.** MediaPipe loads from a CDN -- no model compilation, no Python dependencies, no camera driver configuration. Import the zip, open the browser, and it works.
+2. **478 landmarks.** MediaPipe Face Landmarker provides full 3D face geometry (478 points), expression blendshapes, and iris tracking. No Brick or AI Hub model provides this level of face detail.
+3. **Browser handles the camera.** The browser's `getUserMedia` API manages camera permissions, resolution negotiation, and frame delivery. Running inference on the MPU side requires OpenCV, v4l2 camera access, and manual frame capture -- additional complexity that can fail on first boot.
+4. **Works without the Uno Q.** Because inference runs client-side, you can open the demo on any laptop or phone browser to evaluate it before deploying to hardware. The Replit preview uses this mode.
+
+The trade-off is that browser-side inference ties the detection loop to the browser process. If the browser tab is closed, detection stops.
+
+---
+
+## Supplemental Reference: Advanced AI Model Options
+
+> **Note:** The sections below describe AI model workflows that are technically possible on the Uno Q's QRB2210 hardware but are **not part of this demo** and **not included in the App Lab zip**. They require additional software installation (tflite-runtime, OpenCV, numpy), a camera connected to the MPU, and in some cases cloud accounts (AI Hub, Edge Impulse). These workflows are included as reference material for developers who want to go beyond browser-side MediaPipe or App Lab Bricks. Some of these workflows are more naturally suited to the upcoming **Ventuno Q** (with its 40-TOPS NPU), where on-device inference becomes a primary use case rather than an optional advanced path.
 
 ### What is Qualcomm AI Hub?
 
@@ -869,18 +906,7 @@ _Note: QCS6490 and QCS8550 specs are approximate and may vary by SKU. Consult [Q
 
 For this demo, the QRB2210's CPU inference is more than adequate -- face detection at 15+ FPS is sufficient for real-time tracking. If you need to run larger models (object detection, segmentation, pose estimation, LLMs) at production speeds, the QCS6490 or QCS8550 with NPU offloading is the upgrade path. AI Hub compiles for all three chips, so your model workflow stays the same -- only the target device changes.
 
-### Why this demo uses browser-side MediaPipe instead of AI Hub
-
-This demo defaults to Google MediaPipe running in the browser via WASM for several reasons:
-
-1. **Zero setup.** MediaPipe loads from a CDN -- no model compilation, no Python dependencies, no camera driver configuration. Import the zip, open the browser, and it works.
-2. **478 landmarks.** MediaPipe Face Landmarker provides full 3D face geometry (478 points), expression blendshapes, and iris tracking. The AI Hub `face_det_lite` model only provides bounding boxes -- no landmarks, no expressions, no pupil data.
-3. **Browser handles the camera.** The browser's `getUserMedia` API manages camera permissions, resolution negotiation, and frame delivery. Running inference on the MPU side requires OpenCV, v4l2 camera access, and manual frame capture -- additional complexity that can fail on first boot.
-4. **Works without the Uno Q.** Because inference runs client-side, you can open the demo on any laptop or phone browser to evaluate it before deploying to hardware. The Replit preview uses this mode.
-
-The trade-off is that browser-side inference ties the detection loop to the browser process. If the browser tab is closed, detection stops. The on-device AI Hub path (below) runs headless on the MPU, independent of any browser connection.
-
-### On-device inference via AI Hub (optional)
+### On-device inference via AI Hub (optional, not in this demo)
 
 The `python/face_detector_mpu.py` module and `python/ai_hub_setup.py` helper implement an alternative path: face detection runs natively on the QRB2210 MPU using `tflite-runtime`, bypassing the browser entirely.
 
@@ -957,35 +983,15 @@ pip install tflite-runtime numpy opencv-python-headless
 
 The system always works without AI Hub models. Missing `tflite-runtime`, `numpy`, `opencv`, `.tflite` model, or `/dev/video` device all result in graceful fallback to browser-only mode (MediaPipe WASM). Boot diagnostics report full AI Hub status under the "AI HUB -- ON-DEVICE FACE DETECTION" section.
 
-### Using an App Lab Brick instead
+**Comparison: what's included in this demo vs what requires additional setup:**
 
-App Lab Bricks are containerized AI services that run as Docker containers on the QRB2210. Arduino provides several pre-built Bricks for common tasks:
-
-| Brick | What it does | Model |
-|-------|-------------|-------|
-| `arduino:object_detection` | Detects objects in camera frames | YOLOX-Nano |
-| `arduino:motion_detection` | Detects motion in video stream | Frame differencing |
-| `arduino:web_ui` | Serves web content + WebSocket messaging | (no AI model) |
-
-To add a Brick, edit `app.yaml`:
-
-```yaml
-bricks:
-  - arduino:web_ui
-  - arduino:object_detection
-```
-
-Or add it through the App Lab UI. Each Brick deploys as a container on the QRB2210 and exposes an API to your Python code.
-
-**When to use a Brick vs AI Hub vs browser-side:**
-
-| Approach | Where it runs | Setup effort | Model flexibility | Best for |
-|----------|--------------|-------------|-------------------|----------|
-| Browser (MediaPipe WASM) | Client browser, CPU | Zero -- loads from CDN | Fixed to MediaPipe models | Demos, rapid prototyping, face landmarks |
-| App Lab Brick | QRB2210 Docker container | Low -- add one line to app.yaml | Fixed to Arduino's pre-built models | Standard tasks (object detection, motion) |
-| AI Hub TFLite | QRB2210 MPU native | Medium -- compile + install deps | Any model from AI Hub's catalog (~100+ models) | Optimized headless inference, Qualcomm-tuned models |
-| Hugging Face model | QRB2210 MPU native | Medium-High -- export to TFLite + install deps | TFLite-exportable models from Hugging Face Hub | Custom/niche tasks, research models (must convert to TFLite) |
-| Custom model (Edge Impulse, etc.) | QRB2210 MPU native | High -- train + export + deploy | Your own trained model | Domain-specific tasks, proprietary data |
+| Approach | In this demo? | Where it runs | Setup effort | Best for |
+|----------|:---:|--------------|-------------|----------|
+| Browser (MediaPipe WASM) | **Yes** | Client browser | Zero -- loads from CDN | Demos, face landmarks (this demo) |
+| App Lab Brick | **Partially** (web_ui only) | QRB2210 Docker | Low -- add one line to app.yaml | Standard tasks (object detection, motion) |
+| AI Hub TFLite | No | QRB2210 MPU native | Medium -- compile + install deps | Optimized headless inference |
+| Hugging Face model | No | QRB2210 MPU native | Medium-High -- export to TFLite | Research models, niche tasks |
+| Custom model (Edge Impulse) | No | QRB2210 MPU native | High -- train + export + deploy | Domain-specific tasks, proprietary data |
 
 ### Bringing a Hugging Face model
 
@@ -1098,47 +1104,46 @@ Edge Impulse also has a direct Arduino library export path (Arduino Library > De
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                      AI MODEL ECOSYSTEM FOR UNO Q                               │
-│                      Where each platform fits                                    │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
-  ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
-  │   GOOGLE          │   │   QUALCOMM        │   │   ARDUINO         │
-  │   MediaPipe       │   │   AI Hub          │   │   App Lab Bricks  │
-  │                   │   │                   │   │                   │
-  │   Pre-trained     │   │   100+ optimized  │   │   Containerized   │
-  │   face/hand/pose  │   │   models for      │   │   AI services     │
-  │   models          │   │   Snapdragon      │   │   (YOLOX, motion) │
-  │                   │   │   silicon          │   │                   │
-  │   Runs in BROWSER │   │   Runs on MPU     │   │   Runs on MPU     │
-  │   via WASM        │   │   (tflite-runtime)│   │   (Docker)        │
-  │                   │   │                   │   │                   │
-  │   Zero setup      │   │   Medium setup    │   │   Low setup       │
-  └────────┬─────────┘   └────────┬─────────┘   └────────┬─────────┘
-           │                      │                       │
-           ▼                      ▼                       ▼
-  ┌──────────────────────────────────────────────────────────────────┐
-  │                     PYTHON COORDINATOR (main.py)                 │
-  │                                                                  │
-  │   Receives face/object data from ANY source above                │
-  │   Sends commands via Bridge → MCU (LED matrix, RGB, GPIO)        │
-  │   Sends updates via WebSocket → Browser (UI overlay)             │
-  └──────────────────────────────────────────────────────────────────┘
-           │                      │
-           ▼                      ▼
-  ┌──────────────────┐   ┌──────────────────┐
-  │  HUGGING FACE     │   │  EDGE IMPULSE     │
-  │                   │   │                   │
-  │  500k+ community  │   │  Train on YOUR    │
-  │  models           │   │  custom data      │
-  │                   │   │                   │
-  │  Export to TFLite │   │  Export to TFLite │
-  │  via optimum-cli  │   │  (int8 quantized) │
-  │  or AI Hub        │   │                   │
-  │                   │   │  Best for domain- │
-  │  Best for niche   │   │  specific tasks   │
-  │  research models  │   │  (defects, custom │
-  │                   │   │   gestures, etc.) │
-  └──────────────────┘   └──────────────────┘
+  THIS DEMO (works out of the box)        ADVANCED (requires additional setup)
+  ─────────────────────────────────       ───────────────────────────────────
+
+  ┌──────────────────┐   ┌────────────┐   ┌──────────────────┐  ┌──────────────┐
+  │   GOOGLE          │   │  ARDUINO    │   │   QUALCOMM        │  │ HUGGING FACE │
+  │   MediaPipe       │   │  App Lab    │   │   AI Hub          │  │              │
+  │                   │   │  Bricks     │   │                   │  │ 500k+ models │
+  │   478-pt face     │   │            │   │   100+ optimized  │  │ Export to    │
+  │   landmarks       │   │  web_ui ✓  │   │   models for      │  │ TFLite via   │
+  │                   │   │  obj_det   │   │   Snapdragon      │  │ optimum-cli  │
+  │   Runs in BROWSER │   │  motion    │   │                   │  │              │
+  │   via WASM        │   │            │   │   Runs on MPU     │  │ Runs on MPU  │
+  │                   │   │  Runs on   │   │   (tflite-runtime)│  │ (tflite)     │
+  │   ✓ IN THIS DEMO  │   │  MPU       │   │                   │  │              │
+  └────────┬─────────┘   │  (Docker)  │   │   Needs: AI Hub   │  │ Needs: model │
+           │              └─────┬──────┘   │   account + deps  │  │ conversion   │
+           │                    │           └────────┬─────────┘  └──────┬───────┘
+           │                    │                    │                    │
+           ▼                    ▼                    ▼                    ▼
+  ┌──────────────────────────────────────────────────────────────────────────────┐
+  │                     PYTHON COORDINATOR (main.py)                             │
+  │   Receives data from ANY source → Bridge → MCU (LED/RGB/GPIO)               │
+  │                                 → WebSocket → Browser (UI overlay)           │
+  └──────────────────────────────────────────────────────────────────────────────┘
+                                         ▲
+                                         │
+                               ┌─────────┴─────────┐
+                               │   EDGE IMPULSE      │
+                               │   Train on YOUR     │
+                               │   custom data        │
+                               │   Export to TFLite   │
+                               │                      │
+                               │   Runs on MPU        │
+                               │   (tflite)           │
+                               │                      │
+                               │   Needs: EI account  │
+                               │   + custom training  │
+                               └──────────────────────┘
 ```
 
 ### The decision tree
@@ -1170,7 +1175,9 @@ In all cases, the MCU layer (`sketch.ino`), the Bridge providers, the WebSocket 
 
 ---
 
-## Where the Uno Q fits in Qualcomm's world
+## Further Reading: Where the Uno Q fits in Qualcomm's world
+
+> **Context section.** The material below is background reading about Qualcomm's product ecosystem, the upcoming Ventuno Q, and industry trends. None of it is required to use this demo — it's here to help you understand where the Uno Q sits in the bigger picture and where the platform is heading.
 
 Qualcomm is not just a phone chip company. As of 2025-2026, Qualcomm silicon ships across six major market segments, each with its own product line. The **Dragonwing** brand covers industrial and embedded IoT; the **Snapdragon** brand covers consumer and commercial products. Both share the same underlying IP (Kryo/Oryon CPUs, Adreno GPUs, Hexagon NPUs, FastConnect Wi-Fi/BT).
 
