@@ -25,7 +25,7 @@
 #   7. Scroll IP + status on LED matrix
 #   8. Wait for browser connection
 #
-# Dependencies: stdlib + App Lab SDK. Optional: tflite-runtime, numpy,
+# Dependencies: stdlib + App Lab SDK. Optional: ai-edge-litert, numpy,
 # opencv-python-headless for on-device face detection via AI Hub models.
 
 from arduino.app_utils import *
@@ -143,7 +143,8 @@ def get_uptime():
         return "unknown"
 
 def get_cpu_info():
-    """Parse /proc/cpuinfo for model name and core count."""
+    """Parse /proc/cpuinfo for model name and core count.
+    Handles both x86 (model name) and ARM (Hardware/Processor) layouts."""
     model = "unknown"
     cores = 0
     try:
@@ -151,10 +152,20 @@ def get_cpu_info():
             for line in f:
                 if line.startswith("model name") and model == "unknown":
                     model = line.split(":")[1].strip()
+                elif line.startswith("Hardware") and model == "unknown":
+                    model = line.split(":")[1].strip()
+                elif line.startswith("Processor") and model == "unknown":
+                    model = line.split(":")[1].strip()
                 if line.startswith("processor"):
                     cores += 1
     except Exception:
         pass
+    if model == "unknown":
+        machine = platform.machine()
+        if machine == "aarch64":
+            model = "ARM Cortex (aarch64)"
+        elif machine:
+            model = machine
     return model, cores
 
 def get_mem_info():
@@ -283,114 +294,35 @@ def _auto_setup_models():
 def run_boot_diagnostics():
     """Run full system diagnostics and print to terminal."""
 
-    section("WOJO'S UNO Q FACE OUTLINE DEMO — MPU BOOT")
-    kv("App", "Face Outline Demo v1.0")
-    kv("Python", platform.python_version())
-    kv("Platform", platform.platform())
-    kv("Machine", platform.machine())
-    kv("Hostname", socket.gethostname())
-    kv("Kernel", get_kernel_version())
-    kv("PID", os.getpid())
-    kv("Working directory", os.getcwd())
-    kv("Boot time", time.strftime("%Y-%m-%d %H:%M:%S"))
-
-    # --- System Resources ---
-    section("SYSTEM RESOURCES")
+    section("WOJO'S UNO Q FACE DEMO")
     cpu_model, cpu_cores = get_cpu_info()
-    kv("CPU model", cpu_model)
-    kv("CPU cores", cpu_cores)
-
     mem_total, mem_avail = get_mem_info()
-    mem_used = mem_total - mem_avail
-    mem_pct = round((mem_used / mem_total) * 100, 1) if mem_total > 0 else 0
-    kv("RAM total", f"{mem_total} MB")
-    kv("RAM available", f"{mem_avail} MB ({100 - mem_pct}% free)")
-    kv("RAM used", f"{mem_used} MB ({mem_pct}%)")
-
     disk_total, disk_used, disk_free, disk_pct = get_disk_info()
-    kv("Disk total", f"{disk_total} MB")
-    kv("Disk used", f"{disk_used} MB ({disk_pct}%)")
-    kv("Disk free", f"{disk_free} MB")
-
-    kv("System uptime", get_uptime())
-
-    # --- Network ---
-    section("NETWORK DIAGNOSTICS")
     primary_ip = get_ip_address()
-    all_ips = get_all_ips()
-    kv("Primary IP", primary_ip)
-    kv("All IPs", ", ".join(all_ips) if all_ips else "none")
-    kv("Hostname (FQDN)", socket.getfqdn())
+
+    kv("Python", f"{platform.python_version()} | {platform.machine()} | {cpu_model} x{cpu_cores}")
+    kv("RAM", f"{mem_total} MB total, {mem_avail} MB free")
+    kv("Disk", f"{disk_total} MB total, {disk_pct}% used")
+    kv("Uptime", get_uptime())
+    divider()
+    kv("IP", primary_ip)
 
     dns_result = check_dns("google.com")
-    if dns_result:
-        ok(f"DNS resolution OK — google.com → {dns_result}")
-    else:
-        fail("DNS resolution FAILED — check /etc/resolv.conf")
+    if not dns_result:
+        warn("DNS FAILED — check /etc/resolv.conf")
 
-    dns_cdn = check_dns("cdn.jsdelivr.net")
-    if dns_cdn:
-        ok(f"CDN DNS OK — cdn.jsdelivr.net → {dns_cdn}")
-    else:
-        warn("CDN DNS FAILED — MediaPipe may not load in browser")
-
-    # --- CDN Connectivity ---
-    # These are the URLs the browser will try to fetch. If the Uno Q
-    # can't reach them, the face tracker won't work. We check from
-    # the MPU side as an early warning.
-    section("CDN REACHABILITY (browser will need these)")
-
-    cdn_checks = [
-        ("MediaPipe WASM", "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/+esm"),
-        ("MediaPipe Model", "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"),
-        ("Google Fonts", "https://fonts.googleapis.com/css2?family=Inter"),
-    ]
-
-    for name, url in cdn_checks:
-        result = check_http_reachable(url)
-        if isinstance(result, int) and result < 400:
-            ok(f"{name}: HTTP {result} OK")
-        else:
-            warn(f"{name}: {result}")
-            if "mediapipe" in name.lower():
-                logger.info(f"    ↳ Face tracking will NOT work without this!")
-
-    # --- Project Files ---
-    section("PROJECT FOLDER TREE")
+    # --- Quick File Checks ---
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    print_folder_tree(project_root, "  ", max_depth=3)
+    divider()
+    for f in ["app.yaml", "assets/index.html", "sketch/sketch.ino", "sketch/sketch.yaml"]:
+        fp = os.path.join(project_root, f)
+        if os.path.exists(fp):
+            ok(f)
+        else:
+            fail(f"{f} NOT FOUND")
 
-    # --- App Lab Config ---
-    section("APP LAB CONFIGURATION")
-    app_yaml = os.path.join(project_root, "app.yaml")
-    if os.path.exists(app_yaml):
-        ok("app.yaml found")
-        try:
-            with open(app_yaml, "r") as f:
-                for line in f:
-                    line = line.rstrip()
-                    if line and not line.startswith("#"):
-                        logger.info(f"    {line}")
-        except Exception:
-            pass
-    else:
-        fail("app.yaml NOT FOUND — App Lab won't recognize this project")
-
-    sketch_yaml = os.path.join(project_root, "sketch", "sketch.yaml")
-    if os.path.exists(sketch_yaml):
-        ok("sketch/sketch.yaml found")
-    else:
-        warn("sketch/sketch.yaml missing")
-
-    assets_html = os.path.join(project_root, "assets", "index.html")
-    if os.path.exists(assets_html):
-        size = os.path.getsize(assets_html)
-        ok(f"assets/index.html found ({size // 1024} KB)")
-    else:
-        fail("assets/index.html NOT FOUND — frontend will not load")
-
-    # --- AI Hub / On-Device Detection ---
-    section("AI HUB — ON-DEVICE FACE DETECTION")
+    # --- On-Device Detection ---
+    divider()
     global mpu_detector
 
     if not _ai_hub_import_ok:
@@ -445,19 +377,14 @@ def run_boot_diagnostics():
 
     # --- Boot Summary ---
     boot_elapsed = time.time() - BOOT_START
-    section("BOOT DIAGNOSTICS COMPLETE")
-    kv("Diagnostics took", f"{boot_elapsed:.2f}s")
-    kv("Primary IP", primary_ip)
-    kv("DNS", "OK" if dns_result else "FAILED")
-    kv("CDN reachable", "checked (see above)")
-    kv("On-device AI", "ACTIVE" if mpu_detector else "browser-only")
-    logger.info("")
-    logger.info("  Open your browser to:")
-    logger.info(f"    http://{primary_ip}:<port>/")
-    logger.info("")
-    logger.info("  The LED matrix will scroll the IP address shortly.")
     divider()
+    webui_port = 8080
+    kv("AI", "ACTIVE" if mpu_detector else "browser-only")
+    kv("Boot", f"{boot_elapsed:.1f}s")
     logger.info("")
+    logger.info(f"  ► Open browser to: http://{primary_ip}:{webui_port}/")
+    logger.info("")
+    divider()
 
 
 # Run diagnostics immediately on import (before app starts)
@@ -485,37 +412,28 @@ last_face_present = False
 # boot sequence: scrolls the IP, then "Face Demo Ready".
 
 def startup_sequence():
-    """Runs once at boot in a background thread. Scrolls diagnostic
-    info across the LED matrix so the user can see board status
-    even without a terminal connected."""
+    """Runs once at boot in a background thread. Scrolls the IP
+    address across the LED matrix (twice for readability), then
+    shows AI status."""
     time.sleep(2)
     ip = get_ip_address()
 
-    logger.info(f"[STARTUP] Scrolling IP on LED matrix: {ip}")
-    safe_bridge_call("scroll_text", f"  IP: {ip}  ")
-    time.sleep(8)
-
-    mem_total, mem_avail = get_mem_info()
-    safe_bridge_call("scroll_text", f"  RAM: {mem_avail}/{mem_total}MB  ")
-    time.sleep(6)
-
-    safe_bridge_call("scroll_text", f"  {platform.machine()} {get_kernel_version()[:12]}  ")
-    time.sleep(6)
+    logger.info(f"[STARTUP] LED: scrolling IP {ip}")
+    safe_bridge_call("scroll_text", f"  {ip}  ")
+    safe_bridge_call("scroll_text", f"  {ip}  ")
 
     if mpu_detector and mpu_detector.available:
-        safe_bridge_call("scroll_text", "  AI: ON-DEVICE  ")
-        time.sleep(4)
+        safe_bridge_call("scroll_text", "  AI READY  ")
         started = mpu_detector.start()
         if started:
             logger.info("[STARTUP] On-device face detection started")
             safe_bridge_call("set_rgb", "cyan")
             time.sleep(1)
             safe_bridge_call("set_rgb", "off")
-        else:
-            logger.info("[STARTUP] On-device detection available but could not start capture")
+    else:
+        safe_bridge_call("scroll_text", "  READY  ")
 
-    safe_bridge_call("scroll_text", "  Face Demo Ready  ")
-    logger.info("[STARTUP] LED matrix boot sequence complete")
+    logger.info("[STARTUP] Boot complete")
 
 startup_thread = threading.Thread(target=startup_sequence, daemon=True)
 startup_thread.start()

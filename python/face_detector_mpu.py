@@ -361,25 +361,63 @@ class FaceDetectorMPU:
 
     def _run_inference(self, frame):
         input_detail = self._input_details[0]
-        input_shape = input_detail['shape']
+        target_shape = tuple(input_detail['shape'])
+        ndim = len(target_shape)
 
-        h, w = input_shape[1], input_shape[2]
-        if len(input_shape) == 4 and input_shape[1] == 3:
-            h, w = input_shape[2], input_shape[3]
-            resized = _cv2.resize(frame, (w, h))
-            rgb = _cv2.cvtColor(resized, _cv2.COLOR_BGR2RGB)
-            input_data = _np.transpose(rgb, (2, 0, 1))
-            input_data = _np.expand_dims(input_data, axis=0)
+        total_el = 1
+        for d in target_shape:
+            total_el *= d
+
+        if ndim == 4:
+            if target_shape[1] <= 4:
+                h, w = target_shape[2], target_shape[3]
+                resized = _cv2.resize(frame, (w, h))
+                rgb = _cv2.cvtColor(resized, _cv2.COLOR_BGR2RGB)
+                input_data = _np.transpose(rgb, (2, 0, 1))
+                input_data = _np.expand_dims(input_data, axis=0)
+            else:
+                h, w = target_shape[1], target_shape[2]
+                resized = _cv2.resize(frame, (w, h))
+                rgb = _cv2.cvtColor(resized, _cv2.COLOR_BGR2RGB)
+                input_data = _np.expand_dims(rgb, axis=0)
+        elif ndim == 3:
+            if target_shape[0] <= 4:
+                h, w = target_shape[1], target_shape[2]
+                resized = _cv2.resize(frame, (w, h))
+                rgb = _cv2.cvtColor(resized, _cv2.COLOR_BGR2RGB)
+                input_data = _np.transpose(rgb, (2, 0, 1))
+            else:
+                h, w = target_shape[0], target_shape[1]
+                resized = _cv2.resize(frame, (w, h))
+                rgb = _cv2.cvtColor(resized, _cv2.COLOR_BGR2RGB)
+                input_data = rgb
         else:
-            h, w = input_shape[1], input_shape[2]
-            resized = _cv2.resize(frame, (w, h))
-            rgb = _cv2.cvtColor(resized, _cv2.COLOR_BGR2RGB)
-            input_data = _np.expand_dims(rgb, axis=0)
+            for ch_guess in [3, 1]:
+                if total_el % ch_guess == 0:
+                    pixels = total_el // ch_guess
+                    side = int(pixels ** 0.5)
+                    if side * side * ch_guess == total_el:
+                        h, w = side, side
+                        resized = _cv2.resize(frame, (w, h))
+                        if ch_guess == 3:
+                            input_data = _cv2.cvtColor(resized, _cv2.COLOR_BGR2RGB)
+                        else:
+                            input_data = _cv2.cvtColor(resized, _cv2.COLOR_BGR2GRAY)
+                        break
+            else:
+                self._logger.warning(f"[FaceDetMPU] Unsupported input shape {target_shape} — skipping frame")
+                return []
 
         input_data = input_data.astype(input_detail['dtype'])
 
         if input_detail['dtype'] == _np.float32:
             input_data = input_data / 255.0
+
+        try:
+            input_data = input_data.reshape(target_shape)
+        except ValueError as e:
+            self._logger.warning(f"[FaceDetMPU] Reshape failed {input_data.shape} → {target_shape}: {e}")
+            return []
 
         self._interpreter.set_tensor(input_detail['index'], input_data)
 

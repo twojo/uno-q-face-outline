@@ -335,15 +335,23 @@ const faceListEl = document.getElementById("faceList");
 let du = new DrawingUtils(ctx);
 
 let cameraStream = null;
-try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false
-    });
-    cam.srcObject = cameraStream;
+let cameraAvailable = false;
+async function openCam(constraints) {
+    const s = await navigator.mediaDevices.getUserMedia(constraints);
+    cam.srcObject = s;
     await new Promise(r => { cam.onloadeddata = r; });
     await cam.play();
     await new Promise(r => setTimeout(r, 200));
+    return s;
+}
+try {
+    try {
+        cameraStream = await openCam({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+    } catch (e1) {
+        console.warn("[CAMERA] Default constraints failed, trying any camera:", e1.message);
+        cameraStream = await openCam({ video: true, audio: false });
+    }
+    cameraAvailable = true;
 
     const vw = cam.videoWidth, vh = cam.videoHeight;
     const mp = ((vw * vh) / 1000000).toFixed(1);
@@ -424,11 +432,15 @@ try {
     }
 
     viewport.appendChild(errorDiv);
-    throw e;
 }
 
-cvs.width = cam.videoWidth;
-cvs.height = cam.videoHeight;
+if (cameraAvailable) {
+    cvs.width = cam.videoWidth;
+    cvs.height = cam.videoHeight;
+} else {
+    cvs.width = 640;
+    cvs.height = 480;
+}
 du = new DrawingUtils(ctx);
 
 ctx.fillStyle = "rgba(0,255,0,0.3)";
@@ -711,7 +723,7 @@ function updateAdaptivePerf(now) {
 function draw() {
     requestAnimationFrame(draw);
 
-    if (cam.paused || cam.ended || !cam.videoWidth || !fl) return;
+    if (!cameraAvailable || cam.paused || cam.ended || !cam.videoWidth || !fl) return;
 
     if (cam.currentTime === lastVideoTime) return;
     lastVideoTime = cam.currentTime;

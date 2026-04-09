@@ -354,11 +354,59 @@ void reportStatus() {
     Bridge.call("mcu_status_report", report.c_str());
 }
 
+// -- 3x5 Pixel Font for LED Matrix Text Scrolling --
+// Each row: 3 bits (bit2=left, bit1=center, bit0=right).
+// Index: 0-9 digits, 10-35 A-Z, 36 '.', 37 ':', 38 ' ', 39 '-'
+static const uint8_t FONT_3X5[][5] = {
+    {7,5,5,5,7},{2,6,2,2,7},{7,1,7,4,7},{7,1,7,1,7},{5,5,7,1,1},
+    {7,4,7,1,7},{7,4,7,5,7},{7,1,2,2,2},{7,5,7,5,7},{7,5,7,1,7},
+    {2,5,7,5,5},{6,5,6,5,6},{3,4,4,4,3},{6,5,5,5,6},{7,4,7,4,7},
+    {7,4,6,4,4},{3,4,5,5,3},{5,5,7,5,5},{7,2,2,2,7},{1,1,1,5,2},
+    {5,6,4,6,5},{4,4,4,4,7},{5,7,7,5,5},{5,7,7,7,5},{2,5,5,5,2},
+    {6,5,6,4,4},{2,5,5,6,3},{6,5,6,5,5},{3,4,2,1,6},{7,2,2,2,2},
+    {5,5,5,5,2},{5,5,5,2,2},{5,5,7,7,2},{5,2,2,2,5},{5,5,2,2,2},
+    {7,1,2,4,7},{0,0,0,0,2},{0,2,0,2,0},{0,0,0,0,0},{0,0,7,0,0},
+};
+
+int fontCharIndex(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'A' && c <= 'Z') return c - 'A' + 10;
+    if (c >= 'a' && c <= 'z') return c - 'a' + 10;
+    if (c == '.') return 36;
+    if (c == ':') return 37;
+    if (c == ' ') return 38;
+    if (c == '-') return 39;
+    return 38;
+}
+
 void scrollText(String text) {
     resetMpuHeartbeat();
-    Serial.print("[MATRIX] Text: ");
-    Serial.println(text);
-    matrix.draw(frame_smiley);
+    text.toUpperCase();
+    int len = text.length();
+    int charW = 4;
+    int totalW = len * charW;
+    if (totalW > 0) totalW -= 1;
+
+    uint8_t frame[104];
+
+    for (int offset = 13; offset >= -totalW; offset--) {
+        memset(frame, 0, sizeof(frame));
+        for (int col = 0; col < 13; col++) {
+            int tx = col - offset;
+            if (tx < 0 || tx >= totalW) continue;
+            int ci = tx / charW;
+            int px = tx % charW;
+            if (ci >= len || px >= 3) continue;
+            int fi = fontCharIndex(text.charAt(ci));
+            for (int row = 0; row < 5; row++) {
+                if ((FONT_3X5[fi][row] >> (2 - px)) & 1) {
+                    frame[(1 + row) * 13 + col] = 7;
+                }
+            }
+        }
+        matrix.draw(frame);
+        delay(70);
+    }
 }
 
 // -- Setup --
