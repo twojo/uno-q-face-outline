@@ -20,13 +20,30 @@ from datetime import datetime, UTC
 import socket
 import threading
 import time
+import os
 
 ui = WebUI()
 detection_stream = VideoObjectDetection(confidence=0.5, debounce_sec=0.0)
 
 ui.on_message("override_th", lambda sid, threshold: detection_stream.override_threshold(threshold))
 
-face_present = False
+_start_time = time.monotonic()
+_face_present = False
+_total_detections = 0
+_last_log_time = 0
+_LOG_INTERVAL = 5.0
+
+def _uptime():
+    s = int(time.monotonic() - _start_time)
+    h, rem = divmod(s, 3600)
+    m, sec = divmod(rem, 60)
+    return f"{h:02d}:{m:02d}:{sec:02d}"
+
+def _ts():
+    return datetime.now(UTC).strftime("%H:%M:%S")
+
+def _log(msg):
+    print(f"[{_ts()}] uptime={_uptime()}  {msg}", flush=True)
 
 def safe_call(cmd, arg=""):
     try:
@@ -35,29 +52,37 @@ def safe_call(cmd, arg=""):
         pass
 
 def face_detected():
-    global face_present
-    if not face_present:
-        face_present = True
+    global _face_present
+    if not _face_present:
+        _face_present = True
         safe_call("show_face")
         safe_call("flash_face", "3")
         safe_call("set_rgb", "green")
-    print("Face detected!")
+        _log("FACE APPEARED")
 
 detection_stream.on_detect("face", face_detected)
 
 _heartbeat_count = 0
 
 def send_detections_to_ui(detections: dict):
-    global face_present, _heartbeat_count
+    global _face_present, _heartbeat_count, _total_detections, _last_log_time
     n = len(detections)
     _heartbeat_count += 1
+    _total_detections += n
 
-    if n == 0 and face_present:
-        face_present = False
+    if n == 0 and _face_present:
+        _face_present = False
         safe_call("set_rgb", "off")
         safe_call("show_no_face")
+        _log("FACE LOST")
     elif n > 0 and _heartbeat_count % 30 == 0:
         safe_call("show_face")
+
+    now = time.monotonic()
+    if now - _last_log_time >= _LOG_INTERVAL:
+        _last_log_time = now
+        state = "tracking" if _face_present else "idle"
+        _log(f"status={state}  faces={n}  total_detections={_total_detections}  heartbeats={_heartbeat_count}")
 
     ui.send_message("face_count", {"count": n})
 
@@ -74,6 +99,7 @@ detection_stream.on_detect_all(send_detections_to_ui)
 
 def startup():
     time.sleep(3)
+    ip = "unknown"
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
@@ -83,8 +109,11 @@ def startup():
         safe_call("scroll_text", f"  {ip}  ")
     except Exception:
         pass
+
+    _log(f"READY  ip={ip}  pid={os.getpid()}")
     safe_call("scroll_text", "  READY  ")
 
 threading.Thread(target=startup, daemon=True).start()
 
+_log(f"BOOT  pid={os.getpid()}")
 App.run()
