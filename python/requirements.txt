@@ -1,5 +1,2 @@
-# Runtime dependencies for Wojo's Uno Q Face Outline Demo
-#
-# The VideoObjectDetection brick handles all camera, model, and
-# inference dependencies automatically. No additional packages needed.
-# The Arduino App Lab SDK provides: arduino.app_utils, arduino.app_bricks
+opencv-python>=4.8.0
+numpy>=1.24.0
