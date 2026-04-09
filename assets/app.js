@@ -58,7 +58,7 @@ let currentFps = 0;
 let drawMode = "outline";
 let minConfidence = 0.5;
 
-const socket = typeof io !== "undefined" ? io() : null;
+var socket = null;
 
 drawModeSelect.addEventListener("change", function () {
   drawMode = this.value;
@@ -160,8 +160,7 @@ function detectLoop(timestamp) {
     if (!faceVisible) {
       faceVisible = true;
       showGreeting();
-      statusBadge.textContent = "Face Detected";
-      statusBadge.className = "status-badge active";
+      setStatus("Face Detected", "active");
     }
 
     if (now - lastSendTime > THROTTLE_MS) {
@@ -190,8 +189,7 @@ function detectLoop(timestamp) {
 
     if (faceVisible) {
       faceVisible = false;
-      statusBadge.textContent = "Scanning...";
-      statusBadge.className = "status-badge scanning";
+      setStatus("Scanning...", "scanning");
       showFeedback("System response will appear here");
       if (socket) socket.emit("face_data", { faces: 0 });
     }
@@ -465,33 +463,48 @@ function updateConfidence() {
 }
 
 function initSocketIO() {
-  if (!socket) return;
+  if (typeof io === "undefined") return;
 
-  socket.on("connect", function () {
-    statusBadge.textContent = "Connected";
-    statusBadge.className = "status-badge connected";
-    if (errorContainer) {
-      errorContainer.style.display = "none";
-      errorContainer.textContent = "";
-    }
-  });
+  try {
+    socket = io({ reconnectionAttempts: 3, timeout: 5000 });
 
-  socket.on("disconnect", function () {
-    statusBadge.textContent = "Disconnected";
-    statusBadge.className = "status-badge";
-    if (errorContainer) {
-      errorContainer.textContent = "Connection to the board lost. Please check the connection.";
-      errorContainer.style.display = "block";
-    }
-  });
+    socket.on("connect", function () {
+      if (errorContainer) {
+        errorContainer.style.display = "none";
+        errorContainer.textContent = "";
+      }
+    });
+
+    socket.on("connect_error", function () {
+      socket.close();
+      socket = null;
+    });
+
+    socket.on("disconnect", function () {
+      if (errorContainer) {
+        errorContainer.textContent = "Connection to the board lost.";
+        errorContainer.style.display = "block";
+      }
+    });
+  } catch (e) {
+    socket = null;
+  }
+}
+
+function setStatus(text, className) {
+  statusBadge.textContent = text;
+  statusBadge.className = "status-badge " + (className || "");
 }
 
 async function main() {
+  setStatus("Loading...", "");
   initSocketIO();
   initConfidenceSlider();
   renderDetections();
   await initLandmarker();
+  setStatus("Starting camera...", "");
   await startCamera();
+  setStatus("Scanning...", "scanning");
 }
 
 main();
