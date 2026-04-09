@@ -51,7 +51,7 @@ def send_detections_to_ui(detections: dict):
             "confidence": conf,
             "timestamp": datetime.now(UTC).isoformat()
         }
-        ui.send_message("detection", message=entry)
+        ui.send_message("detection", entry)
 
 detection_stream.on_detect_all(send_detections_to_ui)
 
