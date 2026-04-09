@@ -107,7 +107,7 @@ function renderDetections() {
         contentText.className = 'scan-content';
         var value = scan.confidence;
         var result = Math.floor(value * 1000) / 10;
-        contentText.innerHTML = result + '% &mdash; ' + (scan.content || 'Face');
+        contentText.textContent = result + '% \u2014 ' + (scan.content || 'Face');
 
         var timeText = document.createElement('span');
         timeText.className = 'scan-content-time';
