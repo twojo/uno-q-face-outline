@@ -1,6 +1,12 @@
 // SPDX-FileCopyrightText: Copyright (C) 2025 Wojo
 //
 // SPDX-License-Identifier: MIT
+//
+// Wojo's Face Outline Demo — Frontend Logic
+// Arduino Uno Q | Qualcomm QRB2210 | Arduino App Lab
+//
+// Connects to the WebUI brick via Socket.IO to display real-time
+// face detection results from the VideoObjectDetection brick.
 
 const recentDetectionsElement = document.getElementById('recentDetections');
 const feedbackContentElement = document.getElementById('feedback-content');

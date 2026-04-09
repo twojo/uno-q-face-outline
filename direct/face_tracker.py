@@ -3,14 +3,21 @@
 # SPDX-License-Identifier: MIT
 #
 # Wojo's Face Tracker — Direct SSH Version
+# Arduino Uno Q (Qualcomm QRB2210)
 #
+# Standalone face detection for the Uno Q's Cortex-A53 — no App Lab needed.
 # SSH into your Uno Q and run:
 #
 #   ./setup.sh                        # one-time: installs deps + downloads models
 #   python3 direct/face_tracker.py    # start tracking
 #
-# Uses OpenCV's YuNet face detector (75K params, 233 KB) and
-# optionally the 468-landmark face mesh model via ONNX Runtime.
+# Uses OpenCV's YuNet face detector (75K params, 233 KB) for detection
+# and optionally a 468-landmark face mesh model via ONNX Runtime for
+# full mesh outlines. This is the same landmark count as MediaPipe's
+# face mesh — we use a compatible ONNX model instead of MediaPipe's
+# Python bindings because mediapipe lacks reliable ARM64 Linux wheels
+# for the QRB2210's Cortex-A53.
+#
 # Pure Python — no App Lab, no Bridge, no MCU dependencies.
 
 import cv2
@@ -38,12 +45,16 @@ try:
     if os.path.isfile(MESH_MODEL):
         mesh_session = ort.InferenceSession(MESH_MODEL, providers=["CPUExecutionProvider"])
         HAS_MESH = True
-        print("[OK] Face mesh model loaded (468 landmarks)")
+        print("[OK] Face mesh model loaded (468 landmarks via ONNX Runtime)")
+        print("     Same landmark set as MediaPipe Face Mesh, ARM64-compatible")
     else:
-        print("[INFO] Face mesh model not found — run ./setup.sh to download")
+        print("[INFO] Face mesh model not found — 468-landmark outlines disabled")
+        print("       Fix: ./model_get.sh face-mesh")
+        print("       Or:  ./setup.sh   (downloads all models)")
 except ImportError:
-    print("[INFO] onnxruntime not installed — face mesh disabled")
-    print("       pip3 install onnxruntime")
+    print("[INFO] onnxruntime not installed — 468-landmark face mesh disabled")
+    print("       Fix: pip3 install onnxruntime")
+    print("       Face detection still works (YuNet via OpenCV, no extra deps)")
 
 
 def get_face_mesh(frame, bbox):
@@ -93,7 +104,16 @@ def get_face_mesh(frame, bbox):
 def main():
     if not os.path.isfile(FACE_MODEL):
         print(f"ERROR: Face detection model not found at {FACE_MODEL}")
-        print("       Run ./setup.sh first to download models")
+        print("")
+        print("  Fix: Run the setup script to download models:")
+        print("    cd " + PROJECT_DIR)
+        print("    ./setup.sh")
+        print("")
+        print("  Or download just the face detector:")
+        print("    ./model_get.sh face-detection")
+        print("")
+        print("  The YuNet model is only 233 KB and needs internet access.")
+        print("  Check: curl -s https://github.com > /dev/null && echo 'OK' || echo 'No internet'")
         sys.exit(1)
 
     cap = cv2.VideoCapture(CAMERA_INDEX)
@@ -102,8 +122,17 @@ def main():
 
     if not cap.isOpened():
         print("ERROR: Cannot open camera")
-        print(f"       Tried camera index {CAMERA_INDEX}")
-        print("       Check USB webcam connection")
+        print(f"       Tried /dev/video{CAMERA_INDEX}")
+        print("")
+        print("  Checklist:")
+        print("    1. Is a USB webcam plugged into the Uno Q's USB hub?")
+        print("    2. Run: ls /dev/video*    (should show /dev/video0)")
+        print("    3. Try: v4l2-ctl --list-devices")
+        print("    4. If using a USB-C multiport adapter, ensure it has power delivery")
+        print("    5. Some webcams need USB 2.0 — try a different port on the hub")
+        print("")
+        print("  Note: The Uno Q has a single USB-C port. You need a powered USB hub")
+        print("  or the Arduino USB-C multiport adapter to connect both power and camera.")
         sys.exit(1)
 
     detector = cv2.FaceDetectorYN_create(
@@ -119,10 +148,12 @@ def main():
 
     print("")
     print("================================================")
-    print("  Wojo's Face Tracker — Running")
-    print(f"  Camera: {FRAME_W}x{FRAME_H} @ index {CAMERA_INDEX}")
-    print(f"  Model: YuNet ({os.path.getsize(FACE_MODEL) // 1024} KB)")
-    print(f"  Mesh: {'enabled (468 landmarks)' if HAS_MESH else 'disabled'}")
+    print("  Wojo's Face Tracker — Arduino Uno Q")
+    print("  Qualcomm QRB2210 (Cortex-A53)")
+    print("================================================")
+    print(f"  Camera: {FRAME_W}x{FRAME_H} @ /dev/video{CAMERA_INDEX}")
+    print(f"  Detector: YuNet ({os.path.getsize(FACE_MODEL) // 1024} KB)")
+    print(f"  Mesh: {'468 landmarks (ONNX, MediaPipe-compatible)' if HAS_MESH else 'disabled (detection only)'}")
     print(f"  Confidence: {CONFIDENCE}")
     print("  Press Ctrl+C to stop")
     print("================================================")

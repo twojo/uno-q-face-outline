@@ -1,6 +1,17 @@
 # SPDX-FileCopyrightText: Copyright (C) 2025 Wojo
 #
 # SPDX-License-Identifier: MIT
+#
+# Wojo's Face Outline Demo — App Lab Coordinator
+# Arduino Uno Q (Qualcomm QRB2210 MPU + STM32U585 MCU)
+#
+# This script runs on the QRB2210's Debian Linux and coordinates:
+#   - VideoObjectDetection brick: face detection via USB camera
+#   - WebUI brick: serves the browser UI + Socket.IO messaging
+#   - Bridge RPC: forwards face state to the STM32 MCU for LED/RGB feedback
+#
+# Runs inside Arduino App Lab. For standalone (no App Lab) use:
+#   python3 direct/face_tracker.py
 
 from arduino.app_utils import *
 from arduino.app_bricks.web_ui import WebUI
