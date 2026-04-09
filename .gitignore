@@ -59,6 +59,9 @@ arduino/
 .vscode/
 .cursor/
 
+# Downloaded models (re-download with ./setup.sh or ./model_get.sh)
+models/
+
 # System files
 .DS_Store
 Thumbs.db

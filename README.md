@@ -288,9 +288,29 @@ board connected via USB-C.
 
 <br/>
 
-> **Manual setup without App Lab:** Clone this repo to the Uno Q, flash
-> `sketch/sketch.ino` via Arduino IDE 2+, ensure the Bricks SDK is installed,
-> and run `python/main.py` on the Linux side.
+> **Quick SSH setup (yzma style):** If you prefer the terminal over App Lab,
+> this project supports a direct-run workflow inspired by the
+> [yzma LLM project](https://projecthub.arduino.cc/marc-edgeimpulse/running-local-llms-and-vlms-on-the-arduino-uno-q-with-yzma-74e288):
+>
+> ```bash
+> ssh arduino@<IP>
+> git clone https://github.com/wojo/face-tracker-uno-q && cd face-tracker-uno-q
+> ./setup.sh                        # installs deps + downloads face detection models
+> python3 direct/face_tracker.py    # standalone face tracking (no App Lab needed)
+> ```
+>
+> Or download individual models yzma-style:
+> ```bash
+> ./model_get.sh --list                     # see available models
+> ./model_get.sh face-detection             # download YuNet face detector (233 KB)
+> ./model_get.sh face-mesh                  # download 468-landmark mesh model
+> ./model_get.sh -u <huggingface_url>       # download any custom ONNX model
+> ```
+>
+> The standalone tracker uses OpenCV YuNet (75K params) for face detection and
+> optionally ONNX Runtime for 468-landmark face mesh -- all running natively on
+> the Cortex-A53. MCU LED matrix and RGB LED are controlled via the system-level
+> `arduino-router` Bridge service (no App Lab required).
 
 <br/>
 
