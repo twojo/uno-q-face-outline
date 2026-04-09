@@ -22,9 +22,10 @@ SPDX-License-Identifier: MIT
                 <div id="videoFeedContainer">
                     <div id="videoPlaceholder" class="camera-status">
                         <div class="spinner"></div>
-                        <p class="feedback-text">Connecting to camera...</p>
+                        <p class="feedback-text">Starting camera...</p>
                     </div>
-                    <iframe id="dynamicIframe" title="Video stream" width="640" height="480" frameBorder="0" style="display: none;" allow="camera"></iframe>
+                    <video id="webcamVideo" autoplay playsinline muted style="display:none;"></video>
+                    <canvas id="overlayCanvas" style="display:none;"></canvas>
                 </div>
             </div>
 
@@ -32,6 +33,16 @@ SPDX-License-Identifier: MIT
                 <div class="container container-right">
                     <div class="controls-section">
                         <div class="control-group">
+                            <div class="control-row">
+                                <label for="drawModeSelect">Draw Mode</label>
+                                <select id="drawModeSelect">
+                                    <option value="mesh">Mesh</option>
+                                    <option value="outline" selected>Outline</option>
+                                    <option value="dots">Dots</option>
+                                    <option value="iris">Iris Only</option>
+                                    <option value="none">None</option>
+                                </select>
+                            </div>
                             <div class="control-confidence">
                                 <label id="confidence-label" for="confidenceSlider">Confidence</label>
                                 <button id="confidenceResetButton" class="btn-tertiary">
@@ -58,7 +69,7 @@ SPDX-License-Identifier: MIT
                             <span class="face-count-label">Tracking</span>
                             <span class="face-count-number" id="faceCountNumber">0</span>
                             <span class="face-count-separator">/</span>
-                            <span class="face-count-max">2 max</span>
+                            <span class="face-count-max">4 max</span>
                         </div>
                     </div>
                 </div>
@@ -80,53 +91,25 @@ SPDX-License-Identifier: MIT
                         <div id="recentDetections"></div>
                     </div>
                 </div>
+
+                <div class="container container-right">
+                    <div class="hud-section">
+                        <h2 class="section-title">HUD</h2>
+                        <div id="hudContent" class="hud-content">
+                            <div class="hud-row"><span>FPS</span><span id="hudFps">--</span></div>
+                            <div class="hud-row"><span>Faces</span><span id="hudFaces">0</span></div>
+                            <div class="hud-row"><span>Expression</span><span id="hudExpression">--</span></div>
+                            <div class="hud-row"><span>Yaw</span><span id="hudYaw">--</span></div>
+                            <div class="hud-row"><span>Pitch</span><span id="hudPitch">--</span></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         <div id="error-container" class="error-message" style="display: none;"></div>
     </div>
 
-    <script>
-        const iframe = document.getElementById('dynamicIframe');
-        const placeholder = document.getElementById('videoPlaceholder');
-        const currentHostname = window.location.hostname;
-        const targetPort = 4912;
-        const targetPath = '/embed';
-        const streamUrl = 'http://' + currentHostname + ':' + targetPort + targetPath;
-
-        let connected = false;
-        let retryCount = 0;
-        let loadTimer = null;
-
-        function updatePlaceholder(msg) {
-            const p = placeholder.querySelector('.feedback-text');
-            if (p) p.textContent = msg;
-        }
-
-        function tryLoadStream() {
-            if (connected) return;
-            retryCount++;
-            updatePlaceholder('Connecting to camera... (attempt ' + retryCount + ')');
-            iframe.src = streamUrl;
-            if (loadTimer) clearTimeout(loadTimer);
-            loadTimer = setTimeout(function() {
-                if (!connected) tryLoadStream();
-            }, 6000);
-        }
-
-        iframe.onload = function() {
-            connected = true;
-            if (loadTimer) {
-                clearTimeout(loadTimer);
-                loadTimer = null;
-            }
-            placeholder.style.display = 'none';
-            iframe.style.display = 'block';
-        };
-
-        setTimeout(tryLoadStream, 500);
-    </script>
-
     <script src="libs/socket.io.min.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>

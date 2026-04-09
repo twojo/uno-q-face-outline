@@ -105,12 +105,31 @@ body {
 }
 
 #videoFeedContainer {
+    position: relative;
     display: flex;
     justify-content: center;
     align-items: center;
     width: 100%;
     margin-left: auto;
     margin-right: auto;
+}
+
+#webcamVideo {
+    width: 100%;
+    max-width: 640px;
+    border-radius: 8px;
+    transform: scaleX(-1);
+}
+
+#overlayCanvas {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%) scaleX(-1);
+    width: 100%;
+    max-width: 640px;
+    pointer-events: none;
+    border-radius: 8px;
 }
 
 #video-container {
@@ -416,6 +435,55 @@ body {
     text-align: center;
 }
 
+.control-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.control-row label {
+    font-size: 13px;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.control-row select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.hud-section {
+    padding: 4px 0;
+}
+
+.hud-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.hud-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--muted);
+    padding: 2px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.hud-row span:last-child {
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+}
+
 @media (max-width: 1024px) {
     .main-content {
         flex-direction: column;
@@ -428,9 +496,8 @@ body {
         max-width: 800px;
     }
 
-    #videoFeedContainer iframe {
-        width: 100%;
-        aspect-ratio: 1024 / 768;
+    #webcamVideo, #overlayCanvas {
+        max-width: 100%;
     }
 }
 
