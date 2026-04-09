@@ -272,13 +272,16 @@ void showExpression(String expr) {
     Serial.print("[EXPR] ");
     Serial.println(expr);
 
-    if (expr == "surprise") {
+    if (expr == "smile" || expr == "happy") {
+        matrix.draw(frame_smiley);
+        setRGB(false, true, false);
+    } else if (expr == "surprise" || expr == "surprised") {
         matrix.draw(frame_surprise);
         setRGB(false, false, true);
-    } else if (expr == "eyebrow") {
+    } else if (expr == "eyebrow" || expr == "angry" || expr == "sad") {
         matrix.draw(frame_eyebrows);
         setRGB(true, true, false);
-    } else if (expr == "smile") {
+    } else if (expr == "neutral") {
         matrix.draw(frame_smiley);
         setRGB(false, true, false);
     } else {

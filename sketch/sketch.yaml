@@ -10,5 +10,4 @@ profiles:
       - ArxTypeTraits (0.3.2)
       - DebugLog (0.8.4)
       - MsgPack (0.4.2)
-      - Modulino (0.5.0)
 default_profile: default

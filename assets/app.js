@@ -15,48 +15,49 @@ import {
   DrawingUtils
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs";
 
-const THROTTLE_MS = 500;
-const MAX_FACES = 4;
-const MAX_RECENT_SCANS = 8;
-const CAM_WIDTH = 640;
-const CAM_HEIGHT = 480;
+var THROTTLE_MS = 500;
+var MAX_FACES = 2;
+var MAX_RECENT_SCANS = 8;
+var CAM_WIDTH = 640;
+var CAM_HEIGHT = 480;
 
-const FACE_OVAL = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL;
-const LEFT_EYE = FaceLandmarker.FACE_LANDMARKS_LEFT_EYE;
-const RIGHT_EYE = FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE;
-const LEFT_IRIS = FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS;
-const RIGHT_IRIS = FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS;
-const LIPS = FaceLandmarker.FACE_LANDMARKS_LIPS;
-const TESSELATION = FaceLandmarker.FACE_LANDMARKS_TESSELATION;
+var FACE_OVAL = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL;
+var LEFT_EYE = FaceLandmarker.FACE_LANDMARKS_LEFT_EYE;
+var RIGHT_EYE = FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE;
+var LEFT_IRIS = FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS;
+var RIGHT_IRIS = FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS;
+var LIPS = FaceLandmarker.FACE_LANDMARKS_LIPS;
+var TESSELATION = FaceLandmarker.FACE_LANDMARKS_TESSELATION;
 
-const video = document.getElementById("webcamVideo");
-const canvas = document.getElementById("overlayCanvas");
-const ctx = canvas.getContext("2d");
-const placeholder = document.getElementById("videoPlaceholder");
-const statusBadge = document.getElementById("statusBadge");
-const feedbackContent = document.getElementById("feedback-content");
-const recentDetections = document.getElementById("recentDetections");
-const faceCountNumber = document.getElementById("faceCountNumber");
-const drawModeSelect = document.getElementById("drawModeSelect");
-const errorContainer = document.getElementById("error-container");
+var video = document.getElementById("webcamVideo");
+var canvas = document.getElementById("overlayCanvas");
+var ctx = canvas.getContext("2d");
+var placeholder = document.getElementById("videoPlaceholder");
+var statusBadge = document.getElementById("statusBadge");
+var feedbackContent = document.getElementById("feedback-content");
+var recentDetections = document.getElementById("recentDetections");
+var faceCountNumber = document.getElementById("faceCountNumber");
+var drawModeSelect = document.getElementById("drawModeSelect");
+var errorContainer = document.getElementById("error-container");
 
-const hudFps = document.getElementById("hudFps");
-const hudFaces = document.getElementById("hudFaces");
-const hudExpression = document.getElementById("hudExpression");
-const hudYaw = document.getElementById("hudYaw");
-const hudPitch = document.getElementById("hudPitch");
+var hudFps = document.getElementById("hudFps");
+var hudFaces = document.getElementById("hudFaces");
+var hudExpression = document.getElementById("hudExpression");
+var hudYaw = document.getElementById("hudYaw");
+var hudPitch = document.getElementById("hudPitch");
 
-let faceLandmarker = null;
-let drawingUtils = null;
-let running = false;
-let scans = [];
-let lastSendTime = 0;
-let faceVisible = false;
-let frameCount = 0;
-let fpsTime = performance.now();
-let currentFps = 0;
-let drawMode = "outline";
-let minConfidence = 0.5;
+var faceLandmarker = null;
+var drawingUtils = null;
+var running = false;
+var scans = [];
+var lastSendTime = 0;
+var faceVisible = false;
+var frameCount = 0;
+var fpsTime = performance.now();
+var currentFps = 0;
+var drawMode = "outline";
+var minConfidence = 0.5;
+var lastExpression = "";
 
 var socket = null;
 
@@ -69,11 +70,21 @@ async function initLandmarker() {
   var vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
   );
+
+  var delegate = "GPU";
+  try {
+    var testCanvas = document.createElement("canvas");
+    var gl = testCanvas.getContext("webgl2");
+    if (!gl) delegate = "CPU";
+  } catch (e) {
+    delegate = "CPU";
+  }
+
   faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
     baseOptions: {
       modelAssetPath:
         "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-      delegate: "GPU"
+      delegate: delegate
     },
     runningMode: "VIDEO",
     numFaces: MAX_FACES,
@@ -119,11 +130,6 @@ function detectLoop(timestamp) {
     hudFps.textContent = currentFps;
   }
 
-  if (currentFps > 0 && currentFps < 8) {
-    requestAnimationFrame(detectLoop);
-    return;
-  }
-
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (!faceLandmarker) {
@@ -131,7 +137,14 @@ function detectLoop(timestamp) {
     return;
   }
 
-  var results = faceLandmarker.detectForVideo(video, timestamp);
+  var results;
+  try {
+    results = faceLandmarker.detectForVideo(video, timestamp);
+  } catch (e) {
+    requestAnimationFrame(detectLoop);
+    return;
+  }
+
   var numFaces = results.faceLandmarks ? results.faceLandmarks.length : 0;
 
   faceCountNumber.textContent = numFaces;
@@ -140,8 +153,7 @@ function detectLoop(timestamp) {
 
   if (numFaces > 0) {
     for (var i = 0; i < numFaces; i++) {
-      var lm = results.faceLandmarks[i];
-      drawFace(lm, i);
+      drawFace(results.faceLandmarks[i], i);
     }
 
     var blendshapes = results.faceBlendshapes && results.faceBlendshapes[0]
@@ -149,6 +161,8 @@ function detectLoop(timestamp) {
       : [];
     var expression = detectExpression(blendshapes);
     hudExpression.textContent = expression;
+
+    var blinks = detectBlinks(blendshapes);
 
     var matrix = results.facialTransformationMatrixes && results.facialTransformationMatrixes[0]
       ? results.facialTransformationMatrixes[0]
@@ -168,11 +182,17 @@ function detectLoop(timestamp) {
       var payload = {
         faces: numFaces,
         expression: expression,
-        yaw: headPose.yaw,
-        pitch: headPose.pitch,
+        blinks: blinks,
+        yaw: Math.round(headPose.yaw * 10) / 10,
+        pitch: Math.round(headPose.pitch * 10) / 10,
         timestamp: new Date().toISOString()
       };
       if (socket) socket.emit("face_data", payload);
+
+      if (expression !== lastExpression) {
+        lastExpression = expression;
+        if (socket) socket.emit("expression_change", { expression: expression });
+      }
 
       addDetection({
         content: expression,
@@ -189,6 +209,7 @@ function detectLoop(timestamp) {
 
     if (faceVisible) {
       faceVisible = false;
+      lastExpression = "";
       setStatus("Scanning...", "scanning");
       showFeedback("System response will appear here");
       if (socket) socket.emit("face_data", { faces: 0 });
@@ -212,22 +233,6 @@ function drawFace(landmarks, faceIndex) {
   if (drawMode === "mesh") {
     drawingUtils.drawConnectors(landmarks, TESSELATION, {
       color: "#C0C0C030",
-      lineWidth: 1
-    });
-    drawingUtils.drawConnectors(landmarks, FACE_OVAL, {
-      color: c.line,
-      lineWidth: 2
-    });
-    drawingUtils.drawConnectors(landmarks, LEFT_EYE, {
-      color: c.line,
-      lineWidth: 1
-    });
-    drawingUtils.drawConnectors(landmarks, RIGHT_EYE, {
-      color: c.line,
-      lineWidth: 1
-    });
-    drawingUtils.drawConnectors(landmarks, LIPS, {
-      color: c.line,
       lineWidth: 1
     });
   }
@@ -329,6 +334,18 @@ function detectExpression(blendshapes) {
   return "neutral";
 }
 
+function detectBlinks(blendshapes) {
+  if (!blendshapes || blendshapes.length === 0) return { left: false, right: false };
+  var map = {};
+  for (var i = 0; i < blendshapes.length; i++) {
+    map[blendshapes[i].categoryName] = blendshapes[i].score;
+  }
+  return {
+    left: (map["eyeBlinkLeft"] || 0) > 0.4,
+    right: (map["eyeBlinkRight"] || 0) > 0.4
+  };
+}
+
 function getTopBlendshapeScore(categories) {
   if (!categories || categories.length === 0) return 0;
   var top = 0;
@@ -342,7 +359,7 @@ function extractHeadPose(matrix) {
   if (!matrix || !matrix.data) return { yaw: 0, pitch: 0 };
   var m = matrix.data;
   var yaw = Math.atan2(m[8], m[0]) * (180 / Math.PI);
-  var pitch = Math.asin(-m[4]) * (180 / Math.PI);
+  var pitch = Math.asin(Math.max(-1, Math.min(1, -m[4]))) * (180 / Math.PI);
   return { yaw: yaw, pitch: pitch };
 }
 
@@ -466,9 +483,11 @@ function initSocketIO() {
   if (typeof io === "undefined") return;
 
   try {
-    socket = io({ reconnectionAttempts: 3, timeout: 5000 });
+    socket = io({ reconnectionAttempts: 5, timeout: 5000 });
+    var failCount = 0;
 
     socket.on("connect", function () {
+      failCount = 0;
       if (errorContainer) {
         errorContainer.style.display = "none";
         errorContainer.textContent = "";
@@ -476,8 +495,11 @@ function initSocketIO() {
     });
 
     socket.on("connect_error", function () {
-      socket.close();
-      socket = null;
+      failCount++;
+      if (failCount >= 5) {
+        socket.close();
+        socket = null;
+      }
     });
 
     socket.on("disconnect", function () {
@@ -501,7 +523,13 @@ async function main() {
   initSocketIO();
   initConfidenceSlider();
   renderDetections();
-  await initLandmarker();
+  try {
+    await initLandmarker();
+  } catch (e) {
+    updatePlaceholder("Model load failed: " + e.message);
+    setStatus("Error", "");
+    return;
+  }
   setStatus("Starting camera...", "");
   await startCamera();
   setStatus("Scanning...", "scanning");
