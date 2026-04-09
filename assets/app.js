@@ -20,7 +20,10 @@ let faceVisible = false;
 document.addEventListener('DOMContentLoaded', function() {
     initSocketIO();
     initializeConfidenceSlider();
-    feedbackContentElement.innerHTML = '<p class="feedback-text">System response will appear here</p>';
+    var initEl = document.createElement('p');
+    initEl.className = 'feedback-text';
+    initEl.textContent = 'System response will appear here';
+    feedbackContentElement.replaceChildren(initEl);
     faceVisible = false;
     renderDetections();
 });
@@ -93,11 +96,13 @@ function printDetection(newDetection) {
 }
 
 function renderDetections() {
-    recentDetectionsElement.innerHTML = '';
+    recentDetectionsElement.replaceChildren();
 
     if (scans.length === 0) {
-        recentDetectionsElement.innerHTML =
-            '<div class="no-recent-scans">No face detected yet</div>';
+        var emptyEl = document.createElement('div');
+        emptyEl.className = 'no-recent-scans';
+        emptyEl.textContent = 'No face detected yet';
+        recentDetectionsElement.replaceChildren(emptyEl);
         return;
     }
 

@@ -5,9 +5,10 @@ profiles:
       - platform: arduino:zephyr
     libraries:
       - Arduino_RouterBridge (0.4.1)
-      - dependency: Arduino_RPClite (0.2.1)
-      - dependency: ArxContainer (0.7.0)
-      - dependency: ArxTypeTraits (0.3.2)
-      - dependency: DebugLog (0.8.4)
-      - dependency: MsgPack (0.4.2)
+      - Arduino_RPClite (0.2.1)
+      - ArxContainer (0.7.0)
+      - ArxTypeTraits (0.3.2)
+      - DebugLog (0.8.4)
+      - MsgPack (0.4.2)
+      - Modulino (0.5.0)
 default_profile: default

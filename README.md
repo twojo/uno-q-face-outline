@@ -34,20 +34,20 @@ Qualcomm QRB2210 + STM32U585 working together through
 ## Table of Contents
 
 1. [Why the Arduino Uno Q](#why-the-arduino-uno-q)
-2. [Features at a Glance](#features-at-a-glance)
-3. [Architecture](#architecture)
-4. [Quick Start](#quick-start)
-5. [Project Structure](#project-structure)
-6. [State Diagrams](#state-diagrams)
-7. [Performance](#performance)
-8. [GPIO Placeholders](#gpio-placeholders)
-9. [WebSocket Events](#websocket-events)
-10. [Dependencies](#dependencies)
-11. [Advanced Topics](#advanced-topics)
-12. [Links & Resources](#links--resources)
-13. [Contributing](#contributing)
-14. [License](#license)
-
+2. [App Lab and Bricks](#app-lab-and-bricks)
+3. [Features at a Glance](#features-at-a-glance)
+4. [Architecture](#architecture)
+5. [Quick Start](#quick-start)
+6. [Project Structure](#project-structure)
+7. [State Diagrams](#state-diagrams)
+8. [Performance](#performance)
+9. [GPIO Placeholders](#gpio-placeholders)
+10. [WebSocket Events](#websocket-events)
+11. [Dependencies](#dependencies)
+12. [Advanced Topics](#advanced-topics)
+13. [Links & Resources](#links--resources)
+14. [Contributing](#contributing)
+15. [License](#license)
 <br/>
 
 ---
@@ -98,6 +98,71 @@ through the built-in 13x8 LED matrix and RGB LED.
 
 <br/>
 
+## App Lab and Bricks
+
+The [Arduino App Lab](https://docs.arduino.cc/software/app-lab/) is a unified development
+environment that lets you combine Arduino sketches, Python scripts, and containerized
+Linux applications into a single workflow.
+
+<br/>
+
+<p align="center">
+  <img src="https://docs.arduino.cc/static/782ed8393ae066932b79a19418651a50/a6d36/app-lab.png" alt="Arduino App Lab" width="600">
+</p>
+
+<br/>
+
+[Bricks](https://docs.arduino.cc/software/app-lab/tutorials/bricks) are code building
+blocks that abstract away complexity. This project uses two Bricks:
+
+- **`arduino:web_ui`** -- serves the contents of `assets/` as a web application and
+  provides WebSocket messaging between the browser and `python/main.py`. The Brick
+  injects WebSocket connectivity at runtime. No explicit socket code is needed in the HTML.
+
+- **`arduino:video_object_detection`** -- runs YuNet face detection on the QRB2210
+  via a containerized pipeline. Configured in `app.yaml` with `model: face-detection`.
+
+<br/>
+
+<p align="center">
+  <img src="https://docs.arduino.cc/static/c4ba129c26c39fd5f37d2dfed7fee780/a6d36/add-brick-1.png" alt="Adding a Brick in App Lab" width="500">
+</p>
+
+<br/>
+
+| Brick                          | What It Does                                  | Setup                               |
+|:-------------------------------|:----------------------------------------------|:------------------------------------|
+| **`arduino:web_ui`**           | Serves web content + WebSocket                | **This demo uses it**               |
+| **`arduino:video_object_detection`** | Detects faces in camera frames (YuNet)  | **This demo uses it**               |
+| `arduino:object_detection`     | Detects objects in camera frames (YOLOX-Nano)  | Add one line to `app.yaml`          |
+| `arduino:motion_detection`     | Detects motion in video stream                | Add one line to `app.yaml`          |
+
+<br/>
+
+```yaml
+bricks:
+  - arduino:web_ui: {}
+  - arduino:video_object_detection:
+      model: face-detection
+```
+
+<br/>
+
+> **Tip:** Each Brick deploys as a container on the QRB2210 and exposes an API
+> to your Python code. No Docker configuration required.
+
+<br/>
+
+> **Install tip:** To install this demo, download the repository as a `.zip`, open
+> [Arduino App Lab](https://www.arduino.cc/en/software/#app-lab-section),
+> click **Import App**, and select the file.
+
+<br/>
+
+---
+
+<br/>
+
 ## Features at a Glance
 
 | Feature                        | Description                                                                                                |
@@ -124,13 +189,6 @@ through the built-in 13x8 LED matrix and RGB LED.
 ### System Overview
 
 <br/>
-
-<p align="center">
-  <img src="https://mermaid.ink/img/Z3JhcGggVEQKICAgIHN1YmdyYXBoIEJyb3dzZXJbIkJyb3dzZXIgKFdlYlVJIEJyaWNrKSAtLSBhc3NldHMvaW5kZXguaHRtbCJdCiAgICAgICAgTVBbIk1lZGlhUGlwZSBGYWNlIExhbmRtYXJrZXIgKFdBU00pPGJyLz40NzggbGFuZG1hcmtzLCA0IGZhY2VzIG1heCJdCiAgICAgICAgQ09bIkNhbnZhcyBvdmVybGF5PGJyLz5tZXNoLCBvdXRsaW5lLCBpcmlzLCBIVUQsIGVtb2ppcyJdCiAgICAgICAgQVBbIkFkYXB0aXZlIHBlcmZvcm1hbmNlPGJyLz5hdXRvLXNraXAgZnJhbWVzIHdoZW4gRlBTIDwgOCJdCiAgICAgICAgV1NfT1VUWyJXZWJTb2NrZXQgdGVsZW1ldHJ5PGJyLz5mYWNlX2RhdGEsIHJnYl9jb250cm9sLCBncGlvX2NvbnRyb2wiXQogICAgZW5kCgogICAgc3ViZ3JhcGggTVBVWyJMaW51eCBNUFUgKFFSQjIyMTApIC0tIHB5dGhvbi9tYWluLnB5Il0KICAgICAgICBXQlsiV2ViVUkgQnJpY2s8YnIvPnNlcnZlcyBhc3NldHMvICsgV2ViU29ja2V0Il0KICAgICAgICBCRFsiQm9vdCBkaWFnbm9zdGljczxici8-Q1BVLCBSQU0sIG5ldHdvcmssIEROUywgQ0ROIl0KICAgICAgICBCRlsiQnJpZGdlLmNhbGwgZm9yd2FyZGluZzxici8-ZmFjZSBzdGF0ZSB0byBNQ1UgaGFyZHdhcmUiXQogICAgICAgIEFIWyJBSSBIdWIgZmFsbGJhY2s8YnIvPm9wdGlvbmFsIFRGTGl0ZSBvbi1kZXZpY2UiXQogICAgZW5kCgogICAgc3ViZ3JhcGggTUNVWyJTVE0zMiBNQ1UgKFNUTTMyVTU4NSkgLS0gc2tldGNoL3NrZXRjaC5pbm8iXQogICAgICAgIExFRFsiMTN4OCBMRUQgbWF0cml4PGJyLz5ncmF5c2NhbGUgYml0bWFwcyJdCiAgICAgICAgUkdCWyJSR0IgTEVEIChMRUQ0LCBhY3RpdmUtbG93KTxici8-c3RhdHVzICsgZXhwcmVzc2lvbiBjb2xvcnMiXQogICAgICAgIFNMWyJTdGF0dXMgTEVEIChMRURfQlVJTFRJTik8YnIvPnNvbGlkID0gZmFjZSBwcmVzZW50Il0KICAgICAgICBHUElPWyJHUElPIHBsYWNlaG9sZGVycyBEMy1ENzxici8-cmVsYXksIGJ1enplciwgTmVvUGl4ZWwiXQogICAgICAgIEJQWyIxMCBCcmlkZ2UgcHJvdmlkZXJzPGJyLz5ldmVudC1kcml2ZW4sIGxvb3AgaGFuZGxlcyByZXRyeS90aW1lb3V0Il0KICAgIGVuZAoKICAgIEJyb3dzZXIgLS0-fCJXZWJTb2NrZXQgKEpTT04sIHRocm90dGxlZCA1MDBtcyk8YnIvPmluamVjdGVkIGJ5IEJyaWNrIFNESyBhdCBydW50aW1lInwgTVBVCiAgICBNUFUgLS0-fCJCcmlkZ2UgUlBDPGJyLz4oQXJkdWlub19Sb3V0ZXJCcmlkZ2UpInwgTUNV?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
 
 ```mermaid
 graph TD
@@ -160,20 +218,11 @@ graph TD
     MPU -->|"Bridge RPC<br/>(Arduino_RouterBridge)"| MCU
 ```
 
-</details>
-
 <br/>
 
 ### Data Flow Pipeline
 
 <br/>
-
-<p align="center">
-  <img src="https://mermaid.ink/img/Z3JhcGggTFIKICAgIEFbIlVTQiBXZWJjYW08YnIvPihVVkMsIDY0MHg0ODApIl0gLS0-fCJWaWRlbyBmcmFtZXMifCBCWyJCcm93c2VyPGJyLz4oTWVkaWFQaXBlIFdBU00pIl0KICAgIEIgLS0-fCJXZWJTb2NrZXQ8YnIvPihKU09OLCA1MDBtcykifCBDWyJQeXRob24gb24gRGViaWFuPGJyLz4obWFpbi5weSkiXQogICAgQyAtLT58IkJyaWRnZSBSUEMifCBEWyJTVE0zMiBNQ1U8YnIvPihza2V0Y2guaW5vKSJdCiAgICBCIC0uLT58IkFJIGluZmVyZW5jZTxici8-NDc4IGxhbmRtYXJrcyJ8IEIKICAgIEMgLS4tPnwiQ29vcmRpbmF0ZXM8YnIvPmRhdGEgZmxvdyJ8IEMKICAgIEQgLS4tPnwiTEVEIG1hdHJpeCwgUkdCLDxici8-R1BJTyBjb250cm9sInwgRA==?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
 
 ```mermaid
 graph LR
@@ -184,8 +233,6 @@ graph LR
     C -.->|"Coordinates<br/>data flow"| C
     D -.->|"LED matrix, RGB,<br/>GPIO control"| D
 ```
-
-</details>
 
 <br/>
 
@@ -217,33 +264,6 @@ The Uno Q has **four distinct compute blocks**:
 > processors (QCS6490, QCS8550) include the Hexagon Tensor Processor.
 
 <br/>
-
-### App Lab Bricks
-
-The `arduino:web_ui` Brick powers this demo. It serves HTML/JS from `assets/`, provides
-WebSocket messaging between the browser and Python, and requires **zero configuration**
-beyond one line in `app.yaml`.
-
-<br/>
-
-| Brick                          | What It Does                                  | Setup                               |
-|:-------------------------------|:----------------------------------------------|:------------------------------------|
-| **`arduino:web_ui`**           | Serves web content + WebSocket                | **This demo uses it**               |
-| `arduino:object_detection`     | Detects objects in camera frames (YOLOX-Nano)  | Add one line to `app.yaml`          |
-| `arduino:motion_detection`     | Detects motion in video stream                | Add one line to `app.yaml`          |
-
-<br/>
-
-```yaml
-bricks:
-  - arduino:web_ui
-  - arduino:object_detection   # optional -- add any Brick with one line
-```
-
-<br/>
-
-> **Tip:** Each Brick deploys as a container on the QRB2210 and exposes an API
-> to your Python code. No Docker configuration required.
 
 <br/>
 
@@ -432,28 +452,29 @@ If you said "No" to one or more update prompts and the demo doesn't work:
 
 ```
 .
-├── app.yaml                    # App Lab manifest (bricks: arduino:web_ui)
+├── app.yaml                    # App Lab manifest (bricks + metadata)
 │
 ├── python/
-│   ├── main.py                 # MPU coordinator -- WebUI Brick + Bridge forwarding
-│   ├── face_detector_mpu.py    # On-device TFLite face detection wrapper
-│   ├── ai_hub_setup.py         # AI Hub model download/compile helper
-│   ├── requirements.txt        # Python runtime dependencies
-│   └── models/                 # .tflite model files (auto-discovered at boot)
+│   ├── main.py                 # MPU coordinator -- Bricks + Bridge forwarding
+│   └── requirements.txt        # Python runtime dependencies
 │
 ├── sketch/
 │   ├── sketch.ino              # MCU firmware -- Bridge.provide() + LED matrix
-│   └── sketch.yaml             # Arduino CLI board profile and library versions
+│   └── sketch.yaml             # Board profile and library dependencies
 │
 ├── assets/                     # Frontend (served by WebUI Brick on device)
 │   ├── index.html              # Face tracking UI
-│   ├── css/styles.css          # Stylesheet
-│   ├── js/app.js               # Application logic (ES module)
+│   ├── app.js                  # Application logic
+│   ├── style.css               # Stylesheet
+│   ├── img/                    # Icons and images
 │   └── qualcomm-logo.png       # Branding asset
 │
-├── app.py                      # Replit-only Flask dev server (not in App Lab zip)
-├── templates/                  # Replit copy of assets/ (kept in sync)
-└── static/                     # Replit static assets
+├── direct/
+│   └── face_tracker.py         # Standalone tracker (no App Lab required)
+│
+├── setup.sh                    # Dependency installer for standalone mode
+├── model_get.sh                # Model downloader (yzma-style)
+└── LICENSE
 ```
 
 <br/>
@@ -470,13 +491,6 @@ Both processors boot in parallel. The MCU completes first (no OS) and waits
 for Bridge; the MPU runs Linux, starts Python, then connects.
 
 <br/>
-
-<p align="center">
-  <img src="https://mermaid.ink/img/c2VxdWVuY2VEaWFncmFtCiAgICBwYXJ0aWNpcGFudCBNQ1UgYXMgU1RNMzJVNTg1IE1DVQogICAgcGFydGljaXBhbnQgTVBVIGFzIFFSQjIyMTAgTVBVCgogICAgTm90ZSBvdmVyIE1DVTogUG93ZXItb24KICAgIE5vdGUgb3ZlciBNUFU6IFBvd2VyLW9uCgogICAgTUNVLT4-TUNVOiBTZXJpYWwuYmVnaW4oMTE1MjAwKQogICAgTUNVLT4-TUNVOiBQcmludCBiYW5uZXIgKyBzcGVjcwogICAgTUNVLT4-TUNVOiBDb25maWd1cmUgR1BJTyBwaW5zCiAgICBNQ1UtPj5NQ1U6IG1hdHJpeC5iZWdpbigpCiAgICBNQ1UtPj5NQ1U6IFNob3cgc21pbGV5IGJpdG1hcCAoMS4ycykKICAgIE1DVS0-Pk1DVTogU2hvdyBib290IGljb24gKDAuOHMpCiAgICBNUFUtPj5NUFU6IExpbnV4IGtlcm5lbCBib290CiAgICBNUFUtPj5NUFU6IFB5dGhvbiBydW50aW1lIHN0YXJ0CiAgICBNUFUtPj5NUFU6IEltcG9ydCBBcHAgTGFiIFNESwogICAgTUNVLT4-TUNVOiBSR0Igc2VsZi10ZXN0IChSL0cvQiwgMzAwbXMgZWFjaCkKICAgIE1QVS0-Pk1QVTogU3lzdGVtIGRpYWdub3N0aWNzIChDUFUsIFJBTSwgbmV0d29yaywgRE5TLCBDRE4pCiAgICBNQ1UtPj5NQ1U6IEJyaWRnZS5iZWdpbigpCiAgICBNQ1UtPj5NQ1U6IFJlZ2lzdGVyIDkgQnJpZGdlIHByb3ZpZGVycwogICAgTUNVLT4-TUNVOiBTaG93IGNoZWNrbWFyayBiaXRtYXAgKDAuOHMpCiAgICBNUFUtPj5NUFU6IEJyaWRnZS5iZWdpbigpCiAgICBNQ1UtPj5NUFU6IEJyaWRnZS5jYWxsKCJtY3VfcmVhZHkiKQogICAgTm90ZSBvdmVyIE1QVTogX2JyaWRnZV9yZWFkeSA9IFRydWUKICAgIE1DVS0-Pk1DVTogU2V0IFJHQiByZWQgKGlkbGUsIHdhaXRpbmcpCiAgICBNUFUtPj5NQ1U6IHNhZmVfYnJpZGdlX2NhbGwoInNjcm9sbF90ZXh0IiwgSVApCiAgICBOb3RlIG92ZXIgTUNVOiBTaG93IHNtaWxleSAoc2Nyb2xsX3RleHQgaGFuZGxlcikKICAgIE1QVS0-Pk1DVTogc2FmZV9icmlkZ2VfY2FsbCgic2Nyb2xsX3RleHQiLCBSQU0pCiAgICBNUFUtPj5NQ1U6IHNhZmVfYnJpZGdlX2NhbGwoInNjcm9sbF90ZXh0Iiwga2VybmVsKQogICAgTVBVLT4-TVBVOiBTdGFydCBXZWJVSSBCcmljayAoc2VydmUgYXNzZXRzLykKICAgIE1QVS0-Pk1DVTogc2FmZV9icmlkZ2VfY2FsbCgic2Nyb2xsX3RleHQiLCAiRmFjZSBEZW1vIFJlYWR5IikKICAgIE1QVS0-Pk1QVTogV2ViU29ja2V0IHNlcnZlciByZWFkeQogICAgTm90ZSBvdmVyIE1QVTogQk9PVCBDT01QTEVURQogICAgTm90ZSBvdmVyIE1DVTogSWRsZSAtIHdhaXRpbmcgZm9yIEJyaWRnZSBldmVudHMKICAgIE5vdGUgb3ZlciBNUFU6IElkbGUgLSB3YWl0aW5nIGZvciBXUy9CcmlkZ2U=?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
 
 ```mermaid
 sequenceDiagram
@@ -516,8 +530,6 @@ sequenceDiagram
     Note over MPU: Idle - waiting for WS/Bridge
 ```
 
-</details>
-
 <br/>
 
 > **Note:** The `scrollText` MCU handler currently displays `frame_smiley` rather
@@ -529,13 +541,6 @@ sequenceDiagram
 ### 2. Camera Initialization Flow
 
 <br/>
-
-<p align="center">
-  <img src="https://mermaid.ink/img/Z3JhcGggVEQKICAgIEFbIlBhZ2UgTG9hZCJdIC0tPiBCWyJuYXZpZ2F0b3IubWVkaWFEZXZpY2VzLmdldFVzZXJNZWRpYSgpIl0KICAgIEIgLS0-fFNVQ0NFU1N8IENbIkdvdCBzdHJlYW0iXQogICAgQiAtLT58RVJST1J8IER7IkNoZWNrIGVycm9yIHR5cGUifQoKICAgIEQgLS0-fE5vdEFsbG93ZWRFcnJvcnwgRVsiUGVybWlzc2lvbiBkZW5pZWQiXQogICAgRCAtLT58Tm90Rm91bmRFcnJvcnwgRlsiTm8gY2FtZXJhIGZvdW5kIl0KICAgIEQgLS0-fE90aGVyfCBHWyJHZW5lcmljIGVycm9yIG1lc3NhZ2UiXQogICAgRSAtLT4gSFsiU2hvdyBjYW1lcmEtZXJyb3Igb3ZlcmxheTxici8-d2l0aCBmaXggaW5zdHJ1Y3Rpb25zIl0KICAgIEYgLS0-IEgKICAgIEcgLS0-IEgKCiAgICBDIC0tPiBJWyJHZXQgdHJhY2sgc2V0dGluZ3M8YnIvPmxhYmVsLCByZXNvbHV0aW9uLCBmcmFtZVJhdGUsPGJyLz5mYWNpbmdNb2RlLCBtZWdhcGl4ZWxzIl0KICAgIEkgLS0-IEpbImNhbS5zcmNPYmplY3QgPSBzdHJlYW0iXQogICAgSiAtLT58b25sb2FkZWRkYXRhfCBLWyJJbml0IEZhY2VMYW5kbWFya2VyIl0KICAgIEsgLS0-fG9uUmVhZHl8IExbIlN0YXJ0IGRyYXcoKSByZW5kZXIgbG9vcCJd?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
 
 ```mermaid
 graph TD
@@ -556,8 +561,6 @@ graph TD
     K -->|onReady| L["Start draw() render loop"]
 ```
 
-</details>
-
 <br/>
 
 <details>
@@ -569,13 +572,6 @@ Every animation frame passes through this pipeline. The adaptive performance
 system may skip frames to maintain smooth rendering.
 
 <br/>
-
-<p align="center">
-  <img src="https://mermaid.ink/img/Z3JhcGggVEQKICAgIEFbInJlcXVlc3RBbmltYXRpb25GcmFtZShkcmF3KSJdIC0tPiBCeyJjYW0gcGF1c2VkL2VuZGVkPGJyLz5vciBubyBtb2RlbD8ifQogICAgQiAtLT58WUVTfCBaMVsicmV0dXJuIChza2lwKSJdCiAgICBCIC0tPnxOT3wgQ3siU2FtZSB2aWRlbyBmcmFtZTxici8-YXMgbGFzdCB0aW1lPyJ9CiAgICBDIC0tPnxZRVN8IFoyWyJyZXR1cm4gKHNraXApIl0KICAgIEMgLS0-fE5PfCBEeyJza2lwRnJhbWVzID4gMDxici8-YW5kIG5vdCBvdXIgdHVybj8ifQogICAgRCAtLT58WUVTfCBaM1siaW5jcmVtZW50IGNvdW50ZXJzLCByZXR1cm4iXQogICAgRCAtLT58Tk98IEVbImZsLmRldGVjdEZvclZpZGVvKCk8YnIvPk1lZGlhUGlwZSBXQVNNIGluZmVyZW5jZTxici8-NDc4IGxhbmRtYXJrcyBwZXIgZmFjZSJdCiAgICBFIC0tPiBGWyJDYXAgZmFjZXMgdG8gTUFYX0ZBQ0VTICg0KSJdCiAgICBGIC0tPiBHWyJtYXRjaEZhY2VzKCk8YnIvPnNvcnRlZCBtaW4tZGlzdGFuY2UsPGJyLz5hZGFwdGl2ZSB0aHJlc2hvbGRzLDxici8-ODAwbXMgVFRMIHN1cnZpdm9ycyJdCiAgICBHIC0tPiBIWyJGb3IgZWFjaCBmYWNlOjxici8-bWVzaC9vdXRsaW5lLCBpcmlzLCBwdXBpbHMsPGJyLz5ibGlua3MgKEVBUiksIGV4cHJlc3Npb24sPGJyLz5lbW9qaXMsIGhlYWQgcG9zZSwgZG90cywgbGFiZWwiXQogICAgSCAtLT4gSVsiZHJhd1N5c092ZXJsYXkoKTxici8-Q1BVL1JBTS90ZW1wIHN0YXRzIl0KICAgIEkgLS0-IEpbInVwZGF0ZUFkYXB0aXZlUGVyZigpPGJyLz5jaGVjayBGUFMsIGFkanVzdCBza2lwIl0KICAgIEogLS0-IEtbIlVwZGF0ZSBIVUQgKGV2ZXJ5IDUwMG1zKTxici8-ZmFjZXMsIEZQUywgbGF0ZW5jeSwgcHVwaWxzLDxici8-YmxpbmtzLCB5YXcvcGl0Y2gsIHVwdGltZSJdCiAgICBLIC0tPiBMWyJFbWl0IGZhY2VfZGF0YSB2aWEgV2ViU29ja2V0PGJyLz50aHJvdHRsZWQgdG8gNTAwbXMiXQ==?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
 
 ```mermaid
 graph TD
@@ -595,8 +591,6 @@ graph TD
     K --> L["Emit face_data via WebSocket<br/>throttled to 500ms"]
 ```
 
-</details>
-
 <br/>
 
 </details>
@@ -612,13 +606,6 @@ Monitors FPS over a sliding window and auto-adjusts frame skipping.
 Hysteresis gap (8 to 14) prevents rapid toggling.
 
 <br/>
-
-<p align="center">
-  <img src="https://mermaid.ink/img/c3RhdGVEaWFncmFtLXYyCiAgICBbKl0gLS0-IE9QVElNQUwKICAgIE9QVElNQUwgLS0-IEFVVE9fVEhST1RUTEVEIDogYXZnIEZQUyA8IDggKG92ZXIgMysgc2FtcGxlcykKICAgIEFVVE9fVEhST1RUTEVEIC0tPiBPUFRJTUFMIDogYXZnIEZQUyA-IDE0IChzdXN0YWluZWQgcmVjb3ZlcnkpCgogICAgc3RhdGUgT1BUSU1BTCB7CiAgICAgICAgWypdIDogc2tpcEZyYW1lcyA9IDAKICAgICAgICBbKl0gOiBBbGwgZnJhbWVzIHByb2Nlc3NlZAogICAgICAgIFsqXSA6IEJhZGdlIE9QVElNQUwKICAgIH0KCiAgICBzdGF0ZSBBVVRPX1RIUk9UVExFRCB7CiAgICAgICAgWypdIDogc2tpcEZyYW1lcyA9IDEKICAgICAgICBbKl0gOiBFdmVyeSBvdGhlciBmcmFtZSBza2lwcGVkCiAgICAgICAgWypdIDogQmFkZ2UgVEhST1RUTEVECiAgICB9?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
 
 ```mermaid
 stateDiagram-v2
@@ -638,8 +625,6 @@ stateDiagram-v2
         [*] : Badge THROTTLED
     }
 ```
-
-</details>
 
 <br/>
 
@@ -667,13 +652,6 @@ color from a 4-color palette (blue, orange, green, purple).
 
 <br/>
 
-<p align="center">
-  <img src="https://mermaid.ink/img/Z3JhcGggVEQKICAgIEFbIk5ldyBmYWNlIGRldGVjdGVkIGluIGZyYW1lIl0gLS0-IEJbIm1hdGNoRmFjZXMoKSBkaXN0YW5jZSBjaGVjazxici8-Q29tcGFyZSBjZW50cm9pZCB0byBhbGwga25vd24gZmFjZXMiXQogICAgQiAtLT58Ik1BVENIRUQ8YnIvPihkaXN0IDwgdGhyZXNob2xkKSJ8IENbIlVwZGF0ZSBleGlzdGluZzxici8-bmV3IGNlbnRyb2lkLCByZXNldCBUVEwsPGJyLz51cGRhdGUgYm91bmRpbmcgYm94Il0KICAgIEIgLS0-fFVOTUFUQ0hFRHwgRFsiQXNzaWduIG5ldyBJRDxici8-bmV4dEZhY2VJZCsrLCBwaWNrIGNvbG9yLDxici8-cmVjb3JkIGJpcnRoIHRpbWUiXQogICAgQyAtLT4gRVsiVFJBQ0tFRCAoYWN0aXZlKTxici8-TGFiZWw6IEZhY2UgTiAtIDEyczxici8-VW5pcXVlIGNvbG9yIG92ZXJsYXk8YnIvPkJsaW5rL3B1cGlsL2V4cHJlc3Npb24iXQogICAgRCAtLT4gRQogICAgRSAtLT58ImZhY2UgZGlzYXBwZWFyczxici8-ZnJvbSBkZXRlY3Rpb24ifCBGWyJNSVNTSU5HIChUVEwgY291bnRkb3duKTxici8-ODAwbXMgZ3JhY2UgcGVyaW9kIl0KICAgIEYgLS0-fCJSZWFwcGVhcnMgPCA4MDBtcyJ8IEdbIlJFQ09WRVJFRDxici8-UmVzdW1lIHRyYWNrLCBzYW1lIElEL2NvbG9yIl0KICAgIEYgLS0-fCJUVEwgZXhwaXJlcyA-IDgwMG1zInwgSFsiRVhQSVJFRDxici8-UmVtb3ZlIGZyb20gdHJhY2tlZCBsaXN0PGJyLz5JRCByZXRpcmVkIl0KICAgIEcgLS0-IEU=?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
-
 ```mermaid
 graph TD
     A["New face detected in frame"] --> B["matchFaces() distance check<br/>Compare centroid to all known faces"]
@@ -687,8 +665,6 @@ graph TD
     G --> E
 ```
 
-</details>
-
 <br/>
 
 > Distance matching uses a threshold that scales with face width, sorted by
@@ -701,74 +677,6 @@ graph TD
 
 <br/>
 
-### 6. Bridge Communication Flow
-
-Three layers communicate via two protocols: **WebSocket** (browser to MPU,
-injected by the Brick SDK at runtime) and **Bridge RPC** (MPU to MCU).
-
-<br/>
-
-> **Important:** In the Replit preview, the browser runs standalone without the SDK,
-> so face detection and rendering work but no data reaches the MPU or MCU.
-
-<br/>
-
-<p align="center">
-  <img src="https://mermaid.ink/img/Z3JhcGggVEQKICAgIHN1YmdyYXBoIEJyb3dzZXJbIkJyb3dzZXIgKHZpYSBXZWJVSSBCcmljayBTREspIl0KICAgICAgICBCMVsiTWVkaWFQaXBlIGZhY2UgZGF0YSJdCiAgICAgICAgQjJbIlJHQiBidXR0b24gY2xpY2tzIl0KICAgICAgICBCM1siR1BJTyB0b2dnbGUgY2xpY2tzIl0KICAgICAgICBCNFsiQ2FwdHVyZSBzbmFwc2hvdCJdCiAgICBlbmQKCiAgICBzdWJncmFwaCBNUFVfTGF5ZXJbIk1QVSAoUHl0aG9uKSJdCiAgICAgICAgTTFbIm9uX2ZhY2VfZGF0YSgpPGJyLz5VcGRhdGUgc3RhdGUsIGRldGVybWluZSBleHByZXNzaW9uLDxici8-Y2FsbCBzaG93X2ZhY2Uvc2hvd19ub19mYWNlL3Nob3dfZXhwcmVzc2lvbiJdCiAgICAgICAgTTJbIm9uX3JnYl9jb250cm9sKCk8YnIvPmNhbGwgc2V0X3JnYiJdCiAgICAgICAgTTNbIm9uX2dwaW9fY29udHJvbCgpPGJyLz5jYWxsIHNldF9ncGlvIl0KICAgICAgICBNNFsic2FmZV9icmlkZ2VfY2FsbChtZXRob2QsIGFyZ3MpPGJyLz50cnkvZXhjZXB0LCBuZXZlciBjcmFzaCJdCiAgICBlbmQKCiAgICBzdWJncmFwaCBNQ1VfTGF5ZXJbIk1DVSAoU1RNMzJVNTg1KSAtLSAxMCBCcmlkZ2UgcHJvdmlkZXJzIl0KICAgICAgICBDMVsic2Nyb2xsX3RleHQsIHNob3dfZmFjZSwgc2hvd19ub19mYWNlIl0KICAgICAgICBDMlsiZmxhc2hfZmFjZSwgc2hvd19leHByZXNzaW9uIl0KICAgICAgICBDM1sic2V0X2RldmljZV9tb2RlLCBzZXRfcmdiIl0KICAgICAgICBDNFsic2V0X2dwaW8sIHJlcG9ydF9zdGF0dXMsIG1wdV9hY2siXQogICAgZW5kCgogICAgQnJvd3NlciAtLT58IldlYlNvY2tldCAoSlNPTikifCBNUFVfTGF5ZXIKICAgIE1QVV9MYXllciAtLT58IkJyaWRnZSBSUEMifCBNQ1VfTGF5ZXIKICAgIE1DVV9MYXllciAtLT58IkJyaWRnZS5jYWxsIG1jdV9yZWFkeSJ8IE1QVV9MYXllcg==?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
-
-```mermaid
-graph TD
-    subgraph Browser["Browser (via WebUI Brick SDK)"]
-        B1["MediaPipe face data"]
-        B2["RGB button clicks"]
-        B3["GPIO toggle clicks"]
-        B4["Capture snapshot"]
-    end
-
-    subgraph MPU_Layer["MPU (Python)"]
-        M1["on_face_data()<br/>Update state, determine expression,<br/>call show_face/show_no_face/show_expression"]
-        M2["on_rgb_control()<br/>call set_rgb"]
-        M3["on_gpio_control()<br/>call set_gpio"]
-        M4["safe_bridge_call(method, args)<br/>try/except, never crash"]
-    end
-
-    subgraph MCU_Layer["MCU (STM32U585) -- 10 Bridge providers"]
-        C1["scroll_text, show_face, show_no_face"]
-        C2["flash_face, show_expression"]
-        C3["set_device_mode, set_rgb"]
-        C4["set_gpio, report_status, mpu_ack"]
-    end
-
-    Browser -->|"WebSocket (JSON)"| MPU_Layer
-    MPU_Layer -->|"Bridge RPC"| MCU_Layer
-    MCU_Layer -->|"Bridge.call mcu_ready"| MPU_Layer
-```
-
-</details>
-
-<br/>
-
-#### MCU Bridge Providers
-
-| Provider                  | Action                                                    |
-|:--------------------------|:----------------------------------------------------------|
-| **`scroll_text(text)`**   | Display `frame_smiley` (no text scroll on Zephyr)         |
-| **`show_face()`**         | Smiley bitmap + green RGB + relay ON                      |
-| **`show_no_face()`**      | X bitmap + red RGB + relay OFF                            |
-| **`flash_face(count)`**   | Rapid flash N times + buzzer beep                         |
-| **`show_expression(e)`**  | Expression bitmap + color-coded RGB                       |
-| **`set_device_mode(m)`**  | Store mode string (no hardware change)                    |
-| **`set_rgb(color)`**      | Set RGB LED (8 colors + off)                              |
-| **`set_gpio(pin:state)`** | Toggle pin if in allowlist and enabled                    |
-| **`report_status()`**     | Send uptime/faces/mode to MPU                             |
-| **`mpu_ack()`**           | Acknowledge MPU handshake, stop retry loop                |
-
-<br/>
-
 <details>
 <summary><strong>7. RGB LED State Machine</strong></summary>
 
@@ -778,13 +686,6 @@ LED4 is active-low (`LOW` = ON, `HIGH` = OFF).
 Supported colors: red, green, blue, yellow, cyan, magenta, white, off.
 
 <br/>
-
-<p align="center">
-  <img src="https://mermaid.ink/img/c3RhdGVEaWFncmFtLXYyCiAgICBbKl0gLS0-IE9GRgogICAgT0ZGIC0tPiBTRUxGX1RFU1QgOiBCb290CiAgICBTRUxGX1RFU1QgLS0-IFJFRF9JRExFIDogU2VsZi10ZXN0IGNvbXBsZXRlCgogICAgc3RhdGUgU0VMRl9URVNUIHsKICAgICAgICBbKl0gOiBSIHRoZW4gRyB0aGVuIEIgKDMwMG1zIGVhY2gpCiAgICB9CgogICAgc3RhdGUgUkVEX0lETEUgewogICAgICAgIFsqXSA6IFdhaXRpbmcgZm9yIGZhY2UKICAgIH0KCiAgICBSRURfSURMRSAtLT4gR1JFRU5fVFJBQ0tJTkcgOiBGYWNlIGRldGVjdGVkCiAgICBSRURfSURMRSAtLT4gUkVEX0lETEUgOiBObyBjaGFuZ2UKCiAgICBzdGF0ZSBHUkVFTl9UUkFDS0lORyB7CiAgICAgICAgWypdIDogRmFjZSBwcmVzZW50CiAgICB9CgogICAgR1JFRU5fVFJBQ0tJTkcgLS0-IEdSRUVOX1NNSUxFIDogRXhwcmVzc2lvbiA9IHNtaWxlCiAgICBHUkVFTl9UUkFDS0lORyAtLT4gQkxVRV9TVVJQUklTRSA6IEV4cHJlc3Npb24gPSBzdXJwcmlzZQogICAgR1JFRU5fVFJBQ0tJTkcgLS0-IFlFTExPV19FWUVCUk9XIDogRXhwcmVzc2lvbiA9IGV5ZWJyb3cgcmFpc2UKICAgIEdSRUVOX1RSQUNLSU5HIC0tPiBSRURfSURMRSA6IEZhY2UgbG9zdA==?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
 
 ```mermaid
 stateDiagram-v2
@@ -812,8 +713,6 @@ stateDiagram-v2
     GREEN_TRACKING --> YELLOW_EYEBROW : Expression = eyebrow raise
     GREEN_TRACKING --> RED_IDLE : Face lost
 ```
-
-</details>
 
 <br/>
 
@@ -861,111 +760,6 @@ which layers are visible.
 | **Dots Only**           |  -   |    -    |  -   |   -   |  -   |  -   |  Y   |   -   |
 | **Minimal**             |  -   |    Y    |  -   |   -   |  -   |  Y   |  -   |   -   |
 | **Outline+Emojis**      |  -   |    Y    |  -   |   -   |  Y   |  -   |  -   |   Y   |
-
-<br/>
-
-</details>
-
-<br/>
-
-<details>
-<summary><strong>9. Delegate Selection and Validation Flow</strong></summary>
-
-<br/>
-
-The QRB2210's Adreno 702 GPU supports WebGL, but MediaPipe's GPU delegate
-produces spatially incorrect landmarks. The app uses CPU-first with automatic
-runtime validation.
-
-<br/>
-
-<p align="center">
-  <img src="https://mermaid.ink/img/Z3JhcGggVEQKICAgIEFbIkFwcCBTdGFydCJdIC0tPiBCWyJUcnkgQ1BVIGRlbGVnYXRlIChXQVNNKSJdCiAgICBCIC0tPnxTVUNDRVNTfCBDWyJDUFUgbG9hZGVkIl0KICAgIEIgLS0-fEZBSUx8IERbIlRyeSBHUFUgZGVsZWdhdGUgKFdlYkdML0FkcmVubykiXQogICAgRCAtLT58U1VDQ0VTU3wgRVsiR1BVIGxvYWRlZCJdCiAgICBEIC0tPnxGQUlMfCBGWyJGQVRBTCAtIG5vIGRlbGVnYXRlIl0KICAgIEMgLS0-IEdbIlVOVEVTVEVEPGJyLz5XYWl0aW5nIGZvciBmaXJzdCBmYWNlLi4uIl0KICAgIEUgLS0-IEcKICAgIEcgLS0-fCJGaXJzdCBmYWNlIGRldGVjdGVkInwgSFsiVkFMSURBVElORzxici8-NiBzYW5pdHkgY2hlY2tzIHggNSBmcmFtZXMiXQogICAgSCAtLT58IjMrIFBBU1MifCBJWyJQQVNTRUQiXQogICAgSCAtLT58IjMrIEZBSUwifCBKWyJGQUlMRUQ8YnIvPmF1dG8tc3dpdGNoIGRlbGVnYXRlLCByZWxvYWQgbW9kZWwiXQogICAgSSAtLT58IkV2ZXJ5IDYwcyJ8IEtbIlJlLXZhbGlkYXRlIDUgZnJhbWVzIl0KICAgIEsgLS0-fERlZ3JhZGVkfCBMWyJXYXJuIChubyBhdXRvLXN3aXRjaCkiXQogICAgSyAtLT58T0t8IEk=?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
-
-```mermaid
-graph TD
-    A["App Start"] --> B["Try CPU delegate (WASM)"]
-    B -->|SUCCESS| C["CPU loaded"]
-    B -->|FAIL| D["Try GPU delegate (WebGL/Adreno)"]
-    D -->|SUCCESS| E["GPU loaded"]
-    D -->|FAIL| F["FATAL - no delegate"]
-    C --> G["UNTESTED<br/>Waiting for first face..."]
-    E --> G
-    G -->|"First face detected"| H["VALIDATING<br/>6 sanity checks x 5 frames"]
-    H -->|"3+ PASS"| I["PASSED"]
-    H -->|"3+ FAIL"| J["FAILED<br/>auto-switch delegate, reload model"]
-    I -->|"Every 60s"| K["Re-validate 5 frames"]
-    K -->|Degraded| L["Warn (no auto-switch)"]
-    K -->|OK| I
-```
-
-</details>
-
-<br/>
-
-**Sanity checks per frame:**
-
-| Check  | Condition                    |
-|:-------|:-----------------------------|
-| 1      | Landmark count = 478         |
-| 2      | Bounding box > 3% of frame   |
-| 3      | Out-of-bounds points < 20    |
-| 4      | Nose near face center        |
-| 5      | Eye separation 2-50%         |
-| 6      | Forehead above chin          |
-
-<br/>
-
-</details>
-
-<br/>
-
-<details>
-<summary><strong>10. WebSocket Telemetry Flow</strong></summary>
-
-<br/>
-
-Face data flows from the browser to the MPU, which drives MCU hardware responses.
-
-<br/>
-
-<p align="center">
-  <img src="https://mermaid.ink/img/c2VxdWVuY2VEaWFncmFtCiAgICBwYXJ0aWNpcGFudCBCcm93c2VyCiAgICBwYXJ0aWNpcGFudCBNUFUgYXMgTVBVIChtYWluLnB5KQogICAgcGFydGljaXBhbnQgTUNVIGFzIE1DVSAoc2tldGNoLmlubykKCiAgICBOb3RlIG92ZXIgQnJvd3NlcjogRXZlcnkgNTAwbXMgd2hlbiBmYWNlcyBwcmVzZW50CiAgICBCcm93c2VyLT4-TVBVOiBlbWl0KCJmYWNlX2RhdGEiLCB7ZmFjZXMsIGJsaW5rcywgZXhwcmVzc2lvbiwgcHVwaWxzLCB5YXcsIHBpdGNofSkKICAgIE1QVS0-Pk1QVTogUGFyc2UgSlNPTiwgdXBkYXRlIGZhY2Vfc3RhdGUKCiAgICBhbHQgTm8gZmFjZSAtPiBGYWNlIGFwcGVhcmVkCiAgICAgICAgTVBVLT4-TUNVOiBmbGFzaF9mYWNlKDMpCiAgICAgICAgTVBVLT4-TUNVOiBzaG93X2ZhY2UoKQogICAgICAgIE5vdGUgb3ZlciBNQ1U6IEdyZWVuIFJHQgogICAgZWxzZSBFeHByZXNzaW9uIGNoYW5nZWQKICAgICAgICBNUFUtPj5NQ1U6IHNob3dfZXhwcmVzc2lvbihleHByKQogICAgICAgIE5vdGUgb3ZlciBNQ1U6IENvbG9yLWNvZGVkIFJHQgogICAgZWxzZSBGYWNlIC0-IE5vIGZhY2UKICAgICAgICBNUFUtPj5NQ1U6IHNob3dfbm9fZmFjZSgpCiAgICAgICAgTm90ZSBvdmVyIE1DVTogUmVkIFJHQgogICAgZW5kCgogICAgTVBVLT4-QnJvd3NlcjogZW1pdCgic3RhdGVfdXBkYXRlIiwgZnVsbF9zdGF0ZV9qc29uKQ==?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
-
-```mermaid
-sequenceDiagram
-    participant Browser
-    participant MPU as MPU (main.py)
-    participant MCU as MCU (sketch.ino)
-
-    Note over Browser: Every 500ms when faces present
-    Browser->>MPU: emit("face_data", {faces, blinks, expression, pupils, yaw, pitch})
-    MPU->>MPU: Parse JSON, update face_state
-
-    alt No face -> Face appeared
-        MPU->>MCU: flash_face(3)
-        MPU->>MCU: show_face()
-        Note over MCU: Green RGB
-    else Expression changed
-        MPU->>MCU: show_expression(expr)
-        Note over MCU: Color-coded RGB
-    else Face -> No face
-        MPU->>MCU: show_no_face()
-        Note over MCU: Red RGB
-    end
-
-    MPU->>Browser: emit("state_update", full_state_json)
-```
-
-</details>
 
 <br/>
 
@@ -1134,45 +928,6 @@ industrial use cases.
 
 <br/>
 
-<details>
-<summary><strong>The App Lab and Bricks Experience</strong></summary>
-
-<br/>
-
-The [Arduino App Lab](https://docs.arduino.cc/software/app-lab/) is a unified development
-environment that lets you combine Arduino sketches, Python scripts, and containerized
-Linux applications into a single workflow.
-
-<br/>
-
-<p align="center">
-  <img src="https://docs.arduino.cc/static/782ed8393ae066932b79a19418651a50/a6d36/app-lab.png" alt="Arduino App Lab" width="600">
-</p>
-
-<br/>
-
-[Bricks](https://docs.arduino.cc/software/app-lab/tutorials/bricks) are code building
-blocks that abstract away complexity. This project uses a single Brick:
-
-- **`arduino:web_ui`** -- serves the contents of `assets/` as a web application and
-  provides WebSocket messaging between the browser and `python/main.py`. The Brick
-  injects WebSocket connectivity at runtime. No explicit socket code is needed in the HTML.
-
-<br/>
-
-<p align="center">
-  <img src="https://docs.arduino.cc/static/c4ba129c26c39fd5f37d2dfed7fee780/a6d36/add-brick-1.png" alt="Adding a Brick in App Lab" width="500">
-</p>
-
-<br/>
-
-> **Tip:** To install this demo, download the repository as a `.zip`, open
-> [Arduino App Lab](https://www.arduino.cc/en/software/#app-lab-section),
-> click **Import App**, and select the file.
-
-<br/>
-
-</details>
 
 <br/>
 
@@ -1259,13 +1014,6 @@ ONNX, TensorFlow) and compiles them into optimized runtimes for specific Qualcom
 
 <br/>
 
-<p align="center">
-  <img src="https://mermaid.ink/img/Z3JhcGggTFIKICAgIHN1YmdyYXBoIElucHV0WyJZb3VyIE1vZGVsIl0KICAgICAgICBBWyJQeVRvcmNoIC8gT05OWCAvPGJyLz5URi1LZXJhcyAvIEpBWCJdCiAgICBlbmQKCiAgICBzdWJncmFwaCBDbG91ZFsiQUkgSHViIENsb3VkIl0KICAgICAgICBCWyIxLiBPUFRJTUlaRTxici8-UXVhbnRpemUgSU5UOCwgZnVzZSBvcHMiXQogICAgICAgIENbIjIuIENPTVBJTEU8YnIvPlRhcmdldDogUVJCMjIxMDxici8-UnVudGltZTogVEZMaXRlIG9yIFFOTiJdCiAgICAgICAgRFsiMy4gUFJPRklMRTxici8-TGF0ZW5jeSwgRlBTLCBtZW1vcnksPGJyLz5sYXllci1ieS1sYXllciJdCiAgICAgICAgQiAtLT4gQyAtLT4gRAogICAgZW5kCgogICAgc3ViZ3JhcGggRGV2aWNlWyJUYXJnZXQgRGV2aWNlIl0KICAgICAgICBFWyJVbm8gUSAoUVJCMjIxMCk8YnIvPm9yIGFueSBTbmFwZHJhZ29uIl0KICAgIGVuZAoKICAgIEEgLS0-fHVwbG9hZHwgQgogICAgRCAtLT58ImRvd25sb2FkIC50ZmxpdGUgLyAuZGxjInwgRQ==?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
-
 ```mermaid
 graph LR
     subgraph Input["Your Model"]
@@ -1287,8 +1035,6 @@ graph LR
     D -->|"download .tflite / .dlc"| E
 ```
 
-</details>
-
 <br/>
 
 #### On-Device Inference via AI Hub
@@ -1298,13 +1044,6 @@ runs natively on the QRB2210 using `tflite-runtime`, bypassing the browser.
 
 <br/>
 
-<p align="center">
-  <img src="https://mermaid.ink/img/Z3JhcGggTFIKICAgIEFbIkNhbWVyYSAodjRsMi9VU0IpIl0gLS0-IEJbIk9wZW5DViBjYXB0dXJlIl0KICAgIEIgLS0-IENbIlRGTGl0ZSBpbmZlcmVuY2UgKENQVSkiXQogICAgQyAtLT4gRFsiRmFjZSByZXN1bHRzIl0KICAgIEQgLS0-IEVbIkJyaWRnZSBSUEMgdG8gTUNVPGJyLz4oTEVEL1JHQikiXQogICAgRCAtLT4gRlsiV2ViU29ja2V0IHRvIEJyb3dzZXI8YnIvPihvdmVybGF5KSJd?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
-
 ```mermaid
 graph LR
     A["Camera (v4l2/USB)"] --> B["OpenCV capture"]
@@ -1313,8 +1052,6 @@ graph LR
     D --> E["Bridge RPC to MCU<br/>(LED/RGB)"]
     D --> F["WebSocket to Browser<br/>(overlay)"]
 ```
-
-</details>
 
 <br/>
 
@@ -1328,13 +1065,6 @@ graph LR
 
 <br/>
 
-<p align="center">
-  <img src="https://mermaid.ink/img/Z3JhcGggVEQKICAgIEFbIi50ZmxpdGUgbW9kZWwgZmlsZSJdIC0tPiBCWyJURkxpdGUgSW50ZXJwcmV0ZXI8YnIvPkxvYWQsIEFsbG9jYXRlLCBJbnZva2UiXQogICAgQiAtLT4gQ3siRGVsZWdhdGUgc2VsZWN0aW9uIn0KICAgIEMgLS0-IERbIlhOTlBBQ0sgKENQVSk8YnIvPkRFRkFVTFQgLSByZWxpYWJsZSJdCiAgICBDIC0tPiBFWyJHUFUgKEFkcmVubyA3MDIpPGJyLz5BdmFpbGFibGUgYnV0IHVucmVsaWFibGU8YnIvPmZvciBsYW5kbWFya3MiXQogICAgQyAtLT4gRlsiSGV4YWdvbiAoTlBVKTxici8-Ti9BIG9uIFFSQjIyMTAiXQ==?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
-
 ```mermaid
 graph TD
     A[".tflite model file"] --> B["TFLite Interpreter<br/>Load, Allocate, Invoke"]
@@ -1343,8 +1073,6 @@ graph TD
     C --> E["GPU (Adreno 702)<br/>Available but unreliable<br/>for landmarks"]
     C --> F["Hexagon (NPU)<br/>N/A on QRB2210"]
 ```
-
-</details>
 
 <br/>
 
@@ -1403,13 +1131,6 @@ format can run on the Uno Q using the same `tflite-runtime` infrastructure.
 
 <br/>
 
-<p align="center">
-  <img src="https://mermaid.ink/img/Z3JhcGggTFIKICAgIHN1YmdyYXBoIEhGWyJIdWdnaW5nIEZhY2UgSHViIl0KICAgICAgICBBWyJQeVRvcmNoIC8gVEYtS2VyYXMgLzxici8-SkFYIC8gT05OWCBtb2RlbHMiXQogICAgZW5kCgogICAgc3ViZ3JhcGggQ29udmVydFsiQ29udmVyc2lvbiJdCiAgICAgICAgQlsiT3B0aW9uIEE6IG9wdGltdW0tY2xpPGJyLz5leHBvcnQgdGZsaXRlIC0tcXVhbnRpemUgaW50OCJdCiAgICAgICAgQ1siT3B0aW9uIEI6IEFJIEh1Yjxici8-Y29tcGlsZSBmb3IgUVJCMjIxMCJdCiAgICBlbmQKCiAgICBzdWJncmFwaCBVbm9RWyJVbm8gUSAoUVJCMjIxMCkiXQogICAgICAgIERbInB5dGhvbi9tb2RlbHMvPGJyLz5tb2RlbC50ZmxpdGU8YnIvPmF1dG8tZGlzY292ZXJlZCBhdCBib290Il0KICAgIGVuZAoKICAgIEEgLS0-fCJBInwgQiAtLT58c2NwfCBECiAgICBBIC0tPnwiQiJ8IEMgLS0-fHNjcHwgRA==?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
-
 ```mermaid
 graph LR
     subgraph HF["Hugging Face Hub"]
@@ -1428,8 +1149,6 @@ graph LR
     A -->|"A"| B -->|scp| D
     A -->|"B"| C -->|scp| D
 ```
-
-</details>
 
 <br/>
 
@@ -1452,13 +1171,6 @@ Models trained there export as TFLite and run on the Uno Q identically to AI Hub
 
 <br/>
 
-<p align="center">
-  <img src="https://mermaid.ink/img/Z3JhcGggTFIKICAgIEFbIjEuIENvbGxlY3QgJiBMYWJlbDxici8-aW1hZ2VzLCBhdWRpbywgc2Vuc29yIGRhdGEiXSAtLT4gQlsiMi4gRGVzaWduIEltcHVsc2U8YnIvPnNpZ25hbCBwcm9jZXNzaW5nICs8YnIvPmxlYXJuaW5nIGJsb2NrIl0KICAgIEIgLS0-IENbIjMuIFRyYWluPGJyLz5Nb2JpbGVOZXQsIGN1c3RvbSBEU1ArTk4iXQogICAgQyAtLT4gRFsiNC4gVGVzdDxici8-bGl2ZSBjbGFzc2lmaWNhdGlvbiJdCiAgICBEIC0tPiBFWyI1LiBEZXBsb3k8YnIvPlRGTGl0ZSAoaW50OCkiXQogICAgRSAtLT4gRlsiVW5vIFE6IHB5dGhvbi9tb2RlbHMvPGJyLz5ydW5zIG9uIFFSQjIyMTAgTVBVIl0=?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
-
 ```mermaid
 graph LR
     A["1. Collect & Label<br/>images, audio, sensor data"] --> B["2. Design Impulse<br/>signal processing +<br/>learning block"]
@@ -1467,8 +1179,6 @@ graph LR
     D --> E["5. Deploy<br/>TFLite (int8)"]
     E --> F["Uno Q: python/models/<br/>runs on QRB2210 MPU"]
 ```
-
-</details>
 
 <br/>
 
@@ -1481,13 +1191,6 @@ graph LR
 #### AI Model Ecosystem for Uno Q
 
 <br/>
-
-<p align="center">
-  <img src="https://mermaid.ink/img/Z3JhcGggVEQKICAgIHN1YmdyYXBoIERlbW9bIlRISVMgREVNTyAod29ya3Mgb3V0IG9mIHRoZSBib3gpIl0KICAgICAgICBNUFsiR29vZ2xlIE1lZGlhUGlwZTxici8-NDc4LXB0IGZhY2UgbGFuZG1hcmtzPGJyLz5SdW5zIGluIEJST1dTRVIgdmlhIFdBU00iXQogICAgICAgIEJLWyJBcmR1aW5vIEFwcCBMYWIgQnJpY2tzPGJyLz53ZWJfdWksIG9ial9kZXQsIG1vdGlvbjxici8-UnVucyBvbiBNUFUgKERvY2tlcikiXQogICAgZW5kCgogICAgc3ViZ3JhcGggQWR2YW5jZWRbIkFEVkFOQ0VEIChyZXF1aXJlcyBhZGRpdGlvbmFsIHNldHVwKSJdCiAgICAgICAgQUhbIlF1YWxjb21tIEFJIEh1Yjxici8-MTAwKyBvcHRpbWl6ZWQgbW9kZWxzPGJyLz5SdW5zIG9uIE1QVSAodGZsaXRlLXJ1bnRpbWUpIl0KICAgICAgICBIRlsiSHVnZ2luZyBGYWNlPGJyLz41MDBrKyBtb2RlbHM8YnIvPkV4cG9ydCB0byBURkxpdGUgdmlhIG9wdGltdW0iXQogICAgICAgIEVJWyJFZGdlIEltcHVsc2U8YnIvPlRyYWluIG9uIFlPVVIgZGF0YTxici8-RXhwb3J0IHRvIFRGTGl0ZSJdCiAgICBlbmQKCiAgICBNUCAtLT4gUFlbIlB5dGhvbiBDb29yZGluYXRvciAobWFpbi5weSk8YnIvPlJlY2VpdmVzIGRhdGEgZnJvbSBBTlkgc291cmNlIl0KICAgIEJLIC0tPiBQWQogICAgQUggLS0-IFBZCiAgICBIRiAtLT4gUFkKICAgIEVJIC0tPiBQWQogICAgUFkgLS0-IEJSWyJCcmlkZ2UgUlBDIHRvIE1DVSAoTEVEL1JHQi9HUElPKSJdCiAgICBQWSAtLT4gV1NbIldlYlNvY2tldCB0byBCcm93c2VyIChVSSBvdmVybGF5KSJd?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
 
 ```mermaid
 graph TD
@@ -1511,20 +1214,11 @@ graph TD
     PY --> WS["WebSocket to Browser (UI overlay)"]
 ```
 
-</details>
-
 <br/>
 
 #### The Decision Tree
 
 <br/>
-
-<p align="center">
-  <img src="https://mermaid.ink/img/Z3JhcGggVEQKICAgIFExeyJOZWVkIGZhY2UgbGFuZG1hcmtzPGJyLz4oNDc4IHBvaW50cywgZXhwcmVzc2lvbnMsIGlyaXMpPyJ9CiAgICBRMSAtLT58WUVTfCBBMVsiQnJvd3Nlci1zaWRlIE1lZGlhUGlwZTxici8-KHRoaXMgZGVtbyBkZWZhdWx0KSJdCiAgICBRMSAtLT58Tk98IFEyeyJQcmUtYnVpbHQgQXBwIExhYiBCcmljazxici8-Zm9yIHlvdXIgdGFzaz8ifQogICAgUTIgLS0-fFlFU3wgQTJbIlVzZSB0aGUgQnJpY2s8YnIvPihvbmUgbGluZSBpbiBhcHAueWFtbCkiXQogICAgUTIgLS0-fE5PfCBRM3siTW9kZWwgYXZhaWxhYmxlIG9uPGJyLz5RdWFsY29tbSBBSSBIdWI_In0KICAgIFEzIC0tPnxZRVN8IEEzWyJDb21waWxlIG9wdGltaXplZCBURkxpdGU8YnIvPmZvciBRUkIyMjEwIl0KICAgIFEzIC0tPnxOT3wgUTR7Ik1vZGVsIGF2YWlsYWJsZSBvbjxici8-SHVnZ2luZyBGYWNlPyJ9CiAgICBRNCAtLT58WUVTfCBBNFsiRXhwb3J0IHRvIFRGTGl0ZSB2aWEgb3B0aW11bSw8YnIvPmRlcGxveSB0byBweXRob24vbW9kZWxzLyJdCiAgICBRNCAtLT58Tk98IFE1eyJIYXZlIHlvdXIgb3duPGJyLz50cmFpbmluZyBkYXRhPyJ9CiAgICBRNSAtLT58WUVTfCBBNVsiVHJhaW4gaW4gRWRnZSBJbXB1bHNlLDxici8-ZXhwb3J0IFRGTGl0ZSJdCiAgICBRNSAtLT58Tk98IEE2WyJDaGVjayBURiBNb2RlbCBHYXJkZW4sPGJyLz5jb252ZXJ0IHRvIFRGTGl0ZSJd?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
 
 ```mermaid
 graph TD
@@ -1540,8 +1234,6 @@ graph TD
     Q5 -->|YES| A5["Train in Edge Impulse,<br/>export TFLite"]
     Q5 -->|NO| A6["Check TF Model Garden,<br/>convert to TFLite"]
 ```
-
-</details>
 
 <br/>
 
@@ -1628,13 +1320,6 @@ Assembled through acquisitions (2024-2025):
 
 <br/>
 
-<p align="center">
-  <img src="https://mermaid.ink/img/Z3JhcGggVEQKICAgIEFbIlNJTElDT048YnIvPlF1YWxjb21tIChpbi1ob3VzZSk8YnIvPlNuYXBkcmFnb24sIERyYWdvbndpbmcsPGJyLz5IZXhhZ29uIE5QVSwgQUkgSHViIl0gLS0-IEVbIlRIRSBWSVNJT046PGJyLz5PbmUgdmVuZG9yIGZvciBjaGlwLCBtb2RlbCw8YnIvPk9TLCBPVEEsIElERSwgY2xvdWQsIGNvbW11bml0eSJdCiAgICBCWyJBSSBUT09MQ0hBSU48YnIvPkVkZ2UgSW1wdWxzZSAoYWNxLiBNYXIgMjAyNSk8YnIvPlRyYWluIGN1c3RvbSBNTCBtb2RlbHMsPGJyLz5kZXBsb3kgdG8gUXVhbGNvbW0gZGV2aWNlcyJdIC0tPiBFCiAgICBDWyJPUyArIEZMRUVUIE1HTVQ8YnIvPkZvdW5kcmllcy5pbyAoYWNxLiBNYXIgMjAyNCk8YnIvPkZvdW5kcmllc0ZhY3RvcnksIE9UQSw8YnIvPnNlY3VyZSBib290LCBDSS9DRCJdIC0tPiBFCiAgICBEWyJERVZFTE9QRVIgQ09NTVVOSVRZPGJyLz5BcmR1aW5vIChhbm5vdW5jZWQgT2N0IDIwMjUpPGJyLz4zM00rIGRldmVsb3BlcnMsIEFwcCBMYWIsPGJyLz5BcmR1aW5vIENsb3VkLCBCcmlja3MiXSAtLT4gRQ==?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
-
 ```mermaid
 graph TD
     A["SILICON<br/>Qualcomm (in-house)<br/>Snapdragon, Dragonwing,<br/>Hexagon NPU, AI Hub"] --> E["THE VISION:<br/>One vendor for chip, model,<br/>OS, OTA, IDE, cloud, community"]
@@ -1642,8 +1327,6 @@ graph TD
     C["OS + FLEET MGMT<br/>Foundries.io (acq. Mar 2024)<br/>FoundriesFactory, OTA,<br/>secure boot, CI/CD"] --> E
     D["DEVELOPER COMMUNITY<br/>Arduino (announced Oct 2025)<br/>33M+ developers, App Lab,<br/>Arduino Cloud, Bricks"] --> E
 ```
-
-</details>
 
 <br/>
 
@@ -1662,13 +1345,6 @@ graph TD
 
 <br/>
 
-<p align="center">
-  <img src="https://mermaid.ink/img/Z3JhcGggVEQKICAgIEFbIkFQUExJQ0FUSU9OUzxici8-SHVtYW5vaWRzLCBBTVJzLCBEcm9uZXMsPGJyLz5TbWFydCBDYW1lcmFzLCBJb1QgU2Vuc29ycyJdCiAgICBCWyJBSSBNT0RFTFM8YnIvPkFJIEh1YiwgRWRnZSBJbXB1bHNlLDxici8-SHVnZ2luZyBGYWNlLCBNZWRpYVBpcGUiXQogICAgQ1siU09GVFdBUkUgUExBVEZPUk08YnIvPkFwcCBMYWIsIEJyaWNrcywgQXJkdWlubyBDbG91ZCw8YnIvPkZvdW5kcmllc0ZhY3RvcnkiXQogICAgRFsiU0lMSUNPTiJdCgogICAgQSAtLT4gQiAtLT4gQyAtLT4gRAoKICAgIEQgLS0tIEQxWyJJUTEwIC0tIEh1bWFub2lkL0luZHVzdHJpYWwiXQogICAgRCAtLS0gRDJbIklROCAtLSBFZGdlIEFJL1JvYm90aWNzIChWRU5UVU5PIFEpIl0KICAgIEQgLS0tIEQzWyJJUTYgLS0gU21hcnQgQ2FtZXJhcyJdCiAgICBEIC0tLSBENFsiUTggLS0gSGlnaC1lbmQgSW9UIl0KICAgIEQgLS0tIEQ1WyJRNiAtLSBNaWQtdGllciBJb1QiXQogICAgRCAtLS0gRDZbIlEyIC0tIEVudHJ5IElvVCAoVU5PIFEpIl0=?type=png&bgColor=!white" alt="diagram" width="700">
-</p>
-
-<details>
-<summary>Diagram source (Mermaid)</summary>
-
 ```mermaid
 graph TD
     A["APPLICATIONS<br/>Humanoids, AMRs, Drones,<br/>Smart Cameras, IoT Sensors"]
@@ -1685,8 +1361,6 @@ graph TD
     D --- D5["Q6 -- Mid-tier IoT"]
     D --- D6["Q2 -- Entry IoT (UNO Q)"]
 ```
-
-</details>
 
 <br/>
 
