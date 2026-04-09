@@ -4,22 +4,20 @@
 #
 # Wojo's Face Tracker — Direct SSH Version
 #
-# No App Lab needed. SSH into your Uno Q and run:
+# SSH into your Uno Q and run:
 #
 #   ./setup.sh                        # one-time: installs deps + downloads models
 #   python3 direct/face_tracker.py    # start tracking
 #
-# This uses OpenCV's YuNet face detector (75K params, 233 KB) and
+# Uses OpenCV's YuNet face detector (75K params, 233 KB) and
 # optionally the 468-landmark face mesh model via ONNX Runtime.
-# The MCU LED matrix and RGB LED are controlled via the arduino-router
-# Bridge (runs as a system service on the Uno Q).
+# Pure Python — no App Lab, no Bridge, no MCU dependencies.
 
 import cv2
 import numpy as np
 import time
 import sys
 import os
-import json
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
@@ -32,24 +30,6 @@ CONFIDENCE = 0.5
 CAMERA_INDEX = 0
 FRAME_W, FRAME_H = 640, 480
 
-HAS_BRIDGE = False
-bridge = None
-
-try:
-    from arduino.app_utils import Bridge as _Bridge
-    bridge = _Bridge
-    HAS_BRIDGE = True
-    print("[OK] Bridge available (arduino-router)")
-except ImportError:
-    try:
-        from arduino_bridge import Bridge as _Bridge
-        bridge = _Bridge()
-        HAS_BRIDGE = True
-        print("[OK] Bridge available (arduino_bridge)")
-    except ImportError:
-        print("[WARN] No Bridge module found — running without MCU control")
-        print("       (LED matrix and RGB LED won't respond)")
-
 HAS_MESH = False
 mesh_session = None
 
@@ -58,23 +38,12 @@ try:
     if os.path.isfile(MESH_MODEL):
         mesh_session = ort.InferenceSession(MESH_MODEL, providers=["CPUExecutionProvider"])
         HAS_MESH = True
-        print(f"[OK] Face mesh model loaded (468 landmarks)")
+        print("[OK] Face mesh model loaded (468 landmarks)")
     else:
-        print(f"[INFO] Face mesh model not found at {MESH_MODEL}")
-        print("       Run ./setup.sh to download it")
+        print("[INFO] Face mesh model not found — run ./setup.sh to download")
 except ImportError:
     print("[INFO] onnxruntime not installed — face mesh disabled")
-    print("       Install with: pip3 install onnxruntime")
-
-
-def safe_call(cmd, arg=""):
-    if not HAS_BRIDGE:
-        return
-    try:
-        if bridge and hasattr(bridge, 'call'):
-            bridge.call(cmd, arg)
-    except Exception as e:
-        pass
+    print("       pip3 install onnxruntime")
 
 
 def get_face_mesh(frame, bbox):
@@ -115,7 +84,7 @@ def get_face_mesh(frame, bbox):
         landmarks = outputs[1][0]
         if score > 0.5:
             return landmarks
-    except Exception as e:
+    except Exception:
         pass
 
     return None
@@ -154,13 +123,10 @@ def main():
     print(f"  Camera: {FRAME_W}x{FRAME_H} @ index {CAMERA_INDEX}")
     print(f"  Model: YuNet ({os.path.getsize(FACE_MODEL) // 1024} KB)")
     print(f"  Mesh: {'enabled (468 landmarks)' if HAS_MESH else 'disabled'}")
-    print(f"  Bridge: {'connected' if HAS_BRIDGE else 'not available'}")
     print(f"  Confidence: {CONFIDENCE}")
     print("  Press Ctrl+C to stop")
     print("================================================")
     print("")
-
-    safe_call("scroll_text", "  READY  ")
 
     try:
         while True:
@@ -177,9 +143,6 @@ def main():
             if n > 0 and not face_present:
                 face_present = True
                 face_count += 1
-                safe_call("flash_face", "3")
-                safe_call("set_rgb", "green")
-                safe_call("show_face")
 
                 if HAS_MESH and faces is not None:
                     landmarks = get_face_mesh(frame, faces[0][:4])
@@ -189,22 +152,15 @@ def main():
                 print(f"[FACE] Detected {n} face(s) — total: {face_count}"
                       + (f" — mesh: {mesh_landmarks} landmarks" if mesh_landmarks else ""))
 
-            elif n > 0 and face_present:
-                safe_call("show_face")
-
             elif n == 0 and face_present:
                 face_present = False
                 mesh_landmarks = 0
                 print("[FACE] Lost")
-                safe_call("set_rgb", "off")
-                safe_call("show_no_face")
 
             time.sleep(0.033)
 
     except KeyboardInterrupt:
         print("\nStopping...")
-        safe_call("set_rgb", "off")
-        safe_call("show_no_face")
         cap.release()
         print(f"Session: {face_count} face(s) detected total")
 
