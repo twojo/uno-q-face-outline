@@ -68,13 +68,18 @@ function initSocketIO() {
                 "Face detected!", "Hello, human!", "I see you!"
             ];
             var randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
-            feedbackContentElement.innerHTML =
-                '<p class="greeting-text">' + randomGreeting + '</p>';
+            var greetingEl = document.createElement('p');
+            greetingEl.className = 'greeting-text';
+            greetingEl.textContent = randomGreeting;
+            feedbackContentElement.replaceChildren(greetingEl);
             faceVisible = true;
         }
 
         detectionTimeout = setTimeout(function() {
-            feedbackContentElement.innerHTML = '<p class="feedback-text">System response will appear here</p>';
+            var feedbackEl = document.createElement('p');
+            feedbackEl.className = 'feedback-text';
+            feedbackEl.textContent = 'System response will appear here';
+            feedbackContentElement.replaceChildren(feedbackEl);
             faceVisible = false;
             statusBadge.textContent = 'Scanning...';
             statusBadge.className = 'status-badge scanning';
