@@ -1,126 +1,105 @@
-<!DOCTYPE html>
 <!--
-  SPDX-FileCopyrightText: Copyright (C) 2025 Wojo
-  SPDX-License-Identifier: MIT
-
-  Wojo's Uno Q Face Outline Demo — Browser Frontend
-
-  This HTML file is the face tracking UI shell. The application logic
-  and styling are separated into external files for maintainability:
-    - css/styles.css  — all visual styling
-    - js/app.js       — face detection, rendering, and system logic
-
-  External dependencies (all version-pinned, loaded by app.js):
-    1. Google Fonts (Inter, JetBrains Mono) — cosmetic, degrades to
-       system fonts if CDN is unreachable
-    2. @mediapipe/tasks-vision 0.10.3 from jsdelivr — WASM face
-       landmarker engine, pinned to avoid breaking API changes
-    3. face_landmarker.task model from Google Cloud Storage — the
-       trained model weights (~4MB, cached by the browser)
-
-  No other external code is loaded. Everything else — sanity
-  validation, device simulation, HUD overlays, expression detection,
-  pupil measurement — is implemented in js/app.js.
-
-  On a real Uno Q, this file lives in assets/ and is served
-  automatically by the WebUI brick. On Replit, Flask serves a copy
-  from templates/ for live preview.
+SPDX-FileCopyrightText: Copyright (C) 2025 Wojo
+SPDX-License-Identifier: MIT
 -->
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <title>Wojo's Uno Q Face Outline Demo</title>
-    <link rel="stylesheet" href="css/styles.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wojo's Face Demo — Arduino Uno Q</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="header">
-        <img src="qualcomm-logo.png" alt="Qualcomm" />
-        <div class="header-div"></div>
-        <div class="header-title">
-            <h1>Wojo's Uno Q Face Outline Demo</h1>
-            <span class="sub">2026 Wojo's Uno Q Face Outline Demo V1</span>
+    <div>
+        <div class="header">
+            <h1 class="title-text">Wojo's Face Demo</h1>
+            <span class="status-badge" id="statusBadge">Connecting...</span>
         </div>
-        <div class="header-links">
-            <a href="https://store.arduino.cc/collections/arduino-days-promo/products/uno-q-4gb" target="_blank" rel="noopener" class="header-link" id="buyLink">Get Uno Q 4GB</a>
-            <a href="https://docs.arduino.cc/software/app-lab/" target="_blank" rel="noopener" class="header-link">AppLab</a>
-            <a href="https://github.com/arduino/arduino-app-lab" target="_blank" rel="noopener" class="header-link">GitHub</a>
+
+        <div class="main-content">
+            <div class="container" id="video-container">
+                <div id="videoFeedContainer">
+                    <div id="videoPlaceholder" class="camera-status">
+                        <div class="spinner"></div>
+                        <p class="feedback-text">Searching Webcam...</p>
+                    </div>
+                    <iframe id="dynamicIframe" title="Video stream" width="1024px" height="768px" frameBorder="0" style="display: none;"></iframe>
+                </div>
+            </div>
+
+            <div class="right-column">
+                <div class="container container-right">
+                    <div class="controls-section">
+                        <div class="control-group">
+                            <div class="control-confidence">
+                                <label id="confidence-label" for="confidenceSlider">Confidence</label>
+                                <button id="confidenceResetButton" class="btn-tertiary">
+                                    <input type="number" id="confidenceInput" class="confidence-input" min="0" max="1" step="0.05" value="0.50">
+                                    <img src="img/icon-reset.svg" alt="Reset" class="reset-icon" onerror="this.style.display='none'">
+                                </button>
+                            </div>
+                            <div class="slider-box">
+                                <span class="confidence-limits">0</span>
+                                <div class="slider-container">
+                                    <div class="slider-progress" id="sliderProgress"></div>
+                                    <div class="confidence-value-display" id="confidenceValueDisplay">0.5</div>
+                                    <input type="range" id="confidenceSlider" min="0" max="1" step="0.05" value="0.5">
+                                </div>
+                                <span class="confidence-limits">1</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="container container-right">
+                    <div id="feedback-section" class="feedback-section">
+                        <h2 class="section-title">Feedback</h2>
+                        <div id="feedback-content" class="feedback-content">
+                            <p class="feedback-text">System response will appear here</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="container container-right">
+                    <div class="recent-detections-section">
+                        <div class="section-title-container">
+                            <h2 class="section-title">Recent detections</h2>
+                        </div>
+                        <div id="recentDetections"></div>
+                    </div>
+                </div>
+            </div>
         </div>
+        <div id="error-container" class="error-message" style="display: none;"></div>
     </div>
 
-    <div class="specs-bar" id="specsBar">
-        <div class="spec-chip"><span class="spec-k">SoC</span> <span class="spec-v">QRB2210</span></div>
-        <div class="spec-chip"><span class="spec-k">CPU</span> <span class="spec-v">Cortex-A53 2.0GHz</span></div>
-        <div class="spec-chip"><span class="spec-k">MCU</span> <span class="spec-v">STM32U585</span></div>
-        <div class="spec-chip"><span class="spec-k">RAM</span> <span class="spec-v">4GB</span></div>
-        <div class="spec-chip"><span class="spec-k">Faces</span> <span class="spec-v" id="specFaces">4</span></div>
-        <div class="spec-chip"><span class="spec-k">Del</span> <span class="spec-v" id="specDel">CPU</span></div>
-        <div class="spec-chip" id="specCamChip" style="display:none"><span class="spec-k">Cam</span> <span class="spec-v" id="specCam">--</span></div>
-        <span class="perf-indicator perf-optimal" id="perfBadge">OPTIMAL</span>
-        <span class="upgrade-hint">Need more power? <a href="https://www.arduino.cc/product-ventuno-q" target="_blank" rel="noopener">Ventuno Q</a></span>
-    </div>
+    <script>
+        const iframe = document.getElementById('dynamicIframe');
+        const placeholder = document.getElementById('videoPlaceholder');
+        const currentHostname = window.location.hostname;
+        const targetPort = 4912;
+        const targetPath = '/embed';
+        const streamUrl = `http://${currentHostname}:${targetPort}${targetPath}`;
 
-    <div class="viewport">
-        <video id="cam" autoplay playsinline muted></video>
-        <canvas id="overlay"></canvas>
+        let intervalId;
 
-        <div class="hud hud-tl on" id="hudTL">
-            <div class="hud-row"><span class="hud-k">Tracking</span><span class="hud-v" id="hFaces">0 faces</span></div>
-            <div class="hud-row"><span class="hud-k">Points</span><span class="hud-v" id="hPts">--</span></div>
-            <div id="faceList" class="face-list"></div>
-        </div>
+        iframe.onload = () => {
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
+            placeholder.style.display = 'none';
+            iframe.style.display = 'block';
+        };
 
-        <div class="hud hud-tr on" id="hudTR">
-            <div class="hud-row"><span class="hud-k">FPS</span><span class="hud-v" id="hFps">--</span></div>
-            <div class="hud-row"><span class="hud-k">Latency</span><span class="hud-v" id="hLat">--</span></div>
-            <div class="hud-row"><span class="hud-k">Res</span><span class="hud-v" id="hRes">--</span></div>
-            <div class="hud-row"><span class="hud-k">Device</span><span class="hud-v" id="hDev">Uno Q</span></div>
-        </div>
+        const startLoading = () => {
+            iframe.src = streamUrl;
+        };
 
-        <div class="hud hud-bl on" id="hudBL">
-            <div class="hud-row"><span class="hud-k">Yaw</span><span class="hud-v" id="hYaw">--</span></div>
-            <div class="hud-row"><span class="hud-k">Pitch</span><span class="hud-v" id="hPitch">--</span></div>
-            <div class="hud-row"><span class="hud-k">Blink L</span><span class="hud-v" id="hBlinkL">--</span></div>
-            <div class="hud-row"><span class="hud-k">Blink R</span><span class="hud-v" id="hBlinkR">--</span></div>
-            <div class="hud-row" id="hPupilRowL"><span class="hud-k" style="color:#ff4040">Pupil L</span><span class="hud-v" id="hPupilL" style="color:#ff4040">--</span></div>
-            <div class="hud-row" id="hPupilRowR"><span class="hud-k" style="color:#ff4040">Pupil R</span><span class="hud-v" id="hPupilR" style="color:#ff4040">--</span></div>
-        </div>
+        intervalId = setInterval(startLoading, 1000);
+    </script>
 
-        <div class="hud hud-br on" id="hudBR">
-            <div class="hud-row"><span class="hud-k">Uptime</span><span class="hud-v" id="hUp">00:00</span></div>
-            <div class="hud-row"><span class="hud-k">Frames</span><span class="hud-v" id="hFrames">0</span></div>
-            <div class="hud-row"><span class="hud-k">Detect</span><span class="hud-v" id="hDetects">0</span></div>
-        </div>
-
-        <div class="hud hud-bc on" id="hudSys" style="font-size:8px;opacity:0.7;">
-            <span class="hud-v" id="hSysLine" style="font-size:8px;letter-spacing:0.03em;">SYS: loading...</span>
-        </div>
-    </div>
-
-    <div class="controls">
-        <label>Overlay</label>
-        <select id="preset">
-            <option value="full" selected>Full Mesh + Features</option>
-            <option value="outline">Outline + Features</option>
-            <option value="mesh">Mesh Only</option>
-            <option value="dots">Dots Only</option>
-            <option value="minimal">Minimal</option>
-            <option value="emojis">Outline + Emojis</option>
-        </select>
-    </div>
-
-    <div class="diag" id="diagPanel" style="display:none">
-        <div class="diag-title">System Diagnostics</div>
-        <div class="diag-row" id="dWebGL"><span class="diag-dot dot-wait"></span><span class="diag-label">WebGL Support</span><span class="diag-detail" id="dWebGLInfo">checking...</span></div>
-        <div class="diag-row" id="dImport"><span class="diag-dot dot-wait"></span><span class="diag-label">MediaPipe Import</span><span class="diag-detail" id="dImportInfo">waiting...</span></div>
-        <div class="diag-row" id="dWasm"><span class="diag-dot dot-wait"></span><span class="diag-label">WASM Runtime</span><span class="diag-detail" id="dWasmInfo">waiting...</span></div>
-        <div class="diag-row" id="dModel"><span class="diag-dot dot-wait"></span><span class="diag-label">Face Landmarker Model</span><span class="diag-detail" id="dModelInfo">waiting...</span></div>
-        <div class="diag-row" id="dCamera"><span class="diag-dot dot-wait"></span><span class="diag-label">Camera Access</span><span class="diag-detail" id="dCameraInfo">waiting...</span></div>
-        <div class="diag-row" id="dDetect"><span class="diag-dot dot-wait"></span><span class="diag-label">Face Detection</span><span class="diag-detail" id="dDetectInfo">waiting...</span></div>
-        <div class="diag-row" id="dSanity"><span class="diag-dot dot-wait"></span><span class="diag-label">Landmark Sanity</span><span class="diag-detail" id="dSanityInfo">waiting for first face...</span></div>
-        <div class="diag-row" id="dCanvas"><span class="diag-dot dot-wait"></span><span class="diag-label">Canvas Rendering</span><span class="diag-detail" id="dCanvasInfo">waiting...</span></div>
-    </div>
-
-<script type="module" src="js/app.js"></script>
+    <script src="libs/socket.io.min.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>

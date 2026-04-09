@@ -1,19 +1,5 @@
 # Runtime dependencies for Wojo's Uno Q Face Outline Demo
 #
-# Core dependencies (required on the Uno Q):
-#   These are provided by the Arduino App Lab SDK and do not need
-#   separate installation — they are part of the Bricks runtime.
-#   Listed here for documentation only:
-#     arduino.app_utils (Logger, App, Bridge)
-#     arduino.app_bricks.web_ui (WebUI)
-
-# On-device face detection (required for MPU-side inference)
-#   ai-edge-litert is Google's successor to tflite-runtime,
-#   with full Python 3.13+ support (cp313 wheels available).
-ai-edge-litert>=1.0.1
-numpy>=1.24.0
-opencv-python-headless>=4.8.1.78
-
-# Qualcomm AI Hub — model download, compile, and optimization
-qai-hub>=0.19.0
-qai-hub-models>=0.18.0
+# The VideoObjectDetection brick handles all camera, model, and
+# inference dependencies automatically. No additional packages needed.
+# The Arduino App Lab SDK provides: arduino.app_utils, arduino.app_bricks

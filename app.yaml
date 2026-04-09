@@ -1,45 +1,8 @@
-# ──────────────────────────────────────────────────────────────────
-# App Lab manifest for Wojo's Uno Q Face Outline Demo
-# ──────────────────────────────────────────────────────────────────
-#
-# This file tells Arduino App Lab how to build and run the project
-# on the Uno Q (Qualcomm QRB2210 + STM32U585).
-#
-# Key concepts:
-#   - "bricks" are containerized services that App Lab manages.
-#   - arduino:web_ui serves the assets/ folder as a web app and
-#     provides WebSocket messaging between the browser and the
-#     Python coordinator (python/main.py).
-#   - The sketch/ folder is compiled and flashed to the STM32 MCU
-#     automatically by App Lab during deployment.
-#   - Bridge RPC is configured implicitly: any Bridge.provide()
-#     call in sketch.ino or python/main.py registers a provider.
-#     No explicit port or endpoint configuration is needed.
-#
-# Network ports:
-#   - The web_ui brick binds to port 8080 by default (configurable
-#     via the App Lab settings UI, not in this file).
-#   - The Python coordinator communicates with the browser over
-#     the WebSocket channel provided by web_ui — no separate port.
-#   - Bridge RPC between MPU and MCU uses an internal serial link
-#     managed by the platform — no network port needed.
-#
-# To deploy:
-#   1. Zip the project root (excluding .git, __pycache__, etc.)
-#   2. Open App Lab on your Uno Q
-#   3. Import the zip file
-#   4. App Lab builds the sketch, starts the Python coordinator,
-#      and serves the web UI automatically.
-# ──────────────────────────────────────────────────────────────────
-
 name: Wojo's Uno Q Face Outline Demo
-icon: "\U0001F916"
-description: >
-  Real-time face tracking demo for Arduino Uno Q (Qualcomm QRB2210).
-  478-point MediaPipe Face Landmarker with expression detection,
-  blink tracking, pupil diameter measurement, and device simulation
-  (Uno Q vs Ventuno). LED matrix shows IP address on boot and
-  face/expression bitmaps during tracking.
-
+description: Real-time face tracking demo for Arduino Uno Q with LED matrix and RGB LED feedback.
+ports: []
 bricks:
-  - arduino:web_ui
+- arduino:video_object_detection:
+    model: face-detection
+- arduino:web_ui: {}
+icon: "\U0001F916"
