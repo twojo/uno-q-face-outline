@@ -40,6 +40,14 @@ function initSocketIO() {
         }
     });
 
+    socket.on('face_count', function(data) {
+        var countEl = document.getElementById('faceCountNumber');
+        if (countEl) {
+            countEl.textContent = data.count;
+            countEl.className = 'face-count-number' + (data.count > 0 ? ' active' : '');
+        }
+    });
+
     socket.on('detection', function(message) {
         clearTimeout(detectionTimeout);
         statusBadge.textContent = 'Face Detected';

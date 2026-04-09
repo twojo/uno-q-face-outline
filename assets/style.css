@@ -351,6 +351,50 @@ body {
     opacity: 1;
 }
 
+.face-count-section {
+    display: flex;
+    justify-content: center;
+    padding: 4px 0;
+}
+
+.face-count-display {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.face-count-label {
+    color: var(--muted);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.face-count-number {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    min-width: 28px;
+    text-align: center;
+    transition: color 0.2s ease;
+}
+
+.face-count-number.active {
+    color: var(--green);
+}
+
+.face-count-separator {
+    color: var(--border);
+    font-size: 20px;
+    font-weight: 300;
+}
+
+.face-count-max {
+    color: var(--muted);
+    font-size: 13px;
+}
+
 .feedback-content {
     display: flex;
     flex-direction: column;

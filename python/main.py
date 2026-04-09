@@ -48,6 +48,8 @@ def send_detections_to_ui(detections: dict):
     elif n > 0 and _heartbeat_count % 30 == 0:
         safe_call("show_face")
 
+    ui.send_message("face_count", {"count": n})
+
     for key, value in detections.items():
         conf = value.get("confidence") if isinstance(value, dict) else value
         entry = {
