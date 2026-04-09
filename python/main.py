@@ -27,21 +27,25 @@ def face_detected():
     global face_present
     if not face_present:
         face_present = True
+        safe_call("show_face")
         safe_call("flash_face", "3")
         safe_call("set_rgb", "green")
     print("Face detected!")
 
 detection_stream.on_detect("face", face_detected)
 
+_heartbeat_count = 0
+
 def send_detections_to_ui(detections: dict):
-    global face_present
+    global face_present, _heartbeat_count
     n = len(detections)
+    _heartbeat_count += 1
 
     if n == 0 and face_present:
         face_present = False
         safe_call("set_rgb", "off")
         safe_call("show_no_face")
-    elif n > 0:
+    elif n > 0 and _heartbeat_count % 30 == 0:
         safe_call("show_face")
 
     for key, value in detections.items():

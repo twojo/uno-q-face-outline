@@ -82,9 +82,9 @@ SPDX-License-Identifier: MIT
         const targetPath = '/embed';
         const streamUrl = 'http://' + currentHostname + ':' + targetPort + targetPath;
 
-        let retryTimer = null;
         let connected = false;
         let retryCount = 0;
+        let loadTimer = null;
 
         function updatePlaceholder(msg) {
             const p = placeholder.querySelector('.feedback-text');
@@ -96,23 +96,21 @@ SPDX-License-Identifier: MIT
             retryCount++;
             updatePlaceholder('Connecting to camera... (attempt ' + retryCount + ')');
             iframe.src = streamUrl;
+            if (loadTimer) clearTimeout(loadTimer);
+            loadTimer = setTimeout(function() {
+                if (!connected) tryLoadStream();
+            }, 6000);
         }
 
         iframe.onload = function() {
             connected = true;
-            if (retryTimer) {
-                clearInterval(retryTimer);
-                retryTimer = null;
+            if (loadTimer) {
+                clearTimeout(loadTimer);
+                loadTimer = null;
             }
             placeholder.style.display = 'none';
             iframe.style.display = 'block';
         };
-
-        retryTimer = setInterval(function() {
-            if (!connected) {
-                tryLoadStream();
-            }
-        }, 5000);
 
         setTimeout(tryLoadStream, 500);
     </script>
