@@ -220,16 +220,34 @@ function resetConfidence() {
     const overlay = document.getElementById('meshOverlay');
     if (!overlay) return;
     const ctx = overlay.getContext('2d');
+    const statusEl = document.getElementById('meshStatus');
 
+    function setMeshStatus(msg, isError) {
+        console.log('[Mesh] ' + msg);
+        if (statusEl) {
+            statusEl.textContent = msg;
+            statusEl.style.color = isError ? '#b00020' : '#008184';
+            statusEl.style.display = 'block';
+        }
+    }
+
+    let FaceLandmarker, FilesetResolver, DrawingUtils;
     try {
+        setMeshStatus('Loading MediaPipe...', false);
         const vision = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs');
-        const { FaceLandmarker, FilesetResolver, DrawingUtils } = vision;
+        ({ FaceLandmarker, FilesetResolver, DrawingUtils } = vision);
+    } catch (err) {
+        setMeshStatus('Mesh unavailable: cannot load MediaPipe (' + err.message + ')', true);
+        return;
+    }
 
+    let faceLandmarker;
+    try {
+        setMeshStatus('Initializing face landmarker...', false);
         const filesetResolver = await FilesetResolver.forVisionTasks(
             'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm'
         );
-
-        const faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+        faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
             baseOptions: {
                 modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
                 delegate: 'GPU'
@@ -240,86 +258,163 @@ function resetConfidence() {
             minTrackingConfidence: 0.5,
             outputFaceBlendshapes: true
         });
+    } catch (err) {
+        setMeshStatus('Mesh unavailable: landmarker init failed (' + err.message + ')', true);
+        return;
+    }
 
-        const video = document.createElement('video');
-        video.setAttribute('autoplay', '');
-        video.setAttribute('playsinline', '');
-        video.setAttribute('muted', '');
+    let video = null;
+    let drawVideoOnCanvas = true;
+    let mirrorVideo = true;
 
+    try {
+        setMeshStatus('Requesting camera access...', false);
+        const v = document.createElement('video');
+        v.setAttribute('autoplay', '');
+        v.setAttribute('playsinline', '');
+        v.setAttribute('muted', '');
         const stream = await navigator.mediaDevices.getUserMedia({
             video: { width: 640, height: 480, facingMode: 'user' },
             audio: false
         });
-        video.srcObject = stream;
-        await video.play();
+        v.srcObject = stream;
+        await v.play();
+        video = v;
+        setMeshStatus('Camera access granted', false);
+    } catch (err) {
+        console.log('[Mesh] getUserMedia failed: ' + err.message);
+    }
 
-        overlay.width = video.videoWidth || 640;
-        overlay.height = video.videoHeight || 480;
-        overlay.style.display = 'block';
-
-        const drawingUtils = new DrawingUtils(ctx);
-
-        function trackLoop(timestamp) {
-            ctx.clearRect(0, 0, overlay.width, overlay.height);
-
-            ctx.save();
-            ctx.scale(-1, 1);
-            ctx.drawImage(video, -overlay.width, 0, overlay.width, overlay.height);
-            ctx.restore();
-
-            if (video.readyState >= 2) {
-                let results;
-                try {
-                    results = faceLandmarker.detectForVideo(video, timestamp);
-                } catch (e) {
-                    requestAnimationFrame(trackLoop);
-                    return;
-                }
-
-                if (results.faceLandmarks) {
-                    for (let i = 0; i < results.faceLandmarks.length; i++) {
-                        const mirrored = results.faceLandmarks[i].map(p => ({x: 1 - p.x, y: p.y, z: p.z}));
-
-                        drawingUtils.drawConnectors(mirrored, FaceLandmarker.FACE_LANDMARKS_TESSELATION, {color: '#C0C0C070', lineWidth: 1});
-                        drawingUtils.drawConnectors(mirrored, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, {color: '#E0E0E0', lineWidth: 2});
-                        drawingUtils.drawConnectors(mirrored, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, {color: '#30FF30', lineWidth: 1});
-                        drawingUtils.drawConnectors(mirrored, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, {color: '#30FF30', lineWidth: 1});
-                        drawingUtils.drawConnectors(mirrored, FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS, {color: '#FF3030', lineWidth: 1});
-                        drawingUtils.drawConnectors(mirrored, FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, {color: '#FF3030', lineWidth: 1});
-                        drawingUtils.drawConnectors(mirrored, FaceLandmarker.FACE_LANDMARKS_LIPS, {color: '#FF6090', lineWidth: 1});
-                    }
-
-                    if (results.faceBlendshapes && results.faceBlendshapes[0]) {
-                        const shapes = results.faceBlendshapes[0].categories;
-                        let smile = 0, surprise = 0, brow = 0;
-                        for (const s of shapes) {
-                            if (s.categoryName === 'mouthSmileLeft' || s.categoryName === 'mouthSmileRight') smile += s.score;
-                            if (s.categoryName === 'jawOpen') surprise += s.score;
-                            if (s.categoryName === 'browInnerUp') brow += s.score;
-                        }
-                        let expr = 'neutral';
-                        if (surprise > 0.5) expr = 'surprised';
-                        else if (smile > 0.8) expr = 'happy';
-                        else if (brow > 0.4) expr = 'angry';
-
-                        socket.emit('face_data', {faces: results.faceLandmarks.length, expression: expr});
+    if (!video) {
+        setMeshStatus('Trying brick video stream...', false);
+        for (let attempt = 0; attempt < 10 && !video; attempt++) {
+            try {
+                const iframeEl = document.getElementById('dynamicIframe');
+                if (iframeEl && iframeEl.contentDocument) {
+                    const iframeVideo = iframeEl.contentDocument.querySelector('video');
+                    if (iframeVideo && iframeVideo.readyState >= 2) {
+                        video = iframeVideo;
+                        drawVideoOnCanvas = false;
+                        mirrorVideo = false;
+                        setMeshStatus('Using brick video stream', false);
+                        break;
                     }
                 }
+            } catch (err) {
+                console.log('[Mesh] iframe access failed (cross-origin): ' + err.message);
+                break;
             }
-
-            requestAnimationFrame(trackLoop);
+            await new Promise(r => setTimeout(r, 1000));
         }
+    }
 
-        const iframeEl = document.getElementById('dynamicIframe');
-        const placeholder = document.getElementById('videoPlaceholder');
+    if (!video) {
+        try {
+            setMeshStatus('Trying direct video stream...', false);
+            const streamHost = window.location.hostname;
+            const v = document.createElement('video');
+            v.crossOrigin = 'anonymous';
+            v.setAttribute('autoplay', '');
+            v.setAttribute('playsinline', '');
+            v.setAttribute('muted', '');
+            v.src = `http://${streamHost}:4912/stream`;
+            await new Promise((resolve, reject) => {
+                v.onloadeddata = resolve;
+                v.onerror = reject;
+                setTimeout(() => reject(new Error('timeout')), 5000);
+            });
+            await v.play();
+            video = v;
+            drawVideoOnCanvas = true;
+            mirrorVideo = false;
+            setMeshStatus('Using direct video stream', false);
+        } catch (err) {
+            console.log('[Mesh] direct stream failed: ' + err.message);
+        }
+    }
+
+    if (!video) {
+        setMeshStatus('Mesh overlay needs camera access (HTTPS or localhost required)', true);
+        return;
+    }
+
+    const iframeEl = document.getElementById('dynamicIframe');
+    const placeholder = document.getElementById('videoPlaceholder');
+
+    overlay.width = video.videoWidth || 640;
+    overlay.height = video.videoHeight || 480;
+    overlay.style.display = 'block';
+
+    if (drawVideoOnCanvas) {
         if (iframeEl) iframeEl.style.display = 'none';
         if (placeholder) placeholder.style.display = 'none';
+    } else {
+        overlay.style.background = 'transparent';
+    }
+
+    if (statusEl) statusEl.style.display = 'none';
+
+    const drawingUtils = new DrawingUtils(ctx);
+
+    function trackLoop(timestamp) {
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+        if (drawVideoOnCanvas) {
+            ctx.save();
+            if (mirrorVideo) {
+                ctx.scale(-1, 1);
+                ctx.drawImage(video, -overlay.width, 0, overlay.width, overlay.height);
+            } else {
+                ctx.drawImage(video, 0, 0, overlay.width, overlay.height);
+            }
+            ctx.restore();
+        }
+
+        if (video.readyState >= 2) {
+            let results;
+            try {
+                results = faceLandmarker.detectForVideo(video, timestamp);
+            } catch (e) {
+                requestAnimationFrame(trackLoop);
+                return;
+            }
+
+            if (results.faceLandmarks) {
+                for (let i = 0; i < results.faceLandmarks.length; i++) {
+                    const landmarks = mirrorVideo
+                        ? results.faceLandmarks[i].map(p => ({x: 1 - p.x, y: p.y, z: p.z}))
+                        : results.faceLandmarks[i];
+
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION, {color: '#C0C0C070', lineWidth: 1});
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, {color: '#E0E0E0', lineWidth: 2});
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, {color: '#30FF30', lineWidth: 1});
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, {color: '#30FF30', lineWidth: 1});
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS, {color: '#FF3030', lineWidth: 1});
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, {color: '#FF3030', lineWidth: 1});
+                    drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LIPS, {color: '#FF6090', lineWidth: 1});
+                }
+
+                if (results.faceBlendshapes && results.faceBlendshapes[0]) {
+                    const shapes = results.faceBlendshapes[0].categories;
+                    let smile = 0, surprise = 0, brow = 0;
+                    for (const s of shapes) {
+                        if (s.categoryName === 'mouthSmileLeft' || s.categoryName === 'mouthSmileRight') smile += s.score;
+                        if (s.categoryName === 'jawOpen') surprise += s.score;
+                        if (s.categoryName === 'browInnerUp') brow += s.score;
+                    }
+                    let expr = 'neutral';
+                    if (surprise > 0.5) expr = 'surprised';
+                    else if (smile > 0.8) expr = 'happy';
+                    else if (brow > 0.4) expr = 'angry';
+
+                    socket.emit('face_data', {faces: results.faceLandmarks.length, expression: expr});
+                }
+            }
+        }
 
         requestAnimationFrame(trackLoop);
-        console.log('Face mesh overlay initialized successfully');
-
-    } catch (err) {
-        console.log('Face mesh overlay not available (getUserMedia/MediaPipe): ' + err.message);
-        console.log('Falling back to brick camera iframe');
     }
+
+    requestAnimationFrame(trackLoop);
+    console.log('Face mesh overlay initialized successfully');
 })();

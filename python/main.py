@@ -11,7 +11,20 @@ import time
 ui = WebUI()
 detection_stream = VideoObjectDetection(confidence=0.5, debounce_sec=5.0)
 
-ui.on_message("override_th", lambda sid, threshold: detection_stream.override_threshold(threshold))
+_threshold_ready = False
+
+def safe_override_threshold(sid, threshold):
+    global _threshold_ready
+    try:
+        detection_stream.override_threshold(threshold)
+        _threshold_ready = True
+    except AttributeError:
+        if _threshold_ready:
+            print(f"WARNING: override_threshold failed unexpectedly for value {threshold}")
+        else:
+            print("INFO: Model not ready yet, threshold override deferred")
+
+ui.on_message("override_th", safe_override_threshold)
 
 # Example usage: Register a callback for when a specific object is detected
 def face_detected():
