@@ -25,7 +25,6 @@ var RIGHT_IRIS = FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS;
 var LIPS = FaceLandmarker.FACE_LANDMARKS_LIPS;
 var TESSELATION = FaceLandmarker.FACE_LANDMARKS_TESSELATION;
 
-var video = document.getElementById("webcamVideo");
 var canvas = document.getElementById("overlayCanvas");
 var ctx = canvas.getContext("2d");
 var placeholder = document.getElementById("videoPlaceholder");
@@ -56,6 +55,8 @@ var minConfidence = 0.5;
 var lastExpression = "";
 
 var socket = null;
+var latestFrame = null;
+var frameReady = false;
 
 drawModeSelect.addEventListener("change", function () {
   drawMode = this.value;
@@ -93,25 +94,30 @@ async function initLandmarker() {
   drawingUtils = new DrawingUtils(ctx);
 }
 
-async function startCamera() {
-  updatePlaceholder("Requesting camera...");
-  try {
-    var stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: CAM_WIDTH, height: CAM_HEIGHT, facingMode: "user" },
-      audio: false
-    });
-    video.srcObject = stream;
-    await video.play();
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    placeholder.style.display = "none";
-    video.style.display = "block";
-    canvas.style.display = "block";
-    running = true;
-    requestAnimationFrame(detectLoop);
-  } catch (err) {
-    updatePlaceholder("Camera error: " + err.message);
+function startCamera() {
+  updatePlaceholder("Waiting for camera feed from Uno Q...");
+
+  if (!socket) {
+    updatePlaceholder("No connection to board — camera unavailable");
+    return;
   }
+
+  latestFrame = new Image();
+
+  socket.on("camera_frame", function (data) {
+    latestFrame.onload = function () {
+      frameReady = true;
+      if (!running) {
+        canvas.width = latestFrame.naturalWidth || CAM_WIDTH;
+        canvas.height = latestFrame.naturalHeight || CAM_HEIGHT;
+        placeholder.style.display = "none";
+        canvas.style.display = "block";
+        running = true;
+        requestAnimationFrame(detectLoop);
+      }
+    };
+    latestFrame.src = "data:image/jpeg;base64," + data.data;
+  });
 }
 
 function detectLoop(timestamp) {
@@ -128,14 +134,18 @@ function detectLoop(timestamp) {
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  if (!faceLandmarker) {
+  if (frameReady && latestFrame && latestFrame.complete) {
+    ctx.drawImage(latestFrame, 0, 0, canvas.width, canvas.height);
+  }
+
+  if (!faceLandmarker || !frameReady) {
     requestAnimationFrame(detectLoop);
     return;
   }
 
   var results;
   try {
-    results = faceLandmarker.detectForVideo(video, timestamp);
+    results = faceLandmarker.detectForVideo(canvas, timestamp);
   } catch (e) {
     requestAnimationFrame(detectLoop);
     return;
@@ -728,8 +738,8 @@ async function main() {
     setStatus("Error", "");
     return;
   }
-  setStatus("Starting camera...", "");
-  await startCamera();
+  setStatus("Waiting for camera...", "");
+  startCamera();
   setStatus("Scanning...", "scanning");
 }
 

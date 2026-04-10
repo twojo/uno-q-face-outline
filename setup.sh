@@ -21,40 +21,34 @@ echo "  Arduino Uno Q (Qualcomm QRB2210 + STM32U585)"
 echo "================================================"
 echo ""
 
-MODELS_DIR="models"
-mkdir -p "$MODELS_DIR"
-
 echo "[1/3] Installing Python dependencies..."
-pip3 install --quiet "opencv-python-headless>=4.8.1.78" numpy 2>/dev/null || \
-pip3 install "opencv-python-headless>=4.8.1.78" numpy
+pip3 install --quiet "opencv-python-headless>=4.8.1.78" numpy Pillow 2>/dev/null || \
+pip3 install "opencv-python-headless>=4.8.1.78" numpy Pillow
 echo "      Done."
 echo ""
 
-echo "[2/3] Downloading face detection model (YuNet, 233 KB)..."
-if [ -f "$MODELS_DIR/face_detection_yunet.onnx" ]; then
-    echo "      Already exists — skipping."
+echo "[2/3] Downloading AI models..."
+if [ -f "model_get.sh" ]; then
+    chmod +x model_get.sh
+    ./model_get.sh
 else
-    curl -fsSL -o "$MODELS_DIR/face_detection_yunet.onnx" \
-        "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
-    echo "      Downloaded."
+    echo "      model_get.sh not found — skipping model download."
+    echo "      Run ./model_get.sh manually to download models."
 fi
 echo ""
 
-echo "[3/3] Downloading face mesh model (468 landmarks, ONNX)..."
-if [ -f "$MODELS_DIR/face_mesh_192x192.onnx" ]; then
-    echo "      Already exists — skipping."
-else
-    curl -fsSL -o "$MODELS_DIR/face_mesh_192x192.onnx" \
-        "https://github.com/PINTO0309/facemesh_onnx_tensorrt/raw/main/face_mesh_Nx3x192x192_post.onnx"
-    echo "      Downloaded."
-fi
+echo "[3/3] Verifying setup..."
+python3 -c "import cv2; print('      OpenCV', cv2.__version__)" 2>/dev/null || echo "      WARNING: OpenCV not importable"
+python3 -c "import numpy; print('      NumPy', numpy.__version__)" 2>/dev/null || echo "      WARNING: NumPy not importable"
+python3 -c "from PIL import Image; print('      Pillow OK')" 2>/dev/null || echo "      WARNING: Pillow not importable"
 echo ""
 
+MODELS_DIR="models"
 echo "================================================"
 echo "  Setup complete!"
 echo ""
 echo "  Models in ./$MODELS_DIR/:"
-ls -lh "$MODELS_DIR"/*.onnx 2>/dev/null | awk '{print "    " $NF " (" $5 ")"}'
+ls -lh "$MODELS_DIR"/*.onnx 2>/dev/null | awk '{print "    " $NF " (" $5 ")"}' || echo "    (none downloaded)"
 echo ""
 echo "  Run options:"
 echo ""

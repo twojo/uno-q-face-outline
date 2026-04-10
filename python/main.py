@@ -17,9 +17,12 @@ from arduino.app_utils import *
 from arduino.app_bricks.web_ui import WebUI
 from arduino.app_bricks.video_objectdetection import VideoObjectDetection
 from datetime import datetime, UTC
+from PIL import Image
 import socket
 import threading
 import time
+import base64
+import io
 import os
 
 ui = WebUI()
@@ -204,6 +207,32 @@ ui.on_message("play_mod_buzzer", _on_ui_play_buzzer)
 ui.on_message("set_mod_btn_leds", _on_ui_set_btn_leds)
 ui.on_message("reset_mod_knob", _on_ui_reset_knob)
 ui.on_message("get_modulinos", _on_ui_get_modulinos)
+
+_FRAME_INTERVAL = 1.0 / 12
+_JPEG_QUALITY = 65
+_stream_active = False
+
+def _stream_camera():
+    global _stream_active
+    _log("CAMERA  frame streaming thread started")
+    while True:
+        try:
+            frame = detection_stream.get_frame()
+            if frame is not None:
+                img = Image.fromarray(frame)
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=_JPEG_QUALITY)
+                b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+                ui.send_message("camera_frame", {"data": b64, "w": img.width, "h": img.height})
+                if not _stream_active:
+                    _stream_active = True
+                    _log(f"CAMERA  first frame sent ({img.width}x{img.height})")
+        except Exception as e:
+            if _stream_active:
+                _log(f"CAMERA  frame error: {e}")
+        time.sleep(_FRAME_INTERVAL)
+
+threading.Thread(target=_stream_camera, daemon=True).start()
 
 def startup():
     time.sleep(3)
