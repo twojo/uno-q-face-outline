@@ -113,15 +113,17 @@ function printDetection(newDetection) {
 // Function to render the list of scans
 function renderDetections() {
     // Clear the list
-    recentDetectionsElement.innerHTML = ``;
+    recentDetectionsElement.replaceChildren();
 
     if (scans.length === 0) {
-        recentDetectionsElement.innerHTML = `
-            <div class="no-recent-scans">
-                <img src="./img/no-face.svg">
-                No face detected yet
-            </div>
-        `;
+        const noScans = document.createElement('div');
+        noScans.className = 'no-recent-scans';
+        const noScansImg = document.createElement('img');
+        noScansImg.src = './img/no-face.svg';
+        const noScansText = document.createTextNode('No face detected yet');
+        noScans.appendChild(noScansImg);
+        noScans.appendChild(noScansText);
+        recentDetectionsElement.appendChild(noScans);
         return;
     }
 
