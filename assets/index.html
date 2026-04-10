@@ -7,14 +7,34 @@ SPDX-License-Identifier: MIT
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wojo's Face Demo — Arduino Uno Q</title>
+    <title>Wojo's Uno Q Face Outline Tracker Demo</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div>
         <div class="header">
-            <h1 class="title-text">Wojo's Face Demo</h1>
+            <img src="qualcomm-logo.png" alt="Qualcomm" class="header-logo" />
+            <div class="header-div"></div>
+            <div class="header-title">
+                <h1 class="title-text">Wojo's Uno Q Face Outline Tracker Demo</h1>
+                <span class="header-sub">Arduino Uno Q — Qualcomm QRB2210 + STM32U585</span>
+            </div>
             <span class="status-badge" id="statusBadge">Loading...</span>
+        </div>
+
+        <div class="header-links">
+            <a href="https://store.arduino.cc/collections/arduino-days-promo/products/uno-q-4gb" target="_blank" rel="noopener" class="header-link">Get Uno Q 4GB</a>
+            <a href="https://docs.arduino.cc/software/app-lab/" target="_blank" rel="noopener" class="header-link">App Lab</a>
+            <a href="https://github.com/arduino/arduino-app-lab" target="_blank" rel="noopener" class="header-link">GitHub</a>
+        </div>
+
+        <div class="specs-bar">
+            <div class="spec-chip"><span class="spec-k">SoC</span><span class="spec-v">QRB2210</span></div>
+            <div class="spec-chip"><span class="spec-k">CPU</span><span class="spec-v">Cortex-A53</span></div>
+            <div class="spec-chip"><span class="spec-k">MCU</span><span class="spec-v">STM32U585</span></div>
+            <div class="spec-chip"><span class="spec-k">RAM</span><span class="spec-v">4GB</span></div>
+            <div class="spec-chip"><span class="spec-k">Faces</span><span class="spec-v" id="specFaces">2</span></div>
+            <div class="spec-chip"><span class="spec-k">Del</span><span class="spec-v" id="specDel">CPU</span></div>
         </div>
 
         <div class="main-content">
