@@ -78,7 +78,9 @@ function initSocketIO() {
             greetingImg.alt = 'Hand';
             const greetingP = document.createElement('p');
             greetingP.textContent = randomGreeting;
-            feedbackContentElement.replaceChildren(greetingImg, greetingP);
+            feedbackContentElement.textContent = '';
+            feedbackContentElement.appendChild(greetingImg);
+            feedbackContentElement.appendChild(greetingP);
             handVisible = true;
         }
 
