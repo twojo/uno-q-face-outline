@@ -2,19 +2,41 @@
 //
 // Runs on the STM32U585 microcontroller inside the Arduino Uno Q.
 // Receives commands from the Linux MPU via Router Bridge and drives
-// the built-in LED and RGB LED to reflect face tracking state.
+// the built-in LED matrix, RGB LED, and status LED to reflect
+// face tracking state.
 //
-// Matches Leonardo Cavagnis' "Greetings from Uno Q" structure:
-//   - Arduino_RouterBridge.h for Bridge RPC
-//   - LED_BUILTIN for status
-//   - No Arduino_LED_Matrix (not available as a separate library on Zephyr)
+// LED matrix uses loadFrame() with uint32_t[4] bitmaps (same as
+// Leonardo Cavagnis' "Greetings from Uno Q" reference project).
 
 #include "Arduino_RouterBridge.h"
+#include <Arduino_LED_Matrix.h>
+
+Arduino_LED_Matrix matrix;
 
 #define STATUS_LED  LED_BUILTIN
 #define PIN_LED_R   (LED_BUILTIN + 3)
 #define PIN_LED_G   (LED_BUILTIN + 4)
 #define PIN_LED_B   (LED_BUILTIN + 5)
+
+const uint32_t face_happy[] = {
+  0x000200a8, 0x0a802000, 0x04403e00, 0x00000000
+};
+
+const uint32_t face_idle[] = {
+  0x00000038, 0x0e000000, 0x00007f00, 0x00000000
+};
+
+const uint32_t face_surprise[] = {
+  0x000200a8, 0x0a800000, 0x00001c00, 0x00000000
+};
+
+const uint32_t face_sad[] = {
+  0x000200a8, 0x0a800000, 0x03c04200, 0x00000000
+};
+
+const uint32_t face_error[] = {
+  0x00000000, 0x11000a00, 0x040a0011, 0x00000000
+};
 
 String deviceMode = "uno_q";
 bool facePresent = false;
@@ -49,6 +71,7 @@ void resetMpuHeartbeat() {
     if (mpuTimedOut) {
         mpuTimedOut = false;
         Serial.println("[MCU] MPU heartbeat restored");
+        matrix.loadFrame(face_idle);
         setRGB(true, false, false);
     }
 }
@@ -64,6 +87,7 @@ void showFace() {
     facePresent = true;
     digitalWrite(STATUS_LED, LOW);
     setRGB(false, true, false);
+    matrix.loadFrame(face_happy);
 }
 
 void showNoFace() {
@@ -77,12 +101,14 @@ void showNoFace() {
     facePresent = false;
     digitalWrite(STATUS_LED, HIGH);
     setRGB(true, false, false);
+    matrix.loadFrame(face_idle);
 }
 
 void flashFace(int count) {
     resetMpuHeartbeat();
     for (int i = 0; i < count; i++) {
         digitalWrite(STATUS_LED, LOW);
+        matrix.loadFrame(face_happy);
         setRGB(false, true, false);
         delay(80);
         digitalWrite(STATUS_LED, HIGH);
@@ -91,6 +117,7 @@ void flashFace(int count) {
     }
     if (facePresent) {
         digitalWrite(STATUS_LED, LOW);
+        matrix.loadFrame(face_happy);
         setRGB(false, true, false);
     }
 }
@@ -101,12 +128,16 @@ void showExpression(String expr) {
     Serial.println(expr);
 
     if (expr == "smile" || expr == "happy" || expr == "neutral") {
+        matrix.loadFrame(face_happy);
         setRGB(false, true, false);
     } else if (expr == "surprise" || expr == "surprised") {
+        matrix.loadFrame(face_surprise);
         setRGB(false, false, true);
     } else if (expr == "eyebrow" || expr == "angry" || expr == "sad") {
+        matrix.loadFrame(face_sad);
         setRGB(true, true, false);
     } else {
+        matrix.loadFrame(face_happy);
         setRGB(true, false, true);
     }
 }
@@ -166,22 +197,12 @@ void onMpuAck() {
 void setup() {
     bootTime = millis();
     Serial.begin(115200);
-    delay(500);
-
-    Serial.println("=== WOJO'S UNO Q FACE TRACKER ===");
-
-    pinMode(STATUS_LED, OUTPUT);
-    digitalWrite(STATUS_LED, HIGH);
+    matrix.begin();
+    pinMode(LED_BUILTIN, OUTPUT);
 
     pinMode(PIN_LED_R, OUTPUT);
     pinMode(PIN_LED_G, OUTPUT);
     pinMode(PIN_LED_B, OUTPUT);
-    rgbOff();
-
-    Serial.println("  RGB self-test...");
-    setRGB(true, false, false); delay(300);
-    setRGB(false, true, false); delay(300);
-    setRGB(false, false, true); delay(300);
     rgbOff();
 
     if (!Bridge.begin()) {
@@ -202,8 +223,7 @@ void setup() {
     Bridge.provide("report_status",   reportStatus);
     Bridge.provide("mpu_ack",         onMpuAck);
 
-    Serial.println("  10 providers registered");
-    Serial.println("  Waiting for MPU connection...");
+    matrix.loadFrame(face_idle);
 
     Bridge.call("mcu_ready");
     Serial.println("[MCU] mcu_ready sent");
@@ -226,6 +246,7 @@ void loop() {
         (now - lastMpuActivity >= MPU_HEARTBEAT_TIMEOUT_MS)) {
         mpuTimedOut = true;
         Serial.println("[MCU] MPU heartbeat timeout");
+        matrix.loadFrame(face_error);
         setRGB(true, false, true);
         facePresent = false;
         digitalWrite(STATUS_LED, HIGH);
