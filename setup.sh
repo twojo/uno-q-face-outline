@@ -22,8 +22,8 @@ echo "================================================"
 echo ""
 
 echo "[1/3] Installing Python dependencies..."
-pip3 install --quiet "opencv-python-headless>=4.8.1.78" numpy Pillow 2>/dev/null || \
-pip3 install "opencv-python-headless>=4.8.1.78" numpy Pillow
+pip3 install --quiet "opencv-python-headless>=4.8.1.78" numpy "Pillow>=10.2.0" 2>/dev/null || \
+pip3 install "opencv-python-headless>=4.8.1.78" numpy "Pillow>=10.2.0"
 echo "      Done."
 echo ""
 
