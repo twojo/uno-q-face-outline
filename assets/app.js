@@ -314,16 +314,34 @@ function detectLoop(timestamp) {
   requestAnimationFrame(detectLoop);
 }
 
+function drawConnectors(landmarks, connections, color, lineWidth) {
+  var w = canvas.width;
+  var h = canvas.height;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.beginPath();
+  for (var i = 0; i < connections.length; i++) {
+    var conn = connections[i];
+    var start = conn.start !== undefined ? conn.start : conn[0];
+    var end = conn.end !== undefined ? conn.end : conn[1];
+    if (start < landmarks.length && end < landmarks.length) {
+      var a = landmarks[start];
+      var b = landmarks[end];
+      ctx.moveTo(a.x * w, a.y * h);
+      ctx.lineTo(b.x * w, b.y * h);
+    }
+  }
+  ctx.stroke();
+}
+
 function drawFace(landmarks, faceIndex) {
   if (drawMode === "none") return;
 
   drawCount++;
   if (drawCount === 1) {
     dbg("First draw call: mode=" + drawMode + " landmarks=" + landmarks.length + " canvas=" + canvas.width + "x" + canvas.height);
-    ctx.strokeStyle = "#FF0000";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
-    dbg("Drew test rectangle — if you see a red border around the video, canvas overlay is working");
+    var conn0 = FACE_OVAL[0];
+    dbg("Connector format sample: " + JSON.stringify(conn0));
   }
   if (drawCount % 300 === 0) {
     dbg("Draw #" + drawCount + ": mode=" + drawMode + " faces drawing OK");
@@ -338,29 +356,14 @@ function drawFace(landmarks, faceIndex) {
   var c = colors[faceIndex % colors.length];
 
   if (drawMode === "mesh") {
-    drawingUtils.drawConnectors(landmarks, TESSELATION, {
-      color: "#C0C0C030",
-      lineWidth: 1
-    });
+    drawConnectors(landmarks, TESSELATION, "rgba(192,192,192,0.18)", 1);
   }
 
   if (drawMode === "outline" || drawMode === "mesh") {
-    drawingUtils.drawConnectors(landmarks, FACE_OVAL, {
-      color: c.line,
-      lineWidth: 2
-    });
-    drawingUtils.drawConnectors(landmarks, LEFT_EYE, {
-      color: c.line,
-      lineWidth: 1.5
-    });
-    drawingUtils.drawConnectors(landmarks, RIGHT_EYE, {
-      color: c.line,
-      lineWidth: 1.5
-    });
-    drawingUtils.drawConnectors(landmarks, LIPS, {
-      color: c.line,
-      lineWidth: 1.5
-    });
+    drawConnectors(landmarks, FACE_OVAL, c.line, 2);
+    drawConnectors(landmarks, LEFT_EYE, c.line, 1.5);
+    drawConnectors(landmarks, RIGHT_EYE, c.line, 1.5);
+    drawConnectors(landmarks, LIPS, c.line, 1.5);
   }
 
   if (drawMode === "dots") {
