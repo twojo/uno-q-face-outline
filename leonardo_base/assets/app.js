@@ -73,18 +73,23 @@ function initSocketIO() {
         if (!handVisible) {
             const greetings = ["Hello!", "Hi there!", "Hey!", "Nice to see you!", "Great to have you here!", "I see you", "Looking good!", "There you are!", "Howdy!", "Happy to see a face!", "Hi, friend!", "Face detected!", "Hello, human!"];
             const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
-            feedbackContentElement.innerHTML = `
-                <img src="img/hand.gif" alt="Hand">
-                <p>${randomGreeting}</p>
-            `;
+            const greetImg = document.createElement('img');
+            greetImg.src = 'img/hand.gif';
+            greetImg.alt = 'Hand';
+            const greetP = document.createElement('p');
+            greetP.textContent = randomGreeting;
+            feedbackContentElement.replaceChildren(greetImg, greetP);
             handVisible = true;
         }
 
         detectionTimeout = setTimeout(() => {
-            feedbackContentElement.innerHTML = `
-                <img src="img/stars.svg" alt="Stars">
-                <p class="feedback-text">System response will appear here</p>
-            `;
+            const resetImg = document.createElement('img');
+            resetImg.src = 'img/stars.svg';
+            resetImg.alt = 'Stars';
+            const resetP = document.createElement('p');
+            resetP.className = 'feedback-text';
+            resetP.textContent = 'System response will appear here';
+            feedbackContentElement.replaceChildren(resetImg, resetP);
             handVisible = false;
         }, 3000); // Revert after 3 seconds of no detections
     });
@@ -122,8 +127,8 @@ function renderDetections() {
         // Content (text + icon)
         const contentText = document.createElement('span');
         contentText.className = 'scan-content';
-		const value = scan.confidence;
-		const result = Math.floor(value * 1000) / 10;
+                const value = scan.confidence;
+                const result = Math.floor(value * 1000) / 10;
         contentText.innerHTML = `${result}% - Face`;
 
         // Time
