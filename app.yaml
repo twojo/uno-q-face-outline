@@ -4,6 +4,5 @@ ports: []
 bricks:
 - arduino:video_object_detection:
     model: face-detection
-    fps: 10
 - arduino:web_ui: {}
 icon: 🤖
