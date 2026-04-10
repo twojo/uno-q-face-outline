@@ -122,61 +122,66 @@ SPDX-License-Identifier: MIT
             <button id="debugToggle" class="debug-toggle">_</button>
         </div>
         <div id="debugBody" class="debug-body">
-            <div class="debug-section">
-                <div class="debug-label">Environment</div>
-                <div id="dbgEnv" class="debug-val">—</div>
-            </div>
-            <div class="debug-section">
-                <div class="debug-label">Protocol</div>
-                <div id="dbgProto" class="debug-val">—</div>
-            </div>
-            <div class="debug-section">
-                <div class="debug-label">User Agent</div>
-                <div id="dbgUA" class="debug-val dbg-small">—</div>
-            </div>
-            <div class="debug-section">
-                <div class="debug-label">Camera API</div>
-                <div id="dbgCamAPI" class="debug-val">—</div>
-            </div>
-            <div class="debug-section">
-                <div class="debug-label">WebGL</div>
-                <div id="dbgWebGL" class="debug-val">—</div>
-            </div>
-            <div class="debug-section">
-                <div class="debug-label">MediaPipe Import</div>
-                <div id="dbgMPImport" class="debug-val">pending</div>
-            </div>
-            <div class="debug-section">
-                <div class="debug-label">WASM Fileset</div>
-                <div id="dbgWASM" class="debug-val">pending</div>
-            </div>
-            <div class="debug-section">
-                <div class="debug-label">Face Model</div>
-                <div id="dbgModel" class="debug-val">pending</div>
-            </div>
-            <div class="debug-section">
-                <div class="debug-label">Delegate</div>
-                <div id="dbgDelegate" class="debug-val">—</div>
-            </div>
-            <div class="debug-section">
-                <div class="debug-label">Camera Stream</div>
-                <div id="dbgCamStream" class="debug-val">pending</div>
-            </div>
-            <div class="debug-section">
-                <div class="debug-label">Video Size</div>
-                <div id="dbgVidSize" class="debug-val">—</div>
-            </div>
-            <div class="debug-section">
-                <div class="debug-label">Socket.IO</div>
-                <div id="dbgSocket" class="debug-val">—</div>
-            </div>
-            <div class="debug-section">
-                <div class="debug-label">Detect Loop</div>
-                <div id="dbgLoop" class="debug-val">stopped</div>
-            </div>
-            <div class="debug-divider"></div>
             <div class="debug-label">Log</div>
             <div id="dbgLog" class="debug-log"></div>
+
+            <div class="debug-divider"></div>
+            <div class="debug-label debug-detail-header">System Details</div>
+
+            <div class="debug-details">
+                <div class="debug-section">
+                    <div class="debug-label">Environment</div>
+                    <div id="dbgEnv" class="debug-val">—</div>
+                </div>
+                <div class="debug-section">
+                    <div class="debug-label">Protocol</div>
+                    <div id="dbgProto" class="debug-val">—</div>
+                </div>
+                <div class="debug-section">
+                    <div class="debug-label">User Agent</div>
+                    <div id="dbgUA" class="debug-val dbg-small">—</div>
+                </div>
+                <div class="debug-section">
+                    <div class="debug-label">Camera API</div>
+                    <div id="dbgCamAPI" class="debug-val">—</div>
+                </div>
+                <div class="debug-section">
+                    <div class="debug-label">WebGL</div>
+                    <div id="dbgWebGL" class="debug-val">—</div>
+                </div>
+                <div class="debug-section">
+                    <div class="debug-label">MediaPipe Import</div>
+                    <div id="dbgMPImport" class="debug-val">pending</div>
+                </div>
+                <div class="debug-section">
+                    <div class="debug-label">WASM Fileset</div>
+                    <div id="dbgWASM" class="debug-val">pending</div>
+                </div>
+                <div class="debug-section">
+                    <div class="debug-label">Face Model</div>
+                    <div id="dbgModel" class="debug-val">pending</div>
+                </div>
+                <div class="debug-section">
+                    <div class="debug-label">Delegate</div>
+                    <div id="dbgDelegate" class="debug-val">—</div>
+                </div>
+                <div class="debug-section">
+                    <div class="debug-label">Camera Stream</div>
+                    <div id="dbgCamStream" class="debug-val">pending</div>
+                </div>
+                <div class="debug-section">
+                    <div class="debug-label">Video Size</div>
+                    <div id="dbgVidSize" class="debug-val">—</div>
+                </div>
+                <div class="debug-section">
+                    <div class="debug-label">Socket.IO</div>
+                    <div id="dbgSocket" class="debug-val">—</div>
+                </div>
+                <div class="debug-section">
+                    <div class="debug-label">Detect Loop</div>
+                    <div id="dbgLoop" class="debug-val">stopped</div>
+                </div>
+            </div>
         </div>
     </div>
 
