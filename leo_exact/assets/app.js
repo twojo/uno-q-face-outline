@@ -14,10 +14,15 @@ let handVisible = false;
 document.addEventListener('DOMContentLoaded', () => {
     initSocketIO();
     initializeConfidenceSlider();
-    feedbackContentElement.innerHTML = `
-        <img src="img/stars.svg" alt="Stars">
-        <p class="feedback-text">System response will appear here</p>
-    `;
+    feedbackContentElement.replaceChildren();
+    const initImg = document.createElement('img');
+    initImg.src = 'img/stars.svg';
+    initImg.alt = 'Stars';
+    const initP = document.createElement('p');
+    initP.className = 'feedback-text';
+    initP.textContent = 'System response will appear here';
+    feedbackContentElement.appendChild(initImg);
+    feedbackContentElement.appendChild(initP);
     handVisible = false;
     renderDetections();
 
@@ -73,18 +78,27 @@ function initSocketIO() {
         if (!handVisible) {
             const greetings = ["Hello!", "Hi there!", "Hey!", "Nice to see you!", "Great to have you here!", "I see you", "Looking good!", "There you are!", "Howdy!", "Happy to see a face!", "Hi, friend!", "Face detected!", "Hello, human!"];
             const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
-            feedbackContentElement.innerHTML = `
-                <img src="img/hand.gif" alt="Hand">
-                <p>${randomGreeting}</p>
-            `;
+            feedbackContentElement.replaceChildren();
+            const greetImg = document.createElement('img');
+            greetImg.src = 'img/hand.gif';
+            greetImg.alt = 'Hand';
+            const greetP = document.createElement('p');
+            greetP.textContent = randomGreeting;
+            feedbackContentElement.appendChild(greetImg);
+            feedbackContentElement.appendChild(greetP);
             handVisible = true;
         }
 
         detectionTimeout = setTimeout(() => {
-            feedbackContentElement.innerHTML = `
-                <img src="img/stars.svg" alt="Stars">
-                <p class="feedback-text">System response will appear here</p>
-            `;
+            feedbackContentElement.replaceChildren();
+            const resetImg = document.createElement('img');
+            resetImg.src = 'img/stars.svg';
+            resetImg.alt = 'Stars';
+            const resetP = document.createElement('p');
+            resetP.className = 'feedback-text';
+            resetP.textContent = 'System response will appear here';
+            feedbackContentElement.appendChild(resetImg);
+            feedbackContentElement.appendChild(resetP);
             handVisible = false;
         }, 3000); // Revert after 3 seconds of no detections
     });
@@ -122,8 +136,8 @@ function renderDetections() {
         // Content (text + icon)
         const contentText = document.createElement('span');
         contentText.className = 'scan-content';
-		const value = scan.confidence;
-		const result = Math.floor(value * 1000) / 10;
+                const value = scan.confidence;
+                const result = Math.floor(value * 1000) / 10;
         contentText.innerHTML = `${result}% - Face`;
 
         // Time
