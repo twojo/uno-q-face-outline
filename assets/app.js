@@ -54,9 +54,12 @@ var drawMode = "outline";
 var minConfidence = 0.5;
 var lastExpression = "";
 
+var video = document.getElementById("webcamVideo");
 var socket = null;
 var latestFrame = null;
 var frameReady = false;
+var cameraSource = "none";
+var BRICK_TIMEOUT_MS = 5000;
 
 drawModeSelect.addEventListener("change", function () {
   drawMode = this.value;
@@ -94,30 +97,63 @@ async function initLandmarker() {
   drawingUtils = new DrawingUtils(ctx);
 }
 
-function startCamera() {
-  updatePlaceholder("Waiting for camera feed from Uno Q...");
-
-  if (!socket) {
-    updatePlaceholder("No connection to board — camera unavailable");
-    return;
-  }
-
+function startBrickCamera() {
   latestFrame = new Image();
+  var brickTimer = setTimeout(function () {
+    if (cameraSource === "none") {
+      startBrowserCamera();
+    }
+  }, BRICK_TIMEOUT_MS);
 
   socket.on("camera_frame", function (data) {
-    latestFrame.onload = function () {
-      frameReady = true;
-      if (!running) {
-        canvas.width = latestFrame.naturalWidth || CAM_WIDTH;
-        canvas.height = latestFrame.naturalHeight || CAM_HEIGHT;
-        placeholder.style.display = "none";
-        canvas.style.display = "block";
-        running = true;
-        requestAnimationFrame(detectLoop);
-      }
-    };
-    latestFrame.src = "data:image/jpeg;base64," + data.data;
+    if (cameraSource === "none" || cameraSource === "brick") {
+      cameraSource = "brick";
+      clearTimeout(brickTimer);
+      latestFrame.onload = function () {
+        frameReady = true;
+        if (!running) {
+          canvas.width = latestFrame.naturalWidth || CAM_WIDTH;
+          canvas.height = latestFrame.naturalHeight || CAM_HEIGHT;
+          placeholder.style.display = "none";
+          canvas.style.display = "block";
+          running = true;
+          requestAnimationFrame(detectLoop);
+        }
+      };
+      latestFrame.src = "data:image/jpeg;base64," + data.data;
+    }
   });
+}
+
+async function startBrowserCamera() {
+  updatePlaceholder("No board camera — trying browser webcam...");
+  try {
+    var stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: CAM_WIDTH, height: CAM_HEIGHT, facingMode: "user" },
+      audio: false
+    });
+    cameraSource = "browser";
+    video.srcObject = stream;
+    await video.play();
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    placeholder.style.display = "none";
+    video.style.display = "block";
+    canvas.style.display = "block";
+    running = true;
+    requestAnimationFrame(detectLoop);
+  } catch (err) {
+    updatePlaceholder("Camera unavailable: " + err.message);
+  }
+}
+
+function startCamera() {
+  updatePlaceholder("Connecting to camera...");
+  if (socket) {
+    startBrickCamera();
+  } else {
+    startBrowserCamera();
+  }
 }
 
 function detectLoop(timestamp) {
@@ -134,18 +170,22 @@ function detectLoop(timestamp) {
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  if (frameReady && latestFrame && latestFrame.complete) {
+  if (cameraSource === "brick" && frameReady && latestFrame && latestFrame.complete) {
     ctx.drawImage(latestFrame, 0, 0, canvas.width, canvas.height);
   }
 
-  if (!faceLandmarker || !frameReady) {
+  var inferenceReady = (cameraSource === "brick" && frameReady) ||
+                       (cameraSource === "browser" && video.readyState >= 2);
+
+  if (!faceLandmarker || !inferenceReady) {
     requestAnimationFrame(detectLoop);
     return;
   }
 
   var results;
   try {
-    results = faceLandmarker.detectForVideo(canvas, timestamp);
+    var source = cameraSource === "browser" ? video : canvas;
+    results = faceLandmarker.detectForVideo(source, timestamp);
   } catch (e) {
     requestAnimationFrame(detectLoop);
     return;
