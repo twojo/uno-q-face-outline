@@ -114,14 +114,8 @@ Linux applications into a single workflow.
 <br/>
 
 [Bricks](https://docs.arduino.cc/software/app-lab/tutorials/bricks) are code building
-blocks that abstract away complexity. This project uses two Bricks:
-
-- **`arduino:web_ui`** -- serves the contents of `assets/` as a web application and
-  provides WebSocket messaging between the browser and `python/main.py`. The Brick
-  injects WebSocket connectivity at runtime. No explicit socket code is needed in the HTML.
-
-- **`arduino:video_object_detection`** -- runs YuNet face detection on the QRB2210
-  via a containerized pipeline. Configured in `app.yaml` with `model: face-detection`.
+blocks that abstract away complexity. Each brick deploys as a Docker container on the
+QRB2210 and exposes a Python API. No Docker configuration required.
 
 <br/>
 
@@ -131,26 +125,78 @@ blocks that abstract away complexity. This project uses two Bricks:
 
 <br/>
 
-| Brick                          | What It Does                                  | Setup                               |
-|:-------------------------------|:----------------------------------------------|:------------------------------------|
-| **`arduino:web_ui`**           | Serves web content + WebSocket                | **This demo uses it**               |
-| **`arduino:video_object_detection`** | Detects faces in camera frames (YuNet)  | **This demo uses it**               |
-| `arduino:object_detection`     | Detects objects in camera frames (YOLOX-Nano)  | Add one line to `app.yaml`          |
-| `arduino:motion_detection`     | Detects motion in video stream                | Add one line to `app.yaml`          |
+### Bricks Used in This Demo
+
+| Brick | Role | What It Does |
+|:------|:-----|:-------------|
+| **`arduino:web_ui`** | Interface | Serves `assets/` as a web application, provides Socket.IO messaging between browser and `python/main.py` |
+| **`arduino:video_object_detection`** | Camera + AI | Captures frames from USB camera, runs face detection AI, provides `get_frame()` and `annotated_frame` APIs |
+
+<br/>
+
+**How they work together:**
+
+1. The **`video_object_detection`** brick opens the USB camera and runs AI inference
+2. `python/main.py` reads raw frames via `get_frame()`, encodes them as JPEG, and
+   streams them to the browser over Socket.IO (`camera_frame` event)
+3. The browser draws the frame on a canvas and runs MediaPipe Face Landmarker for
+   detailed 478-point face mesh tracking
+4. The brick's built-in AI also runs as a **fallback** -- if the browser stops sending
+   face data for 10 seconds (e.g. tab closed), the brick's detections drive the MCU
+
+<br/>
+
+### Video Object Detection -- AI Model Options
+
+The `video_object_detection` brick supports multiple AI models. Select the model
+in App Lab under **Bricks > AI Models**, or set it in `app.yaml`:
+
+| Model | `app.yaml` Value | Description | Use Case |
+|:------|:-----------------|:------------|:---------|
+| **Face Detection** | `face-detection` | Lightweight face localizer (YuNet) | **This demo uses it** -- face presence, bounding boxes |
+| YOLOX | `yolox` | General-purpose object detection (nano/small/medium) | People, vehicles, 80+ COCO classes |
+| FOMO | `fomo` | Fast Objects, More Objects (centroid-only) | Small object counting, low compute |
+| Hand Gesture | `hand-gesture` | MediaPipe hand landmark + gesture classifier | Touchless interfaces, sign language |
+| PoseNet | `posenet` | Body pose estimation (17 keypoints) | Fitness tracking, safety monitoring |
+| Custom (.eim) | Path to `.eim` file | Your own Edge Impulse model | Any custom detection task |
 
 <br/>
 
 ```yaml
+# app.yaml -- current configuration
 bricks:
   - arduino:web_ui: {}
   - arduino:video_object_detection:
-      model: face-detection
+      model: face-detection       # Change to yolox, fomo, hand-gesture, etc.
+      fps: 15
+
+# To use a custom Edge Impulse model instead:
+#  - arduino:video_object_detection:
+#      variables:
+#        EI_OBJ_DETECTION_MODEL: /data/model.eim
 ```
 
 <br/>
 
-> **Tip:** Each Brick deploys as a container on the QRB2210 and exposes an API
-> to your Python code. No Docker configuration required.
+> **To swap models:** Open App Lab > click the Video Object Detection brick >
+> go to the **AI Models** tab > select a different model > click **Save**.
+> Or train a custom model via **Train New AI Model** (requires Edge Impulse account).
+
+<br/>
+
+### Other Available Bricks
+
+These bricks are not used in this demo but can be added to `app.yaml`:
+
+| Brick | Category | Description |
+|:------|:---------|:------------|
+| `arduino:object_detection` | Vision | Static image detection (single-frame, not live video) |
+| `arduino:motion_detection` | Sensor | Detects motion from accelerometer/IMU data (not camera) |
+| `arduino:sound_generator` | Audio | Audio feedback, alarms, musical elements |
+| `arduino:wave_generator` | Audio | Real-time waveform synthesis (Theremin-style) |
+| `arduino:database` | Storage | Local data persistence on the UNO Q filesystem |
+| `arduino:cloud_ai_assistant` | Cloud | Conversational AI via cloud APIs |
+| `arduino:telegram_bot` | Comms | Telegram messaging integration |
 
 <br/>
 
@@ -169,7 +215,7 @@ bricks:
 | Feature                        | Description                                                                                                |
 |:-------------------------------|:-----------------------------------------------------------------------------------------------------------|
 | **478-Point Face Landmarks**   | Google MediaPipe Face Landmarker running in-browser via WASM -- zero setup, no model compilation            |
-| **Multi-Face Tracking**        | Up to **4 simultaneous faces** with persistent IDs, unique colors, and 800ms TTL grace period              |
+| **Multi-Face Tracking**        | Up to **2 simultaneous faces** with unique colors per face                                                  |
 | **Expression Detection**       | Smile, surprise, eyebrow raise -- mapped to color-coded RGB LED feedback on the MCU                        |
 | **Blink & Pupil Tracking**     | Eye Aspect Ratio (EAR) blink detection + iris diameter measurement in real time                            |
 | **LED Matrix Visualization**   | 13x8 grayscale bitmaps: smiley (face detected), X (no face), expression icons, IP scroll on boot          |
@@ -875,12 +921,14 @@ Designed to pull as few external resources as possible.
 | DebugLog                   | 0.8.4        | Transitive dep of RouterBridge                |
 | MsgPack                    | 0.4.2        | Transitive dep of RouterBridge                |
 | **Arduino_LED_Matrix**     | (platform)   | Bundled with `arduino:zephyr` board core      |
+| **Arduino_Modulino**       | 0.8.0        | I2C Modulino accessory library (Pixels, Buzzer, Knob, etc.) |
 
 <br/>
 
 ### MPU (`python/main.py`)
 
-App Lab SDK (`arduino.app_utils`, `arduino.app_bricks.web_ui`) + Python stdlib.
+App Lab SDK (`arduino.app_utils`, `arduino.app_bricks.web_ui`,
+`arduino.app_bricks.video_objectdetection`) + `Pillow` (frame encoding) + Python stdlib.
 
 **Optional** for on-device AI: `tflite-runtime`, `numpy`, `opencv-python-headless`.
 
@@ -927,20 +975,23 @@ on first load and cached by a service worker (`assets/sw.js`) for offline use.
 
 <br/>
 
-### App Lab Brick: VideoObjectDetection (Fallback)
+### App Lab Brick: VideoObjectDetection (Camera + Fallback AI)
 
 | Property              | Value                                                                                     |
 |:----------------------|:------------------------------------------------------------------------------------------|
-| **Model**             | YuNet face detection (built into the brick)                                               |
+| **Model**             | Face Detection / YuNet (selectable -- see [AI Model Options](#video-object-detection----ai-model-options)) |
 | **Runtime**           | App Lab SDK container (`arduino:video_object_detection`)                                  |
 | **Configured in**     | `app.yaml` (`model: face-detection`, `fps: 15`)                                          |
 | **Runs on**           | QRB2210 MPU (Cortex-A53, on-device)                                                      |
-| **Output**            | Face bounding boxes with confidence scores                                                |
-| **Used for**          | Backup detection when the browser stops sending data (10-second timeout)                  |
+| **Camera role**       | Opens USB camera, provides raw frames via `get_frame()` API                              |
+| **AI output**         | Face bounding boxes with confidence scores                                                |
+| **Used for**          | (1) Camera frame source for the browser, (2) fallback detection when browser idle 10s    |
 
-This brick is bundled with the App Lab SDK -- no download needed. It
-activates automatically as a fallback when the browser-side MediaPipe
-has not sent face data for 10 seconds (e.g. browser tab closed).
+This brick serves two purposes: it is the **camera source** (Python reads frames
+via `get_frame()` and streams them to the browser over Socket.IO), and it provides
+**fallback face detection** when the browser-side MediaPipe has not sent data for
+10 seconds (e.g. browser tab closed). The model can be swapped in App Lab's
+**Bricks > AI Models** tab without changing any code.
 
 <br/>
 
