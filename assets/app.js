@@ -129,7 +129,7 @@ async function initLandmarker() {
           "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
         delegate: delegate
       },
-      runningMode: "VIDEO",
+      runningMode: "IMAGE",
       numFaces: MAX_FACES,
       outputFaceBlendshapes: true,
       outputFacialTransformationMatrixes: true,
@@ -211,8 +211,6 @@ function syncCanvasSize() {
   dbg("Canvas synced: internal=" + canvas.width + "x" + canvas.height + " display=" + Math.round(rect.width) + "x" + Math.round(rect.height));
 }
 
-var lastDetectTs = -1;
-
 function detectLoop() {
   if (!running) return;
 
@@ -232,12 +230,9 @@ function detectLoop() {
     return;
   }
 
-  var ts = Math.max(Math.round(now), lastDetectTs + 1);
-  lastDetectTs = ts;
-
   var results;
   try {
-    results = faceLandmarker.detectForVideo(video, ts);
+    results = faceLandmarker.detect(video);
   } catch (e) {
     requestAnimationFrame(detectLoop);
     return;
