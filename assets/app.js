@@ -217,14 +217,7 @@ function syncCanvasSize() {
 function detectLoop() {
   if (!running) return;
 
-  frameCount++;
   var now = performance.now();
-  if (now - fpsTime >= 1000) {
-    currentFps = frameCount;
-    frameCount = 0;
-    fpsTime = now;
-    hudFps.textContent = currentFps;
-  }
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -239,6 +232,14 @@ function detectLoop() {
   } catch (e) {
     requestAnimationFrame(detectLoop);
     return;
+  }
+
+  frameCount++;
+  if (now - fpsTime >= 1000) {
+    currentFps = frameCount;
+    frameCount = 0;
+    fpsTime = now;
+    hudFps.textContent = currentFps;
   }
 
   var numFaces = results.faceLandmarks ? results.faceLandmarks.length : 0;
@@ -283,11 +284,11 @@ function detectLoop() {
         pitch: Math.round(headPose.pitch * 10) / 10,
         timestamp: new Date().toISOString()
       };
-      if (socket) socket.emit("face_data", payload);
+      if (socket && socket.connected) socket.emit("face_data", payload);
 
       if (expression !== lastExpression) {
         lastExpression = expression;
-        if (socket) socket.emit("expression_change", { expression: expression });
+        if (socket && socket.connected) socket.emit("expression_change", { expression: expression });
       }
 
       addDetection({
@@ -324,7 +325,7 @@ function detectLoop() {
       renderExpressionTracker();
       setStatus("Scanning...", "scanning");
       showFeedback("System response will appear here");
-      if (socket) socket.emit("face_data", { faces: 0 });
+      if (socket && socket.connected) socket.emit("face_data", { faces: 0 });
     }
   }
 
@@ -580,8 +581,8 @@ function getTopBlendshapeScore(categories) {
 function extractHeadPose(matrix) {
   if (!matrix || !matrix.data) return { yaw: 0, pitch: 0 };
   var m = matrix.data;
-  var yaw = Math.atan2(m[8], m[0]) * (180 / Math.PI);
-  var pitch = Math.asin(Math.max(-1, Math.min(1, -m[4]))) * (180 / Math.PI);
+  var yaw = Math.atan2(m[2], m[0]) * (180 / Math.PI);
+  var pitch = Math.asin(Math.max(-1, Math.min(1, -m[6]))) * (180 / Math.PI);
   return { yaw: yaw, pitch: pitch };
 }
 
@@ -745,7 +746,7 @@ function updateConfidence() {
     } catch (e) {}
   }
 
-  if (socket) socket.emit("override_th", value);
+  if (socket && socket.connected) socket.emit("override_th", value);
   var formatted = value.toFixed(2);
   display.textContent = formatted;
   input.value = formatted;
@@ -772,6 +773,7 @@ function initSocketIO() {
         errorContainer.style.display = "none";
         errorContainer.textContent = "";
       }
+      initModulino();
       socket.emit("get_modulinos", {});
     });
 
@@ -803,8 +805,11 @@ function initSocketIO() {
   }
 }
 
+var _modulinoInitialized = false;
+
 function initModulino() {
-  if (!socket) return;
+  if (!socket || _modulinoInitialized) return;
+  _modulinoInitialized = true;
 
   socket.on("modulino_detected", function (data) {
     var modules = data.modules || [];
@@ -948,7 +953,7 @@ function buildPixelsControl(body) {
     var r = parseInt(hex.substring(1, 3), 16);
     var g = parseInt(hex.substring(3, 5), 16);
     var b = parseInt(hex.substring(5, 7), 16);
-    if (socket) socket.emit("set_mod_pixels", { payload: "all:" + r + ":" + g + ":" + b });
+    if (socket && socket.connected) socket.emit("set_mod_pixels", { payload: "all:" + r + ":" + g + ":" + b });
   });
   body.appendChild(setBtn);
 
@@ -956,7 +961,7 @@ function buildPixelsControl(body) {
   clearBtn.className = "mod-btn mod-btn-outline";
   clearBtn.textContent = "Clear";
   clearBtn.addEventListener("click", function () {
-    if (socket) socket.emit("set_mod_pixels", { payload: "clear" });
+    if (socket && socket.connected) socket.emit("set_mod_pixels", { payload: "clear" });
   });
   body.appendChild(clearBtn);
 }
@@ -996,9 +1001,10 @@ function buildBuzzerControl(body) {
   playBtn.className = "mod-btn";
   playBtn.textContent = "Play";
   playBtn.addEventListener("click", function () {
-    var freq = document.getElementById("modBuzzerFreq").value;
-    var dur = document.getElementById("modBuzzerDur").value;
-    if (socket) socket.emit("play_mod_buzzer", { payload: freq + ":" + dur });
+    var freq = parseInt(document.getElementById("modBuzzerFreq").value, 10);
+    var dur = parseInt(document.getElementById("modBuzzerDur").value, 10);
+    if (isNaN(freq) || isNaN(dur) || freq < 20 || freq > 20000 || dur < 1 || dur > 10000) return;
+    if (socket && socket.connected) socket.emit("play_mod_buzzer", { payload: freq + ":" + dur });
   });
   body.appendChild(playBtn);
 }
@@ -1016,7 +1022,6 @@ async function main() {
   dbg("main() started");
   setStatus("Loading...", "");
   initSocketIO();
-  initModulino();
   initConfidenceSlider();
   setInterval(function() {
     if (Object.keys(expressionState).length > 0) renderExpressionTracker();
