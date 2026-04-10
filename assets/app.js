@@ -678,6 +678,13 @@ function formatDuration(ms) {
   return m + "m " + (s < 10 ? "0" : "") + s + "s";
 }
 
+function makeExprSpan(className, text) {
+  var span = document.createElement("span");
+  span.className = className;
+  span.textContent = text;
+  return span;
+}
+
 function renderExpressionTracker() {
   if (!expressionTrackerEl) return;
   expressionTrackerEl.replaceChildren();
@@ -690,12 +697,11 @@ function renderExpressionTracker() {
     var dur = now - st.startTime;
     var row = document.createElement("div");
     row.className = "expr-entry";
-    row.innerHTML =
-      '<span class="expr-face">' + faceId + '</span>' +
-      '<span class="expr-emoji">' + (EXPR_EMOJIS[st.expression] || "\uD83D\uDE10") + '</span>' +
-      '<span class="expr-name">' + st.expression + '</span>' +
-      '<span class="expr-duration">' + formatDuration(dur) + '</span>' +
-      '<span class="expr-time">' + st.startedAt + '</span>';
+    row.appendChild(makeExprSpan("expr-face", faceId));
+    row.appendChild(makeExprSpan("expr-emoji", EXPR_EMOJIS[st.expression] || "\uD83D\uDE10"));
+    row.appendChild(makeExprSpan("expr-name", st.expression));
+    row.appendChild(makeExprSpan("expr-duration", formatDuration(dur)));
+    row.appendChild(makeExprSpan("expr-time", st.startedAt));
     expressionTrackerEl.appendChild(row);
   }
 
@@ -704,12 +710,11 @@ function renderExpressionTracker() {
     var row2 = document.createElement("div");
     row2.className = "expr-entry";
     row2.style.opacity = "0.5";
-    row2.innerHTML =
-      '<span class="expr-face">' + log.face + '</span>' +
-      '<span class="expr-emoji">' + (EXPR_EMOJIS[log.expression] || "\uD83D\uDE10") + '</span>' +
-      '<span class="expr-name">' + log.expression + '</span>' +
-      '<span class="expr-duration">' + formatDuration(log.duration) + '</span>' +
-      '<span class="expr-time">' + log.endedAt + '</span>';
+    row2.appendChild(makeExprSpan("expr-face", log.face));
+    row2.appendChild(makeExprSpan("expr-emoji", EXPR_EMOJIS[log.expression] || "\uD83D\uDE10"));
+    row2.appendChild(makeExprSpan("expr-name", log.expression));
+    row2.appendChild(makeExprSpan("expr-duration", formatDuration(log.duration)));
+    row2.appendChild(makeExprSpan("expr-time", log.endedAt));
     expressionTrackerEl.appendChild(row2);
   }
 }
