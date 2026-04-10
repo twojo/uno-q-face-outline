@@ -130,6 +130,7 @@ body {
     transform: scaleX(-1);
     pointer-events: none;
     border-radius: 8px;
+    z-index: 10;
 }
 
 #video-container {

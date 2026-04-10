@@ -320,6 +320,10 @@ function drawFace(landmarks, faceIndex) {
   drawCount++;
   if (drawCount === 1) {
     dbg("First draw call: mode=" + drawMode + " landmarks=" + landmarks.length + " canvas=" + canvas.width + "x" + canvas.height);
+    ctx.strokeStyle = "#FF0000";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+    dbg("Drew test rectangle — if you see a red border around the video, canvas overlay is working");
   }
   if (drawCount % 300 === 0) {
     dbg("Draw #" + drawCount + ": mode=" + drawMode + " faces drawing OK");
