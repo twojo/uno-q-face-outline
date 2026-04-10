@@ -44,7 +44,7 @@ var faceVisible = false;
 var frameCount = 0;
 var fpsTime = performance.now();
 var currentFps = 0;
-var drawMode = "mesh";
+var drawMode = "all";
 var minConfidence = 0.5;
 var lastExpression = "";
 var drawCount = 0;
@@ -360,15 +360,22 @@ function drawFace(landmarks, faceIndex) {
   ];
   var c = colors[faceIndex % colors.length];
 
-  if (drawMode === "mesh" || drawMode === "outline") {
+  var showMesh = (drawMode === "all" || drawMode === "mesh");
+  var showOutline = (drawMode === "all" || drawMode === "outline" || drawMode === "mesh");
+  var showDots = (drawMode === "all" || drawMode === "dots");
+  var showIris = (drawMode === "all" || drawMode === "iris" || drawMode === "outline" || drawMode === "mesh");
+
+  if (showMesh || showOutline) {
     var groups = [];
-    if (drawMode === "mesh") {
+    if (showMesh) {
       groups.push({ conns: TESSELATION, color: "rgba(192,192,192,0.19)", lw: 1 });
     }
-    groups.push({ conns: FACE_OVAL, color: c.line, lw: 2 });
-    groups.push({ conns: LEFT_EYE, color: c.line, lw: 1.5 });
-    groups.push({ conns: RIGHT_EYE, color: c.line, lw: 1.5 });
-    groups.push({ conns: LIPS, color: c.line, lw: 1.5 });
+    if (showOutline) {
+      groups.push({ conns: FACE_OVAL, color: c.line, lw: 2 });
+      groups.push({ conns: LEFT_EYE, color: c.line, lw: 1.5 });
+      groups.push({ conns: RIGHT_EYE, color: c.line, lw: 1.5 });
+      groups.push({ conns: LIPS, color: c.line, lw: 1.5 });
+    }
 
     for (var g = 0; g < groups.length; g++) {
       var grp = groups[g];
@@ -390,7 +397,7 @@ function drawFace(landmarks, faceIndex) {
     }
   }
 
-  if (drawMode === "dots") {
+  if (showDots) {
     for (var j = 0; j < norm.length; j++) {
       ctx.beginPath();
       ctx.arc(norm[j].x, norm[j].y, 1.2, 0, 2 * Math.PI);
@@ -399,7 +406,7 @@ function drawFace(landmarks, faceIndex) {
     }
   }
 
-  if (drawMode !== "none") {
+  if (showIris) {
     drawIrisNorm(norm, LEFT_IRIS, c.dot);
     drawIrisNorm(norm, RIGHT_IRIS, c.dot);
   }
