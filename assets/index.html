@@ -114,5 +114,10 @@
 
     <script src="libs/socket.io.min.js"></script>
     <script type="module" src="app.js"></script>
+    <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js").catch(function () {});
+    }
+    </script>
 </body>
 </html>

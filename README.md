@@ -14,7 +14,7 @@
 
 <br/>
 
-**478-point face landmarks &nbsp;|&nbsp; Up to 4 simultaneous faces &nbsp;|&nbsp; Expression detection &nbsp;|&nbsp; LED matrix feedback**
+**478-point face landmarks &nbsp;|&nbsp; Up to 2 simultaneous faces &nbsp;|&nbsp; Expression detection &nbsp;|&nbsp; LED matrix feedback**
 
 <br/>
 
@@ -44,10 +44,11 @@ Qualcomm QRB2210 + STM32U585 working together through
 9. [GPIO Placeholders](#gpio-placeholders)
 10. [WebSocket Events](#websocket-events)
 11. [Dependencies](#dependencies)
-12. [Advanced Topics](#advanced-topics)
-13. [Links & Resources](#links--resources)
-14. [Contributing](#contributing)
-15. [License](#license)
+12. [AI Models & Offline Operation](#ai-models--offline-operation)
+13. [Advanced Topics](#advanced-topics)
+14. [Links & Resources](#links--resources)
+15. [Contributing](#contributing)
+16. [License](#license)
 <br/>
 
 ---
@@ -385,7 +386,9 @@ expect several update prompts before the demo runs.
 
 2. **Connect to Wi-Fi** if not already configured via **App Lab > Settings > Network**.
    The demo needs internet access to download MediaPipe (~4 MB) from
-   `cdn.jsdelivr.net` on first load. After that, the browser caches everything.
+   `cdn.jsdelivr.net` on first load. A service worker (`assets/sw.js`) caches
+   all CDN resources and local assets automatically -- after the first
+   successful load, the UI works fully offline.
 
 3. **Import the demo** `.zip` and let App Lab compile the sketch (~30-60 seconds).
    The LED matrix will show a boot icon, then a checkmark, then scroll the
@@ -466,6 +469,7 @@ If you said "No" to one or more update prompts and the demo doesn't work:
 │   ├── index.html              # Face tracking UI
 │   ├── app.js                  # Application logic
 │   ├── style.css               # Stylesheet
+│   ├── sw.js                   # Service worker -- caches CDN assets for offline use
 │   ├── img/                    # Icons and images
 │   └── qualcomm-logo.png       # Branding asset
 │
@@ -888,9 +892,91 @@ For model compilation on a dev machine (not the Uno Q): `qai-hub`, `qai_hub_mode
 
 | Resource                                  | CDN                    | Pinned       | Required                              |
 |:------------------------------------------|:-----------------------|:-------------|:--------------------------------------|
-| **@mediapipe/tasks-vision**               | jsdelivr               | 0.10.3       | Yes                                   |
-| **face_landmarker.task model**            | Google Cloud Storage   | float16/1    | Yes (~4MB, cached after first load)   |
+| **@mediapipe/tasks-vision**               | jsdelivr               | 0.10.22      | Yes                                   |
+| **face_landmarker.task model**            | Google Cloud Storage   | float16/1    | Yes (~4MB, cached by service worker)  |
 | Google Fonts (Inter, JetBrains Mono)      | Google Fonts           | latest       | No (degrades to system fonts)         |
+
+<br/>
+
+---
+
+<br/>
+
+## AI Models & Offline Operation
+
+This demo uses three layers of AI inference. After the first run with
+internet, everything works fully offline.
+
+<br/>
+
+### Browser-Side: MediaPipe Face Landmarker (Primary)
+
+| Property              | Value                                                                                     |
+|:----------------------|:------------------------------------------------------------------------------------------|
+| **Model**             | `face_landmarker.task` (float16, ~4 MB)                                                   |
+| **Source**             | [Google MediaPipe](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker) |
+| **Runtime**           | MediaPipe Tasks-Vision WASM (`@mediapipe/tasks-vision@0.10.22`)                           |
+| **Loaded from**       | `cdn.jsdelivr.net` (JS/WASM) + `storage.googleapis.com` (model)                          |
+| **Runs on**           | Client browser (GPU via WebGL2, fallback to CPU)                                          |
+| **Output**            | 478 face landmarks, 52 blendshapes, facial transformation matrix                         |
+| **Used for**          | Face mesh/outline drawing, expression detection, head pose (yaw/pitch), blink detection  |
+
+This is the primary AI engine. It runs entirely in the browser with no
+server-side inference. The model and WASM binaries are downloaded from CDN
+on first load and cached by a service worker (`assets/sw.js`) for offline use.
+
+<br/>
+
+### App Lab Brick: VideoObjectDetection (Fallback)
+
+| Property              | Value                                                                                     |
+|:----------------------|:------------------------------------------------------------------------------------------|
+| **Model**             | YuNet face detection (built into the brick)                                               |
+| **Runtime**           | App Lab SDK container (`arduino:video_object_detection`)                                  |
+| **Configured in**     | `app.yaml` (`model: face-detection`, `fps: 15`)                                          |
+| **Runs on**           | QRB2210 MPU (Cortex-A53, on-device)                                                      |
+| **Output**            | Face bounding boxes with confidence scores                                                |
+| **Used for**          | Backup detection when the browser stops sending data (10-second timeout)                  |
+
+This brick is bundled with the App Lab SDK -- no download needed. It
+activates automatically as a fallback when the browser-side MediaPipe
+has not sent face data for 10 seconds (e.g. browser tab closed).
+
+<br/>
+
+### Direct SSH Mode: OpenCV YuNet + ONNX Face Mesh (Standalone)
+
+| Model                 | File                             | Size      | Source                                           | Required    |
+|:----------------------|:---------------------------------|:----------|:-------------------------------------------------|:------------|
+| **YuNet face detector** | `face_detection_yunet.onnx`    | ~233 KB   | [OpenCV Zoo](https://github.com/opencv/opencv_zoo) | Yes        |
+| YuNet INT8 (faster)   | `face_detection_yunet_int8.onnx` | ~150 KB   | OpenCV Zoo                                       | Optional    |
+| **Face mesh (468 pts)** | `face_mesh_192x192.onnx`      | ~3 MB     | [PINTO0309](https://github.com/PINTO0309/facemesh_onnx_tensorrt) | Optional |
+
+These models are only used by `direct/face_tracker.py` (the standalone
+SSH mode that bypasses App Lab). Download them once via `./setup.sh` or
+`./model_get.sh` -- they are stored in `models/` and reused offline.
+
+- **YuNet**: 75K-parameter face detector, runs via OpenCV's DNN module.
+  No extra dependencies beyond `opencv-python-headless` and `numpy`.
+- **Face mesh**: 468-landmark model (same landmark set as MediaPipe Face
+  Mesh). Requires `onnxruntime` (`pip3 install onnxruntime`). If not
+  installed or model not found, the tracker gracefully falls back to
+  bounding-box-only detection.
+
+<br/>
+
+### Offline Caching Summary
+
+| Component                        | First Run              | Subsequent Runs                  |
+|:---------------------------------|:-----------------------|:---------------------------------|
+| **Browser UI + MediaPipe**       | Downloads from CDN     | Served from service worker cache |
+| **VideoObjectDetection brick**   | Built into App Lab SDK | Always available                 |
+| **Direct mode models (YuNet)**   | Downloaded by setup.sh | Stored in `models/` directory    |
+
+After importing the zip into App Lab and opening the browser UI once
+with internet, the service worker caches all MediaPipe resources
+(JS, WASM binaries, and the 4 MB model file). Every subsequent load
+works without internet.
 
 <br/>
 

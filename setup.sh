@@ -25,8 +25,8 @@ MODELS_DIR="models"
 mkdir -p "$MODELS_DIR"
 
 echo "[1/3] Installing Python dependencies..."
-pip3 install --quiet opencv-python-headless numpy 2>/dev/null || \
-pip3 install opencv-python-headless numpy
+pip3 install --quiet "opencv-python-headless>=4.8.1.78" numpy 2>/dev/null || \
+pip3 install "opencv-python-headless>=4.8.1.78" numpy
 echo "      Done."
 echo ""
 
