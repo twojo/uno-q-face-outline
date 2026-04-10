@@ -66,10 +66,20 @@ drawModeSelect.addEventListener("change", function () {
 });
 
 async function initLandmarker() {
+  updatePlaceholder("Loading vision WASM...");
+  setStatus("Loading WASM...", "");
+  var vision;
+  try {
+    vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
+    );
+  } catch (e) {
+    updatePlaceholder("WASM load failed — check connection");
+    throw e;
+  }
+
   updatePlaceholder("Loading face model...");
-  var vision = await FilesetResolver.forVisionTasks(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
-  );
+  setStatus("Loading model...", "");
 
   var delegate = "GPU";
   try {
@@ -95,27 +105,48 @@ async function initLandmarker() {
     minTrackingConfidence: minConfidence
   });
   drawingUtils = new DrawingUtils(ctx);
+  updatePlaceholder("Model ready — starting camera...");
 }
 
 async function startCamera() {
   updatePlaceholder("Requesting camera...");
-  try {
-    var stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: CAM_WIDTH, height: CAM_HEIGHT, facingMode: "user" },
-      audio: false
-    });
-    video.srcObject = stream;
-    await video.play();
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    placeholder.style.display = "none";
-    video.style.display = "block";
-    canvas.style.display = "block";
-    running = true;
-    requestAnimationFrame(detectLoop);
-  } catch (err) {
-    updatePlaceholder("Camera error: " + err.message);
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    updatePlaceholder("Camera API not available — requires HTTPS");
+    setStatus("No Camera API", "");
+    return;
   }
+
+  var constraints = [
+    { video: { width: CAM_WIDTH, height: CAM_HEIGHT, facingMode: "user" }, audio: false },
+    { video: { width: 320, height: 240, facingMode: "user" }, audio: false },
+    { video: { facingMode: "user" }, audio: false },
+    { video: true, audio: false }
+  ];
+
+  var stream = null;
+  for (var i = 0; i < constraints.length; i++) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(constraints[i]);
+      break;
+    } catch (err) {
+      if (i === constraints.length - 1) {
+        updatePlaceholder("Camera denied or unavailable: " + err.message);
+        setStatus("Camera Error", "");
+        return;
+      }
+    }
+  }
+
+  video.srcObject = stream;
+  await video.play();
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  placeholder.style.display = "none";
+  video.style.display = "block";
+  canvas.style.display = "block";
+  running = true;
+  requestAnimationFrame(detectLoop);
 }
 
 function detectLoop(timestamp) {
