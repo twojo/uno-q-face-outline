@@ -211,7 +211,9 @@ function syncCanvasSize() {
   dbg("Canvas synced: internal=" + canvas.width + "x" + canvas.height + " display=" + Math.round(rect.width) + "x" + Math.round(rect.height));
 }
 
-function detectLoop(timestamp) {
+var lastDetectTs = -1;
+
+function detectLoop() {
   if (!running) return;
 
   frameCount++;
@@ -230,9 +232,12 @@ function detectLoop(timestamp) {
     return;
   }
 
+  var ts = Math.max(Math.round(now), lastDetectTs + 1);
+  lastDetectTs = ts;
+
   var results;
   try {
-    results = faceLandmarker.detectForVideo(video, timestamp);
+    results = faceLandmarker.detectForVideo(video, ts);
   } catch (e) {
     requestAnimationFrame(detectLoop);
     return;
@@ -320,17 +325,31 @@ function drawFace(landmarks, faceIndex) {
   var w = canvas.width;
   var h = canvas.height;
 
-  var lm0 = landmarks[0];
-  var isNormalized = (lm0.x >= 0 && lm0.x <= 1 && lm0.y >= 0 && lm0.y <= 1);
-  var sx = isNormalized ? w : 1;
-  var sy = isNormalized ? h : 1;
-
-  if (drawCount === 1) {
-    dbg("Drawing: mode=" + drawMode + " lm=" + landmarks.length + " coords=" + (isNormalized ? "normalized" : "pixel") + " lm0=(" + lm0.x.toFixed(2) + "," + lm0.y.toFixed(2) + ")");
+  var norm = new Array(landmarks.length);
+  var maxVal = 0;
+  for (var k = 0; k < landmarks.length; k++) {
+    var ax = Math.abs(landmarks[k].x);
+    var ay = Math.abs(landmarks[k].y);
+    if (ax > maxVal) maxVal = ax;
+    if (ay > maxVal) maxVal = ay;
   }
 
-  if (lm0.x * sx < -w || lm0.x * sx > w * 2 || lm0.y * sy < -h || lm0.y * sy > h * 2) {
+  var isNorm = (maxVal <= 1.5);
+  for (var k = 0; k < landmarks.length; k++) {
+    if (isNorm) {
+      norm[k] = { x: landmarks[k].x * w, y: landmarks[k].y * h };
+    } else {
+      norm[k] = { x: landmarks[k].x, y: landmarks[k].y };
+    }
+  }
+
+  var testPt = norm[0];
+  if (testPt.x < -50 || testPt.x > w + 50 || testPt.y < -50 || testPt.y > h + 50) {
     return;
+  }
+
+  if (drawCount === 1) {
+    dbg("Drawing: mode=" + drawMode + " lm=" + landmarks.length + " " + (isNorm ? "normalized" : "pixel") + " raw0=(" + landmarks[0].x.toFixed(4) + "," + landmarks[0].y.toFixed(4) + ") -> px=(" + Math.round(norm[0].x) + "," + Math.round(norm[0].y) + ")");
   }
 
   var colors = [
@@ -361,11 +380,9 @@ function drawFace(landmarks, faceIndex) {
         var conn = grp.conns[ci];
         var si = conn.start !== undefined ? conn.start : conn[0];
         var ei = conn.end !== undefined ? conn.end : conn[1];
-        if (si < landmarks.length && ei < landmarks.length) {
-          var a = landmarks[si];
-          var b = landmarks[ei];
-          ctx.moveTo(a.x * sx, a.y * sy);
-          ctx.lineTo(b.x * sx, b.y * sy);
+        if (si < norm.length && ei < norm.length) {
+          ctx.moveTo(norm[si].x, norm[si].y);
+          ctx.lineTo(norm[ei].x, norm[ei].y);
         }
       }
       ctx.stroke();
@@ -374,22 +391,21 @@ function drawFace(landmarks, faceIndex) {
   }
 
   if (drawMode === "dots") {
-    for (var j = 0; j < landmarks.length; j++) {
-      var pt = landmarks[j];
+    for (var j = 0; j < norm.length; j++) {
       ctx.beginPath();
-      ctx.arc(pt.x * sx, pt.y * sy, 1.2, 0, 2 * Math.PI);
+      ctx.arc(norm[j].x, norm[j].y, 1.2, 0, 2 * Math.PI);
       ctx.fillStyle = c.dot;
       ctx.fill();
     }
   }
 
   if (drawMode !== "none") {
-    drawIris(landmarks, LEFT_IRIS, c.dot, sx, sy);
-    drawIris(landmarks, RIGHT_IRIS, c.dot, sx, sy);
+    drawIrisNorm(norm, LEFT_IRIS, c.dot);
+    drawIrisNorm(norm, RIGHT_IRIS, c.dot);
   }
 }
 
-function drawIris(landmarks, irisConnections, color, sx, sy) {
+function drawIrisNorm(norm, irisConnections, color) {
   if (!irisConnections || irisConnections.length === 0) return;
   var indices = new Set();
   for (var i = 0; i < irisConnections.length; i++) {
@@ -398,7 +414,7 @@ function drawIris(landmarks, irisConnections, color, sx, sy) {
   }
   var pts = [];
   indices.forEach(function (idx) {
-    if (landmarks[idx]) pts.push(landmarks[idx]);
+    if (norm[idx]) pts.push(norm[idx]);
   });
   if (pts.length === 0) return;
 
@@ -407,13 +423,13 @@ function drawIris(landmarks, irisConnections, color, sx, sy) {
     cx += pts[i].x;
     cy += pts[i].y;
   }
-  cx = (cx / pts.length) * sx;
-  cy = (cy / pts.length) * sy;
+  cx = cx / pts.length;
+  cy = cy / pts.length;
 
   var maxR = 0;
   for (var i = 0; i < pts.length; i++) {
-    var dx = pts[i].x * sx - cx;
-    var dy = pts[i].y * sy - cy;
+    var dx = pts[i].x - cx;
+    var dy = pts[i].y - cy;
     var r = Math.sqrt(dx * dx + dy * dy);
     if (r > maxR) maxR = r;
   }
