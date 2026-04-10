@@ -44,7 +44,7 @@ var faceVisible = false;
 var frameCount = 0;
 var fpsTime = performance.now();
 var currentFps = 0;
-var drawMode = "outline";
+var drawMode = "mesh";
 var minConfidence = 0.5;
 var lastExpression = "";
 var drawCount = 0;
@@ -316,12 +316,23 @@ function drawFace(landmarks, faceIndex) {
   if (drawMode === "none") return;
 
   drawCount++;
-  if (drawCount === 1) {
-    dbg("Drawing active: mode=" + drawMode + " landmarks=" + landmarks.length);
-  }
 
   var w = canvas.width;
   var h = canvas.height;
+
+  var lm0 = landmarks[0];
+  var isNormalized = (lm0.x >= 0 && lm0.x <= 1 && lm0.y >= 0 && lm0.y <= 1);
+  var sx = isNormalized ? w : 1;
+  var sy = isNormalized ? h : 1;
+
+  if (drawCount === 1) {
+    dbg("Drawing: mode=" + drawMode + " lm=" + landmarks.length + " coords=" + (isNormalized ? "normalized" : "pixel") + " lm0=(" + lm0.x.toFixed(2) + "," + lm0.y.toFixed(2) + ")");
+  }
+
+  if (lm0.x * sx < -w || lm0.x * sx > w * 2 || lm0.y * sy < -h || lm0.y * sy > h * 2) {
+    return;
+  }
+
   var colors = [
     { line: "#30FF30", dot: "#FF3030" },
     { line: "#30AAFF", dot: "#FFAA30" },
@@ -353,8 +364,8 @@ function drawFace(landmarks, faceIndex) {
         if (si < landmarks.length && ei < landmarks.length) {
           var a = landmarks[si];
           var b = landmarks[ei];
-          ctx.moveTo(a.x * w, a.y * h);
-          ctx.lineTo(b.x * w, b.y * h);
+          ctx.moveTo(a.x * sx, a.y * sy);
+          ctx.lineTo(b.x * sx, b.y * sy);
         }
       }
       ctx.stroke();
@@ -362,26 +373,23 @@ function drawFace(landmarks, faceIndex) {
     }
   }
 
-  if (drawMode === "dots" || drawMode === "outline" || drawMode === "mesh") {
-    var dotSize = drawMode === "dots" ? 1.2 : 0;
-    if (drawMode === "dots") {
-      for (var j = 0; j < landmarks.length; j++) {
-        var pt = landmarks[j];
-        ctx.beginPath();
-        ctx.arc(pt.x * w, pt.y * h, dotSize, 0, 2 * Math.PI);
-        ctx.fillStyle = c.dot;
-        ctx.fill();
-      }
+  if (drawMode === "dots") {
+    for (var j = 0; j < landmarks.length; j++) {
+      var pt = landmarks[j];
+      ctx.beginPath();
+      ctx.arc(pt.x * sx, pt.y * sy, 1.2, 0, 2 * Math.PI);
+      ctx.fillStyle = c.dot;
+      ctx.fill();
     }
   }
 
   if (drawMode !== "none") {
-    drawIris(landmarks, LEFT_IRIS, c.dot);
-    drawIris(landmarks, RIGHT_IRIS, c.dot);
+    drawIris(landmarks, LEFT_IRIS, c.dot, sx, sy);
+    drawIris(landmarks, RIGHT_IRIS, c.dot, sx, sy);
   }
 }
 
-function drawIris(landmarks, irisConnections, color) {
+function drawIris(landmarks, irisConnections, color, sx, sy) {
   if (!irisConnections || irisConnections.length === 0) return;
   var indices = new Set();
   for (var i = 0; i < irisConnections.length; i++) {
@@ -399,13 +407,13 @@ function drawIris(landmarks, irisConnections, color) {
     cx += pts[i].x;
     cy += pts[i].y;
   }
-  cx = (cx / pts.length) * canvas.width;
-  cy = (cy / pts.length) * canvas.height;
+  cx = (cx / pts.length) * sx;
+  cy = (cy / pts.length) * sy;
 
   var maxR = 0;
   for (var i = 0; i < pts.length; i++) {
-    var dx = pts[i].x * canvas.width - cx;
-    var dy = pts[i].y * canvas.height - cy;
+    var dx = pts[i].x * sx - cx;
+    var dy = pts[i].y * sy - cy;
     var r = Math.sqrt(dx * dx + dy * dy);
     if (r > maxR) maxR = r;
   }

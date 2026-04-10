@@ -743,9 +743,9 @@ body {
     background: rgba(0, 0, 0, 0.92);
     border-top: 2px solid #3253dc;
     font-family: 'Roboto Mono', 'SF Mono', 'Consolas', monospace;
-    font-size: 11px;
+    font-size: 9px;
     color: #e5e7eb;
-    max-height: 60vh;
+    max-height: 40vh;
     overflow-y: auto;
 }
 
@@ -796,17 +796,17 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    padding: 3px 0;
+    padding: 2px 0;
     border-bottom: 1px solid rgba(55, 65, 81, 0.4);
 }
 
 .debug-label {
     color: #6b7280;
-    font-size: 10px;
+    font-size: 8px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     white-space: nowrap;
-    min-width: 110px;
+    min-width: 90px;
 }
 
 .debug-val {
@@ -814,6 +814,7 @@ body {
     text-align: right;
     word-break: break-all;
     font-variant-numeric: tabular-nums;
+    font-size: 8px;
 }
 
 .dbg-small {
@@ -830,20 +831,20 @@ body {
 
 .debug-log {
     margin-top: 4px;
-    padding: 6px;
+    padding: 4px;
     background: rgba(0, 0, 0, 0.4);
     border-radius: 4px;
     white-space: pre-wrap;
-    font-size: 10px;
+    font-size: 8px;
     color: #9ca3af;
-    max-height: 120px;
+    max-height: 80px;
     overflow-y: auto;
-    line-height: 1.5;
+    line-height: 1.4;
 }
 
 .debug-detail-header {
-    font-size: 11px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 1px;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
