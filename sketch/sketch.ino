@@ -32,7 +32,7 @@
 
 #include <Arduino_LED_Matrix.h>
 #include <Arduino_RouterBridge.h>
-#include <Modulino.h>
+#include <Arduino_Modulino.h>
 
 Arduino_LED_Matrix matrix;
 
@@ -432,7 +432,7 @@ void scrollText(String text) {
 // -- Modulino Functions --
 
 void detectModulinos() {
-    Modulino.begin();
+    Modulino.begin(Wire1);
     hasPixels = modPixels.begin();
     hasBuzzer = modBuzzer.begin();
     hasKnob = modKnob.begin();
