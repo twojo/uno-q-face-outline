@@ -4,11 +4,8 @@ profiles:
     platforms:
       - platform: arduino:zephyr
     libraries:
-      - Arduino_LED_Matrix
-      - Arduino_RouterBridge (0.4.1)
-      - Arduino_RPClite (0.2.1)
+      - MsgPack (0.4.2)
+      - DebugLog (0.8.4)
       - ArxContainer (0.7.0)
       - ArxTypeTraits (0.3.2)
-      - DebugLog (0.8.4)
-      - MsgPack (0.4.2)
 default_profile: default
