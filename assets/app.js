@@ -110,16 +110,8 @@ async function initLandmarker() {
   dbg("Loading face landmarker model...");
   dbgSet("dbgModel", "loading...", "#fbbf24");
 
-  var delegate = "GPU";
-  try {
-    var testCanvas = document.createElement("canvas");
-    var gl = testCanvas.getContext("webgl2");
-    if (!gl) delegate = "CPU";
-  } catch (e) {
-    delegate = "CPU";
-  }
-  dbg("Using delegate: " + delegate);
-  dbgSet("dbgDelegate", delegate, delegate === "GPU" ? "#10b981" : "#fbbf24");
+  dbg("Using delegate: CPU (forced for stability)");
+  dbgSet("dbgDelegate", "CPU", "#fbbf24");
 
   t0 = performance.now();
   try {
@@ -127,9 +119,9 @@ async function initLandmarker() {
       baseOptions: {
         modelAssetPath:
           "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-        delegate: delegate
+        delegate: "CPU"
       },
-      runningMode: "IMAGE",
+      runningMode: "VIDEO",
       numFaces: MAX_FACES,
       outputFaceBlendshapes: true,
       outputFacialTransformationMatrixes: true,
@@ -232,7 +224,7 @@ function detectLoop() {
 
   var results;
   try {
-    results = faceLandmarker.detect(video);
+    results = faceLandmarker.detectForVideo(video, Math.round(now));
   } catch (e) {
     requestAnimationFrame(detectLoop);
     return;
@@ -343,8 +335,8 @@ function drawFace(landmarks, faceIndex) {
     return;
   }
 
-  if (drawCount === 1) {
-    dbg("Drawing: mode=" + drawMode + " lm=" + landmarks.length + " " + (isNorm ? "normalized" : "pixel") + " raw0=(" + landmarks[0].x.toFixed(4) + "," + landmarks[0].y.toFixed(4) + ") -> px=(" + Math.round(norm[0].x) + "," + Math.round(norm[0].y) + ")");
+  if (drawCount <= 5) {
+    dbg("Draw #" + drawCount + ": " + (isNorm ? "NORM" : "PIX") + " raw0=(" + landmarks[0].x.toFixed(4) + "," + landmarks[0].y.toFixed(4) + ") px=(" + Math.round(norm[0].x) + "," + Math.round(norm[0].y) + ") maxVal=" + maxVal.toFixed(2));
   }
 
   var colors = [
