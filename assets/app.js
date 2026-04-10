@@ -9,11 +9,7 @@
 // face mesh / outline / iris tracking. Sends telemetry to the
 // WebUI brick via Socket.IO for Bridge RPC forwarding to the MCU.
 
-import {
-  FaceLandmarker,
-  FilesetResolver,
-  DrawingUtils
-} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs";
+var FaceLandmarker, FilesetResolver, DrawingUtils;
 
 var THROTTLE_MS = 500;
 var MAX_FACES = 2;
@@ -21,13 +17,7 @@ var MAX_RECENT_SCANS = 8;
 var CAM_WIDTH = 640;
 var CAM_HEIGHT = 480;
 
-var FACE_OVAL = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL;
-var LEFT_EYE = FaceLandmarker.FACE_LANDMARKS_LEFT_EYE;
-var RIGHT_EYE = FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE;
-var LEFT_IRIS = FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS;
-var RIGHT_IRIS = FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS;
-var LIPS = FaceLandmarker.FACE_LANDMARKS_LIPS;
-var TESSELATION = FaceLandmarker.FACE_LANDMARKS_TESSELATION;
+var FACE_OVAL, LEFT_EYE, RIGHT_EYE, LEFT_IRIS, RIGHT_IRIS, LIPS, TESSELATION;
 
 var video = document.getElementById("webcamVideo");
 var canvas = document.getElementById("overlayCanvas");
@@ -66,6 +56,27 @@ drawModeSelect.addEventListener("change", function () {
 });
 
 async function initLandmarker() {
+  updatePlaceholder("Loading MediaPipe library...");
+  setStatus("Loading library...", "");
+  try {
+    var mp = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs");
+    FaceLandmarker = mp.FaceLandmarker;
+    FilesetResolver = mp.FilesetResolver;
+    DrawingUtils = mp.DrawingUtils;
+  } catch (e) {
+    updatePlaceholder("MediaPipe failed to load: " + e.message);
+    setStatus("Load Error", "");
+    throw e;
+  }
+
+  FACE_OVAL = FaceLandmarker.FACE_LANDMARKS_FACE_OVAL;
+  LEFT_EYE = FaceLandmarker.FACE_LANDMARKS_LEFT_EYE;
+  RIGHT_EYE = FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE;
+  LEFT_IRIS = FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS;
+  RIGHT_IRIS = FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS;
+  LIPS = FaceLandmarker.FACE_LANDMARKS_LIPS;
+  TESSELATION = FaceLandmarker.FACE_LANDMARKS_TESSELATION;
+
   updatePlaceholder("Loading vision WASM...");
   setStatus("Loading WASM...", "");
   var vision;

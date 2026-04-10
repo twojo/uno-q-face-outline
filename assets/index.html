@@ -117,6 +117,19 @@ SPDX-License-Identifier: MIT
     </div>
 
     <script src="libs/socket.io.min.js"></script>
+    <script>
+      window.addEventListener("error", function(e) {
+        var p = document.getElementById("videoPlaceholder");
+        if (p) {
+          var t = p.querySelector(".feedback-text");
+          if (t) t.textContent = "Script error: " + (e.message || "unknown");
+          var s = p.querySelector(".spinner");
+          if (s) s.style.display = "none";
+        }
+        var b = document.getElementById("statusBadge");
+        if (b) b.textContent = "Error";
+      });
+    </script>
     <script type="module" src="app.js"></script>
 </body>
 </html>
