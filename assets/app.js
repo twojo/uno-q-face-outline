@@ -472,6 +472,55 @@ function showFeedback(msg) {
   feedbackContent.replaceChildren(el);
 }
 
+function showStandaloneNotice() {
+  if (errorContainer) {
+    errorContainer.style.display = "block";
+    errorContainer.className = "standalone-notice";
+    errorContainer.innerHTML = "";
+
+    var icon = document.createElement("span");
+    icon.className = "standalone-icon";
+    icon.textContent = "\uD83D\uDCF1";
+    errorContainer.appendChild(icon);
+
+    var title = document.createElement("strong");
+    title.className = "standalone-title";
+    title.textContent = "Standalone Mode";
+    errorContainer.appendChild(title);
+
+    var desc = document.createElement("p");
+    desc.className = "standalone-desc";
+    desc.textContent = "You\u2019re running this demo in your browser without an Arduino Uno Q board. Face tracking works fully in-browser \u2014 no hardware needed!";
+    errorContainer.appendChild(desc);
+
+    var cta = document.createElement("p");
+    cta.className = "standalone-cta";
+    cta.textContent = "Want the full experience with MCU bridge, LED matrix, and Modulino peripherals?";
+    errorContainer.appendChild(cta);
+
+    var links = document.createElement("div");
+    links.className = "standalone-links";
+
+    var buyLink = document.createElement("a");
+    buyLink.href = "https://store.arduino.cc/products/uno-q";
+    buyLink.target = "_blank";
+    buyLink.rel = "noopener";
+    buyLink.className = "standalone-btn standalone-btn-primary";
+    buyLink.textContent = "Get an Arduino Uno Q";
+    links.appendChild(buyLink);
+
+    var repoLink = document.createElement("a");
+    repoLink.href = "https://github.com/arduino/uno-q-demos";
+    repoLink.target = "_blank";
+    repoLink.rel = "noopener";
+    repoLink.className = "standalone-btn standalone-btn-outline";
+    repoLink.textContent = "Clone the Demos Repo";
+    links.appendChild(repoLink);
+
+    errorContainer.appendChild(links);
+  }
+}
+
 function addDetection(det) {
   scans.unshift(det);
   if (scans.length > MAX_RECENT_SCANS) scans.pop();
@@ -599,13 +648,14 @@ function initSocketIO() {
 
     socket.on("connect_error", function (err) {
       failCount++;
-      dbg("Socket.IO error #" + failCount + ": " + (err.message || err));
-      dbgSet("dbgSocket", "error #" + failCount, "#f87171");
+      dbg("Socket.IO attempt #" + failCount + ": " + (err.message || err));
+      dbgSet("dbgSocket", "attempt #" + failCount, "#fbbf24");
       if (failCount >= 5) {
-        dbg("Socket.IO gave up after 5 failures");
-        dbgSet("dbgSocket", "gave up", "#f87171");
+        dbg("No board found — standalone browser mode");
+        dbgSet("dbgSocket", "standalone mode", "#6b7280");
         socket.close();
         socket = null;
+        showStandaloneNotice();
       }
     });
 
@@ -613,7 +663,7 @@ function initSocketIO() {
       dbg("Socket.IO disconnected: " + reason);
       dbgSet("dbgSocket", "disconnected", "#fbbf24");
       if (errorContainer) {
-        errorContainer.textContent = "Connection to the board lost.";
+        errorContainer.textContent = "Board connection lost. Reconnecting...";
         errorContainer.style.display = "block";
       }
     });
