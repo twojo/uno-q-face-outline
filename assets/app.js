@@ -58,11 +58,11 @@ drawModeSelect.addEventListener("change", function () {
 async function initLandmarker() {
   updatePlaceholder("Loading MediaPipe library...");
   setStatus("Loading library...", "");
-  dbg("Importing MediaPipe from CDN...");
+  dbg("Importing MediaPipe (local)...");
   dbgSet("dbgMPImport", "loading...", "#fbbf24");
   var t0 = performance.now();
   try {
-    var mp = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs");
+    var mp = await import("./libs/mediapipe/vision_bundle.mjs");
     FaceLandmarker = mp.FaceLandmarker;
     FilesetResolver = mp.FilesetResolver;
     DrawingUtils = mp.DrawingUtils;
@@ -93,7 +93,7 @@ async function initLandmarker() {
   var vision;
   try {
     vision = await FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
+      "./libs/mediapipe/wasm"
     );
     var dt = Math.round(performance.now() - t0);
     dbg("WASM fileset OK (" + dt + "ms)");
