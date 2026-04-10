@@ -58,12 +58,20 @@ drawModeSelect.addEventListener("change", function () {
 async function initLandmarker() {
   updatePlaceholder("Loading MediaPipe library...");
   setStatus("Loading library...", "");
+  dbg("Importing MediaPipe from CDN...");
+  dbgSet("dbgMPImport", "loading...", "#fbbf24");
+  var t0 = performance.now();
   try {
     var mp = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs");
     FaceLandmarker = mp.FaceLandmarker;
     FilesetResolver = mp.FilesetResolver;
     DrawingUtils = mp.DrawingUtils;
+    var dt = Math.round(performance.now() - t0);
+    dbg("MediaPipe imported OK (" + dt + "ms)");
+    dbgSet("dbgMPImport", "OK (" + dt + "ms)", "#10b981");
   } catch (e) {
+    dbg("MediaPipe import FAILED: " + e.message);
+    dbgSet("dbgMPImport", "FAILED: " + e.message, "#f87171");
     updatePlaceholder("MediaPipe failed to load: " + e.message);
     setStatus("Load Error", "");
     throw e;
@@ -79,18 +87,28 @@ async function initLandmarker() {
 
   updatePlaceholder("Loading vision WASM...");
   setStatus("Loading WASM...", "");
+  dbg("Loading WASM fileset...");
+  dbgSet("dbgWASM", "loading...", "#fbbf24");
+  t0 = performance.now();
   var vision;
   try {
     vision = await FilesetResolver.forVisionTasks(
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
     );
+    var dt = Math.round(performance.now() - t0);
+    dbg("WASM fileset OK (" + dt + "ms)");
+    dbgSet("dbgWASM", "OK (" + dt + "ms)", "#10b981");
   } catch (e) {
+    dbg("WASM fileset FAILED: " + e.message);
+    dbgSet("dbgWASM", "FAILED: " + e.message, "#f87171");
     updatePlaceholder("WASM load failed — check connection");
     throw e;
   }
 
   updatePlaceholder("Loading face model...");
   setStatus("Loading model...", "");
+  dbg("Loading face landmarker model...");
+  dbgSet("dbgModel", "loading...", "#fbbf24");
 
   var delegate = "GPU";
   try {
@@ -100,29 +118,45 @@ async function initLandmarker() {
   } catch (e) {
     delegate = "CPU";
   }
+  dbg("Using delegate: " + delegate);
+  dbgSet("dbgDelegate", delegate, delegate === "GPU" ? "#10b981" : "#fbbf24");
 
-  faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath:
-        "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-      delegate: delegate
-    },
-    runningMode: "VIDEO",
-    numFaces: MAX_FACES,
-    outputFaceBlendshapes: true,
-    outputFacialTransformationMatrixes: true,
-    minFaceDetectionConfidence: minConfidence,
-    minFacePresenceConfidence: minConfidence,
-    minTrackingConfidence: minConfidence
-  });
+  t0 = performance.now();
+  try {
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate: delegate
+      },
+      runningMode: "VIDEO",
+      numFaces: MAX_FACES,
+      outputFaceBlendshapes: true,
+      outputFacialTransformationMatrixes: true,
+      minFaceDetectionConfidence: minConfidence,
+      minFacePresenceConfidence: minConfidence,
+      minTrackingConfidence: minConfidence
+    });
+    var dt = Math.round(performance.now() - t0);
+    dbg("Face model loaded OK (" + dt + "ms)");
+    dbgSet("dbgModel", "OK (" + dt + "ms)", "#10b981");
+  } catch (e) {
+    dbg("Face model FAILED: " + e.message);
+    dbgSet("dbgModel", "FAILED: " + e.message, "#f87171");
+    throw e;
+  }
   drawingUtils = new DrawingUtils(ctx);
   updatePlaceholder("Model ready — starting camera...");
 }
 
 async function startCamera() {
   updatePlaceholder("Requesting camera...");
+  dbg("Starting camera...");
+  dbgSet("dbgCamStream", "requesting...", "#fbbf24");
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    dbg("Camera API NOT available (protocol: " + location.protocol + ")");
+    dbgSet("dbgCamStream", "NO API (" + location.protocol + ")", "#f87171");
     updatePlaceholder("Camera API not available — requires HTTPS");
     setStatus("No Camera API", "");
     return;
@@ -137,11 +171,15 @@ async function startCamera() {
 
   var stream = null;
   for (var i = 0; i < constraints.length; i++) {
+    dbg("Trying camera constraint " + (i + 1) + "/" + constraints.length + "...");
     try {
       stream = await navigator.mediaDevices.getUserMedia(constraints[i]);
+      dbg("Camera constraint " + (i + 1) + " succeeded");
       break;
     } catch (err) {
+      dbg("Camera constraint " + (i + 1) + " failed: " + err.name + " — " + err.message);
       if (i === constraints.length - 1) {
+        dbgSet("dbgCamStream", "FAILED: " + err.name, "#f87171");
         updatePlaceholder("Camera denied or unavailable: " + err.message);
         setStatus("Camera Error", "");
         return;
@@ -149,14 +187,18 @@ async function startCamera() {
     }
   }
 
+  dbgSet("dbgCamStream", "active", "#10b981");
   video.srcObject = stream;
   await video.play();
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
+  dbg("Video playing: " + video.videoWidth + "x" + video.videoHeight);
+  dbgSet("dbgVidSize", video.videoWidth + "x" + video.videoHeight);
   placeholder.style.display = "none";
   video.style.display = "block";
   canvas.style.display = "block";
   running = true;
+  dbgSet("dbgLoop", "running", "#10b981");
   requestAnimationFrame(detectLoop);
 }
 
@@ -532,14 +574,22 @@ function updateConfidence() {
 }
 
 function initSocketIO() {
-  if (typeof io === "undefined") return;
+  if (typeof io === "undefined") {
+    dbg("Socket.IO library not loaded");
+    dbgSet("dbgSocket", "no library", "#6b7280");
+    return;
+  }
 
   try {
+    dbg("Connecting Socket.IO...");
+    dbgSet("dbgSocket", "connecting...", "#fbbf24");
     socket = io({ reconnectionAttempts: 5, timeout: 5000 });
     var failCount = 0;
 
     socket.on("connect", function () {
       failCount = 0;
+      dbg("Socket.IO connected (id: " + socket.id + ")");
+      dbgSet("dbgSocket", "connected", "#10b981");
       if (errorContainer) {
         errorContainer.style.display = "none";
         errorContainer.textContent = "";
@@ -547,21 +597,29 @@ function initSocketIO() {
       socket.emit("get_modulinos", {});
     });
 
-    socket.on("connect_error", function () {
+    socket.on("connect_error", function (err) {
       failCount++;
+      dbg("Socket.IO error #" + failCount + ": " + (err.message || err));
+      dbgSet("dbgSocket", "error #" + failCount, "#f87171");
       if (failCount >= 5) {
+        dbg("Socket.IO gave up after 5 failures");
+        dbgSet("dbgSocket", "gave up", "#f87171");
         socket.close();
         socket = null;
       }
     });
 
-    socket.on("disconnect", function () {
+    socket.on("disconnect", function (reason) {
+      dbg("Socket.IO disconnected: " + reason);
+      dbgSet("dbgSocket", "disconnected", "#fbbf24");
       if (errorContainer) {
         errorContainer.textContent = "Connection to the board lost.";
         errorContainer.style.display = "block";
       }
     });
   } catch (e) {
+    dbg("Socket.IO init error: " + e.message);
+    dbgSet("dbgSocket", "init error", "#f87171");
     socket = null;
   }
 }
@@ -772,21 +830,28 @@ function setStatus(text, className) {
 }
 
 async function main() {
+  dbg("main() started");
   setStatus("Loading...", "");
   initSocketIO();
   initModulino();
   initConfidenceSlider();
   renderDetections();
+  dbg("UI initialized, loading model...");
   try {
     await initLandmarker();
   } catch (e) {
+    dbg("initLandmarker failed: " + e.message);
     updatePlaceholder("Model load failed: " + e.message);
     setStatus("Error", "");
     return;
   }
   setStatus("Starting camera...", "");
+  dbg("Model ready, requesting camera...");
   await startCamera();
-  setStatus("Scanning...", "scanning");
+  if (running) {
+    setStatus("Scanning...", "scanning");
+    dbg("Detect loop active — scanning for faces");
+  }
 }
 
 main();

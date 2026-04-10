@@ -116,9 +116,112 @@ SPDX-License-Identifier: MIT
         <div id="error-container" class="error-message" style="display: none;"></div>
     </div>
 
+    <div id="debugOverlay" class="debug-overlay">
+        <div class="debug-header">
+            <span class="debug-title">DEBUG</span>
+            <button id="debugToggle" class="debug-toggle">_</button>
+        </div>
+        <div id="debugBody" class="debug-body">
+            <div class="debug-section">
+                <div class="debug-label">Environment</div>
+                <div id="dbgEnv" class="debug-val">—</div>
+            </div>
+            <div class="debug-section">
+                <div class="debug-label">Protocol</div>
+                <div id="dbgProto" class="debug-val">—</div>
+            </div>
+            <div class="debug-section">
+                <div class="debug-label">User Agent</div>
+                <div id="dbgUA" class="debug-val dbg-small">—</div>
+            </div>
+            <div class="debug-section">
+                <div class="debug-label">Camera API</div>
+                <div id="dbgCamAPI" class="debug-val">—</div>
+            </div>
+            <div class="debug-section">
+                <div class="debug-label">WebGL</div>
+                <div id="dbgWebGL" class="debug-val">—</div>
+            </div>
+            <div class="debug-section">
+                <div class="debug-label">MediaPipe Import</div>
+                <div id="dbgMPImport" class="debug-val">pending</div>
+            </div>
+            <div class="debug-section">
+                <div class="debug-label">WASM Fileset</div>
+                <div id="dbgWASM" class="debug-val">pending</div>
+            </div>
+            <div class="debug-section">
+                <div class="debug-label">Face Model</div>
+                <div id="dbgModel" class="debug-val">pending</div>
+            </div>
+            <div class="debug-section">
+                <div class="debug-label">Delegate</div>
+                <div id="dbgDelegate" class="debug-val">—</div>
+            </div>
+            <div class="debug-section">
+                <div class="debug-label">Camera Stream</div>
+                <div id="dbgCamStream" class="debug-val">pending</div>
+            </div>
+            <div class="debug-section">
+                <div class="debug-label">Video Size</div>
+                <div id="dbgVidSize" class="debug-val">—</div>
+            </div>
+            <div class="debug-section">
+                <div class="debug-label">Socket.IO</div>
+                <div id="dbgSocket" class="debug-val">—</div>
+            </div>
+            <div class="debug-section">
+                <div class="debug-label">Detect Loop</div>
+                <div id="dbgLoop" class="debug-val">stopped</div>
+            </div>
+            <div class="debug-divider"></div>
+            <div class="debug-label">Log</div>
+            <div id="dbgLog" class="debug-log"></div>
+        </div>
+    </div>
+
     <script src="libs/socket.io.min.js"></script>
     <script>
+      var _dbgLog = [];
+      function dbg(msg) {
+        var ts = new Date().toLocaleTimeString();
+        _dbgLog.push("[" + ts + "] " + msg);
+        if (_dbgLog.length > 50) _dbgLog.shift();
+        var el = document.getElementById("dbgLog");
+        if (el) el.textContent = _dbgLog.join("\n");
+      }
+      function dbgSet(id, val, color) {
+        var el = document.getElementById(id);
+        if (el) {
+          el.textContent = val;
+          if (color) el.style.color = color;
+        }
+      }
+      window.dbg = dbg;
+      window.dbgSet = dbgSet;
+
+      dbg("Page loaded");
+      dbgSet("dbgProto", location.protocol + "//" + location.host, location.protocol === "https:" ? "#10b981" : "#fbbf24");
+      dbgSet("dbgEnv", navigator.platform + " | " + (navigator.hardwareConcurrency || "?") + " cores");
+      dbgSet("dbgUA", navigator.userAgent);
+      dbgSet("dbgCamAPI", (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ? "available" : "NOT AVAILABLE", (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ? "#10b981" : "#f87171");
+
+      try {
+        var tc = document.createElement("canvas");
+        var gl = tc.getContext("webgl2") || tc.getContext("webgl");
+        if (gl) {
+          var dbgr = gl.getExtension("WEBGL_debug_renderer_info");
+          var renderer = dbgr ? gl.getParameter(dbgr.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+          dbgSet("dbgWebGL", renderer, "#10b981");
+        } else {
+          dbgSet("dbgWebGL", "NOT AVAILABLE", "#f87171");
+        }
+      } catch(e) {
+        dbgSet("dbgWebGL", "error: " + e.message, "#f87171");
+      }
+
       window.addEventListener("error", function(e) {
+        dbg("ERROR: " + (e.message || "unknown") + " @ " + (e.filename || "") + ":" + (e.lineno || ""));
         var p = document.getElementById("videoPlaceholder");
         if (p) {
           var t = p.querySelector(".feedback-text");
@@ -128,6 +231,22 @@ SPDX-License-Identifier: MIT
         }
         var b = document.getElementById("statusBadge");
         if (b) b.textContent = "Error";
+      });
+
+      window.addEventListener("unhandledrejection", function(e) {
+        dbg("PROMISE REJECT: " + (e.reason ? (e.reason.message || e.reason) : "unknown"));
+      });
+
+      document.getElementById("debugToggle").addEventListener("click", function() {
+        var body = document.getElementById("debugBody");
+        var btn = document.getElementById("debugToggle");
+        if (body.style.display === "none") {
+          body.style.display = "";
+          btn.textContent = "_";
+        } else {
+          body.style.display = "none";
+          btn.textContent = "+";
+        }
       });
     </script>
     <script type="module" src="app.js"></script>
