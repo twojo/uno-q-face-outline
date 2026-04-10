@@ -36,6 +36,7 @@
 
 #include <Arduino_LED_Matrix.h>
 #include <Arduino_RouterBridge.h>
+#include <Modulino.h>
 
 Arduino_LED_Matrix matrix;
 
@@ -68,6 +69,26 @@ bool facePresent = false;
 unsigned long bootTime = 0;
 unsigned long faceCount = 0;
 unsigned long lastFaceTransition = 0;
+
+ModulinoPixels modPixels;
+ModulinoBuzzer modBuzzer;
+ModulinoKnob modKnob;
+ModulinoButtons modButtons;
+ModulinoDistance modDistance;
+ModulinoThermo modThermo;
+
+bool hasPixels = false, hasBuzzer = false, hasKnob = false;
+bool hasButtons = false, hasDistance = false, hasThermo = false;
+int modulinoCount = 0;
+int prevKnobPos = -9999;
+bool prevKnobBtn = false;
+bool prevBtn[3] = {false, false, false};
+int prevDistMm = -1;
+float prevTemp = -999;
+float prevHum = -999;
+unsigned long lastFastPoll = 0;
+unsigned long lastSlowPoll = 0;
+bool modulinoReported = false;
 
 // -- 13x8 LED Matrix Bitmap Patterns (flat uint8_t grayscale) --
 // Each frame is 104 values (8 rows x 13 columns).
@@ -412,6 +433,180 @@ void scrollText(String text) {
     }
 }
 
+// -- Modulino Functions --
+
+void detectModulinos() {
+    Modulino.begin();
+    hasPixels = modPixels.begin();
+    hasBuzzer = modBuzzer.begin();
+    hasKnob = modKnob.begin();
+    hasButtons = modButtons.begin();
+    hasDistance = modDistance.begin();
+    hasThermo = modThermo.begin();
+    if (hasPixels) { modulinoCount++; serialKV("Pixels", "detected"); }
+    if (hasBuzzer) { modulinoCount++; serialKV("Buzzer", "detected"); }
+    if (hasKnob) { modulinoCount++; serialKV("Knob", "detected"); }
+    if (hasButtons) { modulinoCount++; serialKV("Buttons", "detected"); }
+    if (hasDistance) { modulinoCount++; serialKV("Distance", "detected"); }
+    if (hasThermo) { modulinoCount++; serialKV("Thermo", "detected"); }
+    serialKV("Total modules", modulinoCount);
+}
+
+String modulinoList() {
+    String s = "";
+    if (hasPixels) s += "pixels,";
+    if (hasBuzzer) s += "buzzer,";
+    if (hasKnob) s += "knob,";
+    if (hasButtons) s += "buttons,";
+    if (hasDistance) s += "distance,";
+    if (hasThermo) s += "thermo,";
+    if (s.length() > 0) s.remove(s.length() - 1);
+    return s;
+}
+
+void reportModulinos() {
+    Bridge.call("modulino_detected", modulinoList().c_str());
+}
+
+void setModPixels(String payload) {
+    if (!hasPixels) { Serial.println("[MOD] Pixels not connected"); return; }
+    resetMpuHeartbeat();
+    if (payload == "clear") {
+        modPixels.clear();
+        modPixels.show();
+        Serial.println("[MOD] Pixels cleared");
+        return;
+    }
+    int p1 = payload.indexOf(':');
+    int p2 = payload.indexOf(':', p1 + 1);
+    int p3 = payload.indexOf(':', p2 + 1);
+    if (p1 < 0 || p2 < 0 || p3 < 0) {
+        Serial.println("[MOD] Pixels bad format (idx:r:g:b)");
+        return;
+    }
+    String idxStr = payload.substring(0, p1);
+    uint8_t r = payload.substring(p1 + 1, p2).toInt();
+    uint8_t g = payload.substring(p2 + 1, p3).toInt();
+    uint8_t b = payload.substring(p3 + 1).toInt();
+    ModulinoColor color(r, g, b);
+    if (idxStr == "all") {
+        for (int i = 0; i < 8; i++) modPixels.set(i, color, 25);
+    } else {
+        int idx = idxStr.toInt();
+        if (idx >= 0 && idx < 8) modPixels.set(idx, color, 25);
+    }
+    modPixels.show();
+    Serial.print("[MOD] Pixels: "); Serial.println(payload);
+}
+
+void playModBuzzer(String payload) {
+    if (!hasBuzzer) { Serial.println("[MOD] Buzzer not connected"); return; }
+    resetMpuHeartbeat();
+    if (payload == "stop") { modBuzzer.noTone(); return; }
+    int sep = payload.indexOf(':');
+    if (sep < 0) return;
+    int freq = payload.substring(0, sep).toInt();
+    int dur = payload.substring(sep + 1).toInt();
+    if (freq > 0 && dur > 0) {
+        modBuzzer.tone(freq, dur);
+        Serial.print("[MOD] Buzzer "); Serial.print(freq);
+        Serial.print("Hz "); Serial.print(dur); Serial.println("ms");
+    }
+}
+
+void setModBtnLeds(String payload) {
+    if (!hasButtons) return;
+    resetMpuHeartbeat();
+    int p1 = payload.indexOf(':');
+    int p2 = payload.indexOf(':', p1 + 1);
+    if (p1 < 0 || p2 < 0) return;
+    bool a = payload.substring(0, p1).toInt();
+    bool bv = payload.substring(p1 + 1, p2).toInt();
+    bool c = payload.substring(p2 + 1).toInt();
+    modButtons.setLeds(a, bv, c);
+}
+
+void resetModKnob() {
+    if (!hasKnob) return;
+    resetMpuHeartbeat();
+    modKnob.set(0);
+    prevKnobPos = 0;
+    Serial.println("[MOD] Knob reset to 0");
+}
+
+void pollModulinoSensors() {
+    if (modulinoCount == 0) return;
+    unsigned long now = millis();
+
+    if (now - lastFastPoll >= 150) {
+        lastFastPoll = now;
+        if (hasKnob) {
+            int pos = modKnob.get();
+            bool pressed = modKnob.isPressed();
+            if (pos != prevKnobPos || pressed != prevKnobBtn) {
+                prevKnobPos = pos;
+                prevKnobBtn = pressed;
+                String msg = String(pos) + ":" + (pressed ? "1" : "0");
+                Bridge.call("modulino_knob", msg.c_str());
+                Serial.print("[MOD] Knob pos="); Serial.print(pos);
+                if (pressed) Serial.print(" PRESSED");
+                Serial.println();
+            }
+        }
+        if (hasButtons) {
+            modButtons.update();
+            bool changed = false;
+            bool st[3];
+            for (int i = 0; i < 3; i++) {
+                st[i] = modButtons.isPressed(i);
+                if (st[i] != prevBtn[i]) changed = true;
+            }
+            if (changed) {
+                for (int i = 0; i < 3; i++) prevBtn[i] = st[i];
+                String msg = String(st[0]) + ":" + String(st[1]) + ":" + String(st[2]);
+                Bridge.call("modulino_buttons", msg.c_str());
+                Serial.print("[MOD] Buttons A="); Serial.print(st[0]);
+                Serial.print(" B="); Serial.print(st[1]);
+                Serial.print(" C="); Serial.println(st[2]);
+            }
+        }
+        if (hasDistance) {
+            if (modDistance.available()) {
+                int d = (int)modDistance.get();
+                int dd = d - prevDistMm;
+                if (dd > 10 || dd < -10) {
+                    prevDistMm = d;
+                    Bridge.call("modulino_distance", String(d).c_str());
+                    Serial.print("[MOD] Distance "); Serial.print(d); Serial.println("mm");
+                }
+            }
+        }
+    }
+
+    if (now - lastSlowPoll >= 2000) {
+        lastSlowPoll = now;
+        if (hasThermo) {
+            float t = modThermo.getTemperature();
+            float h = modThermo.getHumidity();
+            float dt = t - prevTemp;
+            float dh = h - prevHum;
+            if (dt > 0.3 || dt < -0.3 || dh > 1.0 || dh < -1.0) {
+                prevTemp = t;
+                prevHum = h;
+                String msg = String(t, 1) + ":" + String(h, 1);
+                Bridge.call("modulino_thermo", msg.c_str());
+                Serial.print("[MOD] Thermo "); Serial.print(t, 1);
+                Serial.print("C "); Serial.print(h, 1); Serial.println("%");
+            }
+        }
+    }
+
+    if (!modulinoReported && millis() - bootTime > 5000) {
+        modulinoReported = true;
+        reportModulinos();
+    }
+}
+
 // -- Setup --
 void setup() {
     bootTime = millis();
@@ -500,10 +695,25 @@ void setup() {
     Bridge.provide("report_status",   reportStatus);
     Bridge.provide("mpu_ack",         onMpuAck);
 
-    Serial.println("  10 providers registered:");
+    Bridge.provide("set_mod_pixels",  setModPixels);
+    Bridge.provide("play_mod_buzzer", playModBuzzer);
+    Bridge.provide("set_mod_btn_leds", setModBtnLeds);
+    Bridge.provide("reset_mod_knob",  resetModKnob);
+    Bridge.provide("report_modulinos", reportModulinos);
+
+    Serial.println("  15 providers registered:");
     Serial.println("    scroll_text, show_face, show_no_face,");
     Serial.println("    flash_face, show_expression, set_device_mode,");
-    Serial.println("    set_rgb, set_gpio, report_status, mpu_ack");
+    Serial.println("    set_rgb, set_gpio, report_status, mpu_ack,");
+    Serial.println("    set_mod_pixels, play_mod_buzzer, set_mod_btn_leds,");
+    Serial.println("    reset_mod_knob, report_modulinos");
+
+    serialSection("MODULINO DETECTION");
+    Serial.println("  Scanning I2C bus for Modulino accessories...");
+    detectModulinos();
+    if (modulinoCount == 0) {
+        Serial.println("  No Modulinos found -- plug in and reboot to use them");
+    }
 
     // -- Boot Summary --
     serialSection("BOOT COMPLETE");
@@ -603,4 +813,6 @@ void loop() {
         digitalWrite(STATUS_LED, HIGH);
         triggerRelay(false);
     }
+
+    pollModulinoSensors();
 }

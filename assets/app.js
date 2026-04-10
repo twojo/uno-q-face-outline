@@ -492,6 +492,7 @@ function initSocketIO() {
         errorContainer.style.display = "none";
         errorContainer.textContent = "";
       }
+      socket.emit("get_modulinos", {});
     });
 
     socket.on("connect_error", function () {
@@ -513,6 +514,206 @@ function initSocketIO() {
   }
 }
 
+function initModulino() {
+  if (!socket) return;
+
+  socket.on("modulino_detected", function (data) {
+    var modules = data.modules || [];
+    if (modules.length === 0) return;
+    var section = document.getElementById("modulinoSection");
+    section.style.display = "";
+    var modsDiv = document.getElementById("modulinoModules");
+    modsDiv.replaceChildren();
+    for (var i = 0; i < modules.length; i++) {
+      var badge = document.createElement("span");
+      badge.className = "mod-badge";
+      badge.textContent = modules[i];
+      modsDiv.appendChild(badge);
+    }
+    var ctrlDiv = document.getElementById("modulinoControls");
+    ctrlDiv.replaceChildren();
+    buildModulinoControls(modules, ctrlDiv);
+  });
+
+  socket.on("modulino_knob", function (data) {
+    var el = document.getElementById("modKnobPos");
+    if (el) el.textContent = data.position;
+    var btn = document.getElementById("modKnobBtn");
+    if (btn) {
+      btn.textContent = data.pressed ? "Pressed" : "Released";
+      btn.className = data.pressed ? "mod-knob-pressed" : "";
+    }
+  });
+
+  socket.on("modulino_buttons", function (data) {
+    var states = data.states || [];
+    var ids = ["modBtnA", "modBtnB", "modBtnC"];
+    for (var i = 0; i < ids.length && i < states.length; i++) {
+      var el = document.getElementById(ids[i]);
+      if (el) el.className = "mod-btn-indicator" + (states[i] ? " pressed" : "");
+    }
+  });
+
+  socket.on("modulino_distance", function (data) {
+    var el = document.getElementById("modDistVal");
+    if (el) el.textContent = data.mm;
+  });
+
+  socket.on("modulino_thermo", function (data) {
+    var el = document.getElementById("modThermoTemp");
+    if (el) el.textContent = data.temp.toFixed(1);
+    var hel = document.getElementById("modThermoHum");
+    if (hel) hel.textContent = data.humidity.toFixed(1);
+  });
+}
+
+function buildModulinoControls(modules, container) {
+  for (var i = 0; i < modules.length; i++) {
+    var mod = modules[i];
+    var ctrl = document.createElement("div");
+    ctrl.className = "mod-ctrl";
+
+    var header = document.createElement("div");
+    header.className = "mod-ctrl-header";
+    var label = document.createElement("span");
+    label.className = "mod-label";
+    label.textContent = mod.charAt(0).toUpperCase() + mod.slice(1);
+    header.appendChild(label);
+    ctrl.appendChild(header);
+
+    var body = document.createElement("div");
+    body.className = "mod-ctrl-body";
+
+    if (mod === "pixels") {
+      buildPixelsControl(body);
+    } else if (mod === "buzzer") {
+      buildBuzzerControl(body);
+    } else if (mod === "knob") {
+      body.className = "mod-ctrl-body mod-readout";
+      var posSpan = document.createElement("span");
+      posSpan.textContent = "Position: ";
+      var posVal = document.createElement("strong");
+      posVal.id = "modKnobPos";
+      posVal.textContent = "0";
+      posSpan.appendChild(posVal);
+      body.appendChild(posSpan);
+      var btnSpan = document.createElement("span");
+      btnSpan.id = "modKnobBtn";
+      btnSpan.textContent = "Released";
+      body.appendChild(btnSpan);
+    } else if (mod === "buttons") {
+      body.className = "mod-ctrl-body mod-readout";
+      var labels = ["A", "B", "C"];
+      for (var j = 0; j < 3; j++) {
+        var ind = document.createElement("span");
+        ind.className = "mod-btn-indicator";
+        ind.id = "modBtn" + labels[j];
+        ind.textContent = labels[j];
+        body.appendChild(ind);
+      }
+    } else if (mod === "distance") {
+      body.className = "mod-ctrl-body mod-readout";
+      var dSpan = document.createElement("span");
+      var dVal = document.createElement("strong");
+      dVal.id = "modDistVal";
+      dVal.textContent = "--";
+      dSpan.appendChild(dVal);
+      dSpan.appendChild(document.createTextNode(" mm"));
+      body.appendChild(dSpan);
+    } else if (mod === "thermo") {
+      body.className = "mod-ctrl-body mod-readout";
+      var tSpan = document.createElement("span");
+      var tVal = document.createElement("strong");
+      tVal.id = "modThermoTemp";
+      tVal.textContent = "--";
+      tSpan.appendChild(tVal);
+      tSpan.appendChild(document.createTextNode(" \u00B0C"));
+      body.appendChild(tSpan);
+      var hSpan = document.createElement("span");
+      var hVal = document.createElement("strong");
+      hVal.id = "modThermoHum";
+      hVal.textContent = "--";
+      hSpan.appendChild(hVal);
+      hSpan.appendChild(document.createTextNode(" %"));
+      body.appendChild(hSpan);
+    }
+
+    ctrl.appendChild(body);
+    container.appendChild(ctrl);
+  }
+}
+
+function buildPixelsControl(body) {
+  var colorInput = document.createElement("input");
+  colorInput.type = "color";
+  colorInput.id = "modPixelColor";
+  colorInput.className = "mod-color-input";
+  colorInput.value = "#ff0000";
+  body.appendChild(colorInput);
+
+  var setBtn = document.createElement("button");
+  setBtn.className = "mod-btn";
+  setBtn.textContent = "Set All";
+  setBtn.addEventListener("click", function () {
+    var hex = document.getElementById("modPixelColor").value;
+    var r = parseInt(hex.substring(1, 3), 16);
+    var g = parseInt(hex.substring(3, 5), 16);
+    var b = parseInt(hex.substring(5, 7), 16);
+    if (socket) socket.emit("set_mod_pixels", { payload: "all:" + r + ":" + g + ":" + b });
+  });
+  body.appendChild(setBtn);
+
+  var clearBtn = document.createElement("button");
+  clearBtn.className = "mod-btn mod-btn-outline";
+  clearBtn.textContent = "Clear";
+  clearBtn.addEventListener("click", function () {
+    if (socket) socket.emit("set_mod_pixels", { payload: "clear" });
+  });
+  body.appendChild(clearBtn);
+}
+
+function buildBuzzerControl(body) {
+  var freqInput = document.createElement("input");
+  freqInput.type = "number";
+  freqInput.className = "mod-input";
+  freqInput.id = "modBuzzerFreq";
+  freqInput.value = "440";
+  freqInput.min = "100";
+  freqInput.max = "5000";
+  freqInput.step = "100";
+  body.appendChild(freqInput);
+
+  var hzLabel = document.createElement("span");
+  hzLabel.className = "mod-readout";
+  hzLabel.textContent = "Hz";
+  body.appendChild(hzLabel);
+
+  var durInput = document.createElement("input");
+  durInput.type = "number";
+  durInput.className = "mod-input";
+  durInput.id = "modBuzzerDur";
+  durInput.value = "200";
+  durInput.min = "50";
+  durInput.max = "2000";
+  durInput.step = "50";
+  body.appendChild(durInput);
+
+  var msLabel = document.createElement("span");
+  msLabel.className = "mod-readout";
+  msLabel.textContent = "ms";
+  body.appendChild(msLabel);
+
+  var playBtn = document.createElement("button");
+  playBtn.className = "mod-btn";
+  playBtn.textContent = "Play";
+  playBtn.addEventListener("click", function () {
+    var freq = document.getElementById("modBuzzerFreq").value;
+    var dur = document.getElementById("modBuzzerDur").value;
+    if (socket) socket.emit("play_mod_buzzer", { payload: freq + ":" + dur });
+  });
+  body.appendChild(playBtn);
+}
+
 function setStatus(text, className) {
   statusBadge.textContent = text;
   statusBadge.className = "status-badge " + (className || "");
@@ -521,6 +722,7 @@ function setStatus(text, className) {
 async function main() {
   setStatus("Loading...", "");
   initSocketIO();
+  initModulino();
   initConfidenceSlider();
   renderDetections();
   try {

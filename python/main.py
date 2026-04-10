@@ -141,6 +141,74 @@ def on_brick_detect(detections: dict):
 
 detection_stream.on_detect_all(on_brick_detect)
 
+_modulino_modules = []
+
+def _on_modulino_detected(modules_str):
+    global _modulino_modules
+    _modulino_modules = [m.strip() for m in modules_str.split(",") if m.strip()]
+    _log(f"MODULINOS  detected={_modulino_modules}")
+    ui.send_message("modulino_detected", {"modules": _modulino_modules})
+
+def _on_modulino_knob(data_str):
+    parts = data_str.split(":")
+    pos = int(parts[0]) if parts else 0
+    pressed = parts[1] == "1" if len(parts) > 1 else False
+    ui.send_message("modulino_knob", {"position": pos, "pressed": pressed})
+
+def _on_modulino_buttons(data_str):
+    parts = data_str.split(":")
+    states = [p == "1" for p in parts]
+    ui.send_message("modulino_buttons", {"states": states})
+
+def _on_modulino_distance(data_str):
+    try:
+        ui.send_message("modulino_distance", {"mm": int(data_str)})
+    except ValueError:
+        pass
+
+def _on_modulino_thermo(data_str):
+    parts = data_str.split(":")
+    if len(parts) == 2:
+        try:
+            ui.send_message("modulino_thermo", {"temp": float(parts[0]), "humidity": float(parts[1])})
+        except ValueError:
+            pass
+
+try:
+    Bridge.provide("modulino_detected", _on_modulino_detected)
+    Bridge.provide("modulino_knob", _on_modulino_knob)
+    Bridge.provide("modulino_buttons", _on_modulino_buttons)
+    Bridge.provide("modulino_distance", _on_modulino_distance)
+    Bridge.provide("modulino_thermo", _on_modulino_thermo)
+    _log("MODULINO  Bridge providers registered for sensor data")
+except (AttributeError, TypeError) as e:
+    _log(f"MODULINO  Bridge.provide() unavailable ({e}) -- sensor data via serial only")
+
+def _on_ui_set_pixels(sid, data):
+    if isinstance(data, dict):
+        safe_call("set_mod_pixels", data.get("payload", ""))
+
+def _on_ui_play_buzzer(sid, data):
+    if isinstance(data, dict):
+        safe_call("play_mod_buzzer", data.get("payload", ""))
+
+def _on_ui_set_btn_leds(sid, data):
+    if isinstance(data, dict):
+        safe_call("set_mod_btn_leds", data.get("payload", ""))
+
+def _on_ui_reset_knob(sid, data):
+    safe_call("reset_mod_knob")
+
+def _on_ui_get_modulinos(sid, data):
+    if _modulino_modules:
+        ui.send_message("modulino_detected", {"modules": _modulino_modules})
+
+ui.on_message("set_mod_pixels", _on_ui_set_pixels)
+ui.on_message("play_mod_buzzer", _on_ui_play_buzzer)
+ui.on_message("set_mod_btn_leds", _on_ui_set_btn_leds)
+ui.on_message("reset_mod_knob", _on_ui_reset_knob)
+ui.on_message("get_modulinos", _on_ui_get_modulinos)
+
 def startup():
     time.sleep(3)
     ip = "unknown"
