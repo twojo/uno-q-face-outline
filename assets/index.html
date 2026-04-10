@@ -53,9 +53,9 @@ SPDX-License-Identifier: MIT
                 <div class="container container-right">
                     <div class="controls-section">
                         <div class="control-group">
-                            <div class="control-row">
-                                <label for="drawModeSelect">Draw Mode</label>
-                                <select id="drawModeSelect">
+                            <div class="control-row control-row-large">
+                                <label for="drawModeSelect">Overlay</label>
+                                <select id="drawModeSelect" class="select-large">
                                     <option value="all" selected>All Overlays</option>
                                     <option value="mesh">Mesh</option>
                                     <option value="outline">Outline</option>
@@ -64,21 +64,11 @@ SPDX-License-Identifier: MIT
                                     <option value="none">None</option>
                                 </select>
                             </div>
-                            <div class="control-confidence">
-                                <label id="confidence-label" for="confidenceSlider">Confidence</label>
-                                <button id="confidenceResetButton" class="btn-tertiary">
-                                    <input type="number" id="confidenceInput" class="confidence-input" min="0" max="1" step="0.05" value="0.50">
-                                    <img src="img/icon-reset.svg" alt="Reset" class="reset-icon" onerror="this.style.display='none'">
-                                </button>
-                            </div>
-                            <div class="slider-box">
-                                <span class="confidence-limits">0</span>
-                                <div class="slider-container">
-                                    <div class="slider-progress" id="sliderProgress"></div>
-                                    <div class="confidence-value-display" id="confidenceValueDisplay">0.5</div>
-                                    <input type="range" id="confidenceSlider" min="0" max="1" step="0.05" value="0.5">
-                                </div>
-                                <span class="confidence-limits">1</span>
+                            <div class="confidence-compact">
+                                <label>Conf</label>
+                                <input type="range" id="confidenceSlider" min="0" max="1" step="0.05" value="0.5" class="slider-compact">
+                                <span id="confidenceValueDisplay" class="conf-val">0.50</span>
+                                <input type="hidden" id="confidenceInput" value="0.50">
                             </div>
                         </div>
                     </div>
@@ -96,20 +86,9 @@ SPDX-License-Identifier: MIT
                 </div>
 
                 <div class="container container-right">
-                    <div id="feedback-section" class="feedback-section">
-                        <h2 class="section-title">Feedback</h2>
-                        <div id="feedback-content" class="feedback-content">
-                            <p class="feedback-text">System response will appear here</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="container container-right">
-                    <div class="recent-detections-section">
-                        <div class="section-title-container">
-                            <h2 class="section-title">Recent detections</h2>
-                        </div>
-                        <div id="recentDetections"></div>
+                    <div class="expression-tracker-section">
+                        <h2 class="section-title">Expression Tracker</h2>
+                        <div id="expressionTracker" class="expression-tracker"></div>
                     </div>
                 </div>
 

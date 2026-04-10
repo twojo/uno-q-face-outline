@@ -24,11 +24,10 @@ var canvas = document.getElementById("overlayCanvas");
 var ctx = canvas.getContext("2d");
 var placeholder = document.getElementById("videoPlaceholder");
 var statusBadge = document.getElementById("statusBadge");
-var feedbackContent = document.getElementById("feedback-content");
-var recentDetections = document.getElementById("recentDetections");
 var faceCountNumber = document.getElementById("faceCountNumber");
 var drawModeSelect = document.getElementById("drawModeSelect");
 var errorContainer = document.getElementById("error-container");
+var expressionTrackerEl = document.getElementById("expressionTracker");
 
 var hudFps = document.getElementById("hudFps");
 var hudFaces = document.getElementById("hudFaces");
@@ -48,6 +47,18 @@ var drawMode = "all";
 var minConfidence = 0.5;
 var lastExpression = "";
 var drawCount = 0;
+
+var EXPR_EMOJIS = {
+  happy: "\uD83D\uDE00",
+  surprised: "\uD83D\uDE32",
+  angry: "\uD83D\uDE20",
+  sad: "\u2639\uFE0F",
+  neutral: "\uD83D\uDE10"
+};
+
+var expressionState = {};
+var expressionLog = [];
+var MAX_EXPR_LOG = 12;
 
 var socket = null;
 
@@ -295,6 +306,22 @@ function detectLoop() {
     if (faceVisible) {
       faceVisible = false;
       lastExpression = "";
+      var fKeys = Object.keys(expressionState);
+      for (var fk = 0; fk < fKeys.length; fk++) {
+        var fid = fKeys[fk];
+        var st = expressionState[fid];
+        var endNow = Date.now();
+        expressionLog.unshift({
+          face: fid,
+          expression: st.expression,
+          duration: endNow - st.startTime,
+          startedAt: st.startedAt,
+          endedAt: new Date(endNow).toLocaleTimeString()
+        });
+        if (expressionLog.length > MAX_EXPR_LOG) expressionLog.pop();
+      }
+      expressionState = {};
+      renderExpressionTracker();
       setStatus("Scanning...", "scanning");
       showFeedback("System response will appear here");
       if (socket) socket.emit("face_data", { faces: 0 });
@@ -397,6 +424,10 @@ function drawFace(landmarks, faceIndex) {
     drawIrisNorm(norm, LEFT_IRIS, c.dot);
     drawIrisNorm(norm, RIGHT_IRIS, c.dot);
   }
+
+  if (drawMode === "all" || drawMode === "outline") {
+    drawEmojiOverlay(norm, faceIndex);
+  }
 }
 
 function drawIrisNorm(norm, irisConnections, color) {
@@ -437,6 +468,37 @@ function drawIrisNorm(norm, irisConnections, color) {
   ctx.arc(cx, cy, 2, 0, 2 * Math.PI);
   ctx.fillStyle = color;
   ctx.fill();
+}
+
+function drawEmojiOverlay(norm, faceIndex) {
+  if (!lastExpression || lastExpression === "neutral") return;
+  if (norm.length < 153) return;
+
+  var chin = norm[152];
+  var baseY = chin.y + 28;
+  var baseX = chin.x;
+
+  var emoji = EXPR_EMOJIS[lastExpression];
+  if (!emoji) return;
+
+  ctx.save();
+  ctx.translate(baseX, baseY);
+  ctx.scale(-1, 1);
+  ctx.font = "28px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  var glows = {
+    happy: "rgba(255,220,50,0.9)",
+    surprised: "rgba(140,120,255,0.9)",
+    angry: "rgba(255,60,60,0.9)",
+    sad: "rgba(100,150,255,0.9)"
+  };
+  ctx.shadowColor = glows[lastExpression] || "rgba(255,255,255,0.5)";
+  ctx.shadowBlur = 16;
+  ctx.globalAlpha = 1;
+  ctx.fillText(emoji, 0, 0);
+  ctx.restore();
 }
 
 function detectExpression(blendshapes) {
@@ -495,25 +557,8 @@ function updatePlaceholder(msg) {
   if (p) p.textContent = msg;
 }
 
-function showGreeting() {
-  var greetings = [
-    "Hello!", "Hi there!", "Hey!", "Nice to see you!",
-    "Looking good!", "There you are!", "Howdy!",
-    "Face detected!", "Hello, human!", "I see you!"
-  ];
-  var text = greetings[Math.floor(Math.random() * greetings.length)];
-  var el = document.createElement("p");
-  el.className = "greeting-text";
-  el.textContent = text;
-  feedbackContent.replaceChildren(el);
-}
-
-function showFeedback(msg) {
-  var el = document.createElement("p");
-  el.className = "feedback-text";
-  el.textContent = msg;
-  feedbackContent.replaceChildren(el);
-}
+function showGreeting() {}
+function showFeedback(msg) {}
 
 function showStandaloneNotice() {
   if (errorContainer) {
@@ -565,75 +610,82 @@ function showStandaloneNotice() {
 }
 
 function addDetection(det) {
-  scans.unshift(det);
-  if (scans.length > MAX_RECENT_SCANS) scans.pop();
-  renderDetections();
+  var faceId = "Face 1";
+  var expression = det.content || "neutral";
+  var now = Date.now();
+  var ts = det.timestamp;
+
+  if (!expressionState[faceId] || expressionState[faceId].expression !== expression) {
+    if (expressionState[faceId]) {
+      expressionState[faceId].endTime = now;
+      var dur = now - expressionState[faceId].startTime;
+      expressionLog.unshift({
+        face: faceId,
+        expression: expressionState[faceId].expression,
+        duration: dur,
+        startedAt: expressionState[faceId].startedAt,
+        endedAt: new Date(now).toLocaleTimeString()
+      });
+      if (expressionLog.length > MAX_EXPR_LOG) expressionLog.pop();
+    }
+    expressionState[faceId] = {
+      expression: expression,
+      startTime: now,
+      startedAt: new Date(now).toLocaleTimeString()
+    };
+  }
+  renderExpressionTracker();
 }
 
-function renderDetections() {
-  recentDetections.replaceChildren();
+function formatDuration(ms) {
+  var s = Math.floor(ms / 1000);
+  if (s < 60) return s + "s";
+  var m = Math.floor(s / 60);
+  s = s % 60;
+  return m + "m " + (s < 10 ? "0" : "") + s + "s";
+}
 
-  if (scans.length === 0) {
-    var emptyEl = document.createElement("div");
-    emptyEl.className = "no-recent-scans";
-    emptyEl.textContent = "No face detected yet";
-    recentDetections.replaceChildren(emptyEl);
-    return;
+function renderExpressionTracker() {
+  if (!expressionTrackerEl) return;
+  expressionTrackerEl.replaceChildren();
+
+  var now = Date.now();
+  var keys = Object.keys(expressionState);
+  for (var k = 0; k < keys.length; k++) {
+    var faceId = keys[k];
+    var st = expressionState[faceId];
+    var dur = now - st.startTime;
+    var row = document.createElement("div");
+    row.className = "expr-entry";
+    row.innerHTML =
+      '<span class="expr-face">' + faceId + '</span>' +
+      '<span class="expr-emoji">' + (EXPR_EMOJIS[st.expression] || "\uD83D\uDE10") + '</span>' +
+      '<span class="expr-name">' + st.expression + '</span>' +
+      '<span class="expr-duration">' + formatDuration(dur) + '</span>' +
+      '<span class="expr-time">' + st.startedAt + '</span>';
+    expressionTrackerEl.appendChild(row);
   }
 
-  for (var i = 0; i < scans.length; i++) {
-    var scan = scans[i];
-    var row = document.createElement("div");
-    row.className = "scan-container";
-
-    var cellContainer = document.createElement("span");
-    cellContainer.className = "scan-cell-container cell-border";
-
-    var contentText = document.createElement("span");
-    contentText.className = "scan-content";
-    var result = Math.floor(scan.confidence * 1000) / 10;
-    contentText.textContent = result + "% \u2014 " + (scan.content || "Face");
-
-    var timeText = document.createElement("span");
-    timeText.className = "scan-content-time";
-    timeText.textContent = new Date(scan.timestamp).toLocaleTimeString();
-
-    cellContainer.appendChild(contentText);
-    cellContainer.appendChild(timeText);
-    row.appendChild(cellContainer);
-    recentDetections.appendChild(row);
+  for (var i = 0; i < expressionLog.length; i++) {
+    var log = expressionLog[i];
+    var row2 = document.createElement("div");
+    row2.className = "expr-entry";
+    row2.style.opacity = "0.5";
+    row2.innerHTML =
+      '<span class="expr-face">' + log.face + '</span>' +
+      '<span class="expr-emoji">' + (EXPR_EMOJIS[log.expression] || "\uD83D\uDE10") + '</span>' +
+      '<span class="expr-name">' + log.expression + '</span>' +
+      '<span class="expr-duration">' + formatDuration(log.duration) + '</span>' +
+      '<span class="expr-time">' + log.endedAt + '</span>';
+    expressionTrackerEl.appendChild(row2);
   }
 }
 
 function initConfidenceSlider() {
   var slider = document.getElementById("confidenceSlider");
   var input = document.getElementById("confidenceInput");
-  var resetBtn = document.getElementById("confidenceResetButton");
 
   slider.addEventListener("input", updateConfidence);
-  input.addEventListener("input", function () {
-    var v = parseFloat(input.value);
-    if (isNaN(v)) v = 0.5;
-    if (v < 0) v = 0;
-    if (v > 1) v = 1;
-    slider.value = v;
-    updateConfidence();
-  });
-  input.addEventListener("blur", function () {
-    var v = parseFloat(input.value);
-    if (isNaN(v)) v = 0.5;
-    if (v < 0) v = 0;
-    if (v > 1) v = 1;
-    input.value = v.toFixed(2);
-  });
-  resetBtn.addEventListener("click", function (e) {
-    if (e.target.classList.contains("reset-icon") || e.target.closest(".reset-icon")) {
-      slider.value = "0.5";
-      input.value = "0.50";
-      updateConfidence();
-    }
-  });
-
   updateConfidence();
 }
 
@@ -641,7 +693,6 @@ function updateConfidence() {
   var slider = document.getElementById("confidenceSlider");
   var input = document.getElementById("confidenceInput");
   var display = document.getElementById("confidenceValueDisplay");
-  var progress = document.getElementById("sliderProgress");
 
   var value = parseFloat(slider.value);
   minConfidence = value;
@@ -657,12 +708,9 @@ function updateConfidence() {
   }
 
   if (socket) socket.emit("override_th", value);
-  var pct = (value - slider.min) / (slider.max - slider.min) * 100;
   var formatted = value.toFixed(2);
   display.textContent = formatted;
-  if (document.activeElement !== input) input.value = formatted;
-  progress.style.width = pct + "%";
-  display.style.left = pct + "%";
+  input.value = formatted;
 }
 
 function initSocketIO() {
@@ -932,7 +980,9 @@ async function main() {
   initSocketIO();
   initModulino();
   initConfidenceSlider();
-  renderDetections();
+  setInterval(function() {
+    if (Object.keys(expressionState).length > 0) renderExpressionTracker();
+  }, 1000);
   dbg("UI initialized, loading model...");
   try {
     await initLandmarker();
