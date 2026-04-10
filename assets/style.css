@@ -841,21 +841,8 @@ body {
 }
 
 .debug-detail-header {
-    color: #ef4444;
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 1px;
     margin-bottom: 4px;
-}
-
-.debug-details .debug-label {
-    color: #ef4444;
-}
-
-.debug-details .debug-val {
-    color: #fca5a5;
-}
-
-.debug-details .debug-section {
-    border-bottom-color: rgba(239, 68, 68, 0.15);
 }
