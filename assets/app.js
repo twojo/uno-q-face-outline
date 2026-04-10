@@ -414,7 +414,7 @@ function drawFace(landmarks, faceIndex) {
   if (showDots) {
     for (var j = 0; j < norm.length; j++) {
       ctx.beginPath();
-      ctx.arc(norm[j].x, norm[j].y, 1.2, 0, 2 * Math.PI);
+      ctx.arc(norm[j].x, norm[j].y, 1.8, 0, 2 * Math.PI);
       ctx.fillStyle = c.dot;
       ctx.fill();
     }
@@ -468,6 +468,19 @@ function drawIrisNorm(norm, irisConnections, color) {
   ctx.arc(cx, cy, 2, 0, 2 * Math.PI);
   ctx.fillStyle = color;
   ctx.fill();
+
+  var diam = Math.round(maxR * 2);
+  ctx.save();
+  ctx.translate(cx, cy - maxR - 5);
+  ctx.scale(-1, 1);
+  ctx.font = "bold 8px 'Roboto Mono', monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillStyle = color;
+  ctx.shadowColor = "rgba(0,0,0,0.9)";
+  ctx.shadowBlur = 3;
+  ctx.fillText(diam + "px", 0, 0);
+  ctx.restore();
 }
 
 function drawEmojiOverlay(norm, faceIndex) {
@@ -481,24 +494,44 @@ function drawEmojiOverlay(norm, faceIndex) {
   var emoji = EXPR_EMOJIS[lastExpression];
   if (!emoji) return;
 
-  ctx.save();
-  ctx.translate(baseX, baseY);
-  ctx.scale(-1, 1);
-  ctx.font = "28px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-
   var glows = {
     happy: "rgba(255,220,50,0.9)",
     surprised: "rgba(140,120,255,0.9)",
     angry: "rgba(255,60,60,0.9)",
     sad: "rgba(100,150,255,0.9)"
   };
+
+  ctx.save();
+  ctx.translate(baseX, baseY);
+  ctx.scale(-1, 1);
+  ctx.font = "28px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
   ctx.shadowColor = glows[lastExpression] || "rgba(255,255,255,0.5)";
   ctx.shadowBlur = 16;
   ctx.globalAlpha = 1;
   ctx.fillText(emoji, 0, 0);
   ctx.restore();
+
+  var faceId = "Face 1";
+  var st = expressionState[faceId];
+  if (st) {
+    var dur = Date.now() - st.startTime;
+    var durStr = formatDuration(dur);
+    var label = lastExpression + "  " + durStr;
+
+    ctx.save();
+    ctx.translate(baseX, baseY + 24);
+    ctx.scale(-1, 1);
+    ctx.font = "bold 13px 'Roboto Mono', monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(0,0,0,0.8)";
+    ctx.shadowBlur = 6;
+    ctx.fillStyle = glows[lastExpression] || "#fff";
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  }
 }
 
 function detectExpression(blendshapes) {
@@ -598,11 +631,11 @@ function showStandaloneNotice() {
     links.appendChild(buyLink);
 
     var repoLink = document.createElement("a");
-    repoLink.href = "https://github.com/arduino/uno-q-demos";
+    repoLink.href = "https://github.com/arduino/ArduinoAppLab";
     repoLink.target = "_blank";
     repoLink.rel = "noopener";
     repoLink.className = "standalone-btn standalone-btn-outline";
-    repoLink.textContent = "Clone the Demos Repo";
+    repoLink.textContent = "Arduino App Lab Repo";
     links.appendChild(repoLink);
 
     errorContainer.appendChild(links);
