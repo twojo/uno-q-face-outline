@@ -32,7 +32,11 @@
 
 #include <Arduino_LED_Matrix.h>
 #include <Arduino_RouterBridge.h>
+
+// #define USE_MODULINO
+#ifdef USE_MODULINO
 #include <Arduino_Modulino.h>
+#endif
 
 Arduino_LED_Matrix matrix;
 
@@ -66,6 +70,7 @@ unsigned long bootTime = 0;
 unsigned long faceCount = 0;
 unsigned long lastFaceTransition = 0;
 
+#ifdef USE_MODULINO
 ModulinoPixels modPixels;
 ModulinoBuzzer modBuzzer;
 ModulinoKnob modKnob;
@@ -85,6 +90,7 @@ float prevHum = -999;
 unsigned long lastFastPoll = 0;
 unsigned long lastSlowPoll = 0;
 bool modulinoReported = false;
+#endif
 
 // -- 13x8 LED Matrix Bitmap Patterns (flat uint8_t grayscale) --
 // Each frame is 104 values (8 rows x 13 columns).
@@ -430,6 +436,7 @@ void scrollText(String text) {
 }
 
 // -- Modulino Functions --
+#ifdef USE_MODULINO
 
 void detectModulinos() {
     Modulino.begin(Wire1);
@@ -603,6 +610,8 @@ void pollModulinoSensors() {
     }
 }
 
+#endif
+
 // -- Setup --
 void setup() {
     bootTime = millis();
@@ -691,25 +700,27 @@ void setup() {
     Bridge.provide("report_status",   reportStatus);
     Bridge.provide("mpu_ack",         onMpuAck);
 
+#ifdef USE_MODULINO
     Bridge.provide("set_mod_pixels",  setModPixels);
     Bridge.provide("play_mod_buzzer", playModBuzzer);
     Bridge.provide("set_mod_btn_leds", setModBtnLeds);
     Bridge.provide("reset_mod_knob",  resetModKnob);
     Bridge.provide("report_modulinos", reportModulinos);
+#endif
 
-    Serial.println("  15 providers registered:");
+    Serial.println("  10 providers registered:");
     Serial.println("    scroll_text, show_face, show_no_face,");
     Serial.println("    flash_face, show_expression, set_device_mode,");
-    Serial.println("    set_rgb, set_gpio, report_status, mpu_ack,");
-    Serial.println("    set_mod_pixels, play_mod_buzzer, set_mod_btn_leds,");
-    Serial.println("    reset_mod_knob, report_modulinos");
+    Serial.println("    set_rgb, set_gpio, report_status, mpu_ack");
 
+#ifdef USE_MODULINO
     serialSection("MODULINO DETECTION");
     Serial.println("  Scanning I2C bus for Modulino accessories...");
     detectModulinos();
     if (modulinoCount == 0) {
         Serial.println("  No Modulinos found -- plug in and reboot to use them");
     }
+#endif
 
     // -- Boot Summary --
     serialSection("BOOT COMPLETE");
@@ -810,5 +821,7 @@ void loop() {
         triggerRelay(false);
     }
 
+#ifdef USE_MODULINO
     pollModulinoSensors();
+#endif
 }
