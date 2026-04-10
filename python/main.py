@@ -208,13 +208,17 @@ ui.on_message("set_mod_btn_leds", _on_ui_set_btn_leds)
 ui.on_message("reset_mod_knob", _on_ui_reset_knob)
 ui.on_message("get_modulinos", _on_ui_get_modulinos)
 
-_FRAME_INTERVAL = 1.0 / 12
-_JPEG_QUALITY = 65
+_FRAME_INTERVAL = 1.0 / 10
+_JPEG_QUALITY = 60
 _stream_active = False
+_stream_errors = 0
+_MAX_STREAM_ERRORS = 50
+_BACKOFF_BASE = 0.5
 
 def _stream_camera():
-    global _stream_active
+    global _stream_active, _stream_errors
     _log("CAMERA  frame streaming thread started")
+    time.sleep(2)
     while True:
         try:
             frame = detection_stream.get_frame()
@@ -227,10 +231,19 @@ def _stream_camera():
                 if not _stream_active:
                     _stream_active = True
                     _log(f"CAMERA  first frame sent ({img.width}x{img.height})")
+                _stream_errors = 0
+            time.sleep(_FRAME_INTERVAL)
+        except (ConnectionError, BrokenPipeError, OSError) as e:
+            _stream_errors += 1
+            if _stream_errors <= 3 or _stream_errors % 20 == 0:
+                _log(f"CAMERA  connection error ({_stream_errors}): {e}")
+            backoff = min(_BACKOFF_BASE * _stream_errors, 5.0)
+            time.sleep(backoff)
         except Exception as e:
-            if _stream_active:
-                _log(f"CAMERA  frame error: {e}")
-        time.sleep(_FRAME_INTERVAL)
+            _stream_errors += 1
+            if _stream_errors <= 3:
+                _log(f"CAMERA  frame error ({_stream_errors}): {e}")
+            time.sleep(_FRAME_INTERVAL * 2)
 
 threading.Thread(target=_stream_camera, daemon=True).start()
 
