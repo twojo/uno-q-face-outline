@@ -56,10 +56,7 @@ var lastExpression = "";
 
 var video = document.getElementById("webcamVideo");
 var socket = null;
-var latestFrame = null;
-var frameReady = false;
 var cameraSource = "none";
-var BRICK_TIMEOUT_MS = 5000;
 
 drawModeSelect.addEventListener("change", function () {
   drawMode = this.value;
@@ -97,36 +94,8 @@ async function initLandmarker() {
   drawingUtils = new DrawingUtils(ctx);
 }
 
-function startBrickCamera() {
-  latestFrame = new Image();
-  var brickTimer = setTimeout(function () {
-    if (cameraSource === "none") {
-      startBrowserCamera();
-    }
-  }, BRICK_TIMEOUT_MS);
-
-  socket.on("camera_frame", function (data) {
-    if (cameraSource === "none" || cameraSource === "brick") {
-      cameraSource = "brick";
-      clearTimeout(brickTimer);
-      latestFrame.onload = function () {
-        frameReady = true;
-        if (!running) {
-          canvas.width = latestFrame.naturalWidth || CAM_WIDTH;
-          canvas.height = latestFrame.naturalHeight || CAM_HEIGHT;
-          placeholder.style.display = "none";
-          canvas.style.display = "block";
-          running = true;
-          requestAnimationFrame(detectLoop);
-        }
-      };
-      latestFrame.src = "data:image/jpeg;base64," + data.data;
-    }
-  });
-}
-
-async function startBrowserCamera() {
-  updatePlaceholder("No board camera — trying browser webcam...");
+async function startCamera() {
+  updatePlaceholder("Starting camera...");
   try {
     var stream = await navigator.mediaDevices.getUserMedia({
       video: { width: CAM_WIDTH, height: CAM_HEIGHT, facingMode: "user" },
@@ -135,24 +104,16 @@ async function startBrowserCamera() {
     cameraSource = "browser";
     video.srcObject = stream;
     await video.play();
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = video.videoWidth || CAM_WIDTH;
+    canvas.height = video.videoHeight || CAM_HEIGHT;
     placeholder.style.display = "none";
     video.style.display = "block";
     canvas.style.display = "block";
     running = true;
     requestAnimationFrame(detectLoop);
   } catch (err) {
+    cameraSource = "none";
     updatePlaceholder("Camera unavailable: " + err.message);
-  }
-}
-
-function startCamera() {
-  updatePlaceholder("Connecting to camera...");
-  if (socket) {
-    startBrickCamera();
-  } else {
-    startBrowserCamera();
   }
 }
 
@@ -170,22 +131,14 @@ function detectLoop(timestamp) {
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  if (cameraSource === "brick" && frameReady && latestFrame && latestFrame.complete) {
-    ctx.drawImage(latestFrame, 0, 0, canvas.width, canvas.height);
-  }
-
-  var inferenceReady = (cameraSource === "brick" && frameReady) ||
-                       (cameraSource === "browser" && video.readyState >= 2);
-
-  if (!faceLandmarker || !inferenceReady) {
+  if (!faceLandmarker || video.readyState < 2) {
     requestAnimationFrame(detectLoop);
     return;
   }
 
   var results;
   try {
-    var source = cameraSource === "browser" ? video : canvas;
-    results = faceLandmarker.detectForVideo(source, timestamp);
+    results = faceLandmarker.detectForVideo(video, timestamp);
   } catch (e) {
     requestAnimationFrame(detectLoop);
     return;
@@ -555,6 +508,27 @@ function initSocketIO() {
         errorContainer.style.display = "block";
       }
     });
+    socket.on("detection", function (data) {
+      if (data && data.content) {
+        addDetection(data);
+
+        if (cameraSource === "none") {
+          faceCountNumber.textContent = "1";
+          faceCountNumber.className = "face-count-number active";
+          hudFaces.textContent = "1";
+        }
+      }
+    });
+
+    socket.on("face_count", function (data) {
+      if (cameraSource === "none" && data) {
+        var n = data.count || 0;
+        faceCountNumber.textContent = n;
+        faceCountNumber.className = "face-count-number" + (n > 0 ? " active" : "");
+        hudFaces.textContent = n;
+      }
+    });
+
   } catch (e) {
     socket = null;
   }

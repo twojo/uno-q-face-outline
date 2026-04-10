@@ -1,28 +1,10 @@
-# Wojo's Uno Q Face Outline Tracker Demo — App Lab Coordinator
-# Arduino Uno Q (Qualcomm QRB2210 MPU + STM32U585 MCU)
-#
-# This script runs on the QRB2210's Debian Linux and coordinates:
-#   - WebUI brick: serves the browser UI + Socket.IO messaging
-#   - Bridge RPC: forwards face state from browser to MCU for LED/RGB feedback
-#   - VideoObjectDetection brick: backup on-device detection
-#
-# The browser runs MediaPipe Face Landmarker (WASM) and sends face data
-# via Socket.IO. This script forwards expression/state changes to the MCU
-# through Bridge RPC.
-#
-# Runs inside Arduino App Lab. For standalone (no App Lab) use:
-#   python3 direct/face_tracker.py
-
 from arduino.app_utils import *
 from arduino.app_bricks.web_ui import WebUI
 from arduino.app_bricks.video_objectdetection import VideoObjectDetection
 from datetime import datetime, UTC
-from PIL import Image
 import socket
 import threading
 import time
-import base64
-import io
 import os
 
 ui = WebUI()
@@ -117,28 +99,42 @@ def on_expression_change(sid, data):
 ui.on_message("expression_change", on_expression_change)
 ui.on_message("override_th", lambda sid, threshold: detection_stream.override_threshold(threshold))
 
-def on_brick_detect(detections: dict):
+def on_brick_face_detected():
+    global _face_present
+    if time.monotonic() - _last_browser_msg < _BROWSER_TIMEOUT:
+        return
+    if not _face_present:
+        _face_present = True
+        safe_call("show_face")
+        safe_call("set_rgb", "green")
+        _log("FACE APPEARED (brick)")
+
+detection_stream.on_detect("face", on_brick_face_detected)
+
+def on_brick_detect_all(detections: dict):
     global _face_present
     if time.monotonic() - _last_browser_msg < _BROWSER_TIMEOUT:
         return
 
     n = len(detections)
 
-    if n > 0 and not _face_present:
-        _face_present = True
-        safe_call("show_face")
-        safe_call("set_rgb", "green")
-        _log(f"FACE APPEARED (brick fallback)  count={n}")
-
+    if n > 0:
+        for key, value in detections.items():
+            entry = {
+                "content": key,
+                "confidence": value,
+                "timestamp": datetime.now(UTC).isoformat()
+            }
+            ui.send_message("detection", message=entry)
     elif n == 0 and _face_present:
         _face_present = False
         safe_call("show_no_face")
         safe_call("set_rgb", "red")
-        _log("FACE LOST (brick fallback)")
+        _log("FACE LOST (brick)")
 
     ui.send_message("face_count", {"count": n})
 
-detection_stream.on_detect_all(on_brick_detect)
+detection_stream.on_detect_all(on_brick_detect_all)
 
 _modulino_modules = []
 
@@ -207,45 +203,6 @@ ui.on_message("play_mod_buzzer", _on_ui_play_buzzer)
 ui.on_message("set_mod_btn_leds", _on_ui_set_btn_leds)
 ui.on_message("reset_mod_knob", _on_ui_reset_knob)
 ui.on_message("get_modulinos", _on_ui_get_modulinos)
-
-_FRAME_INTERVAL = 1.0 / 10
-_JPEG_QUALITY = 60
-_stream_active = False
-_stream_errors = 0
-_MAX_STREAM_ERRORS = 50
-_BACKOFF_BASE = 0.5
-
-def _stream_camera():
-    global _stream_active, _stream_errors
-    _log("CAMERA  frame streaming thread started")
-    time.sleep(2)
-    while True:
-        try:
-            frame = detection_stream.get_frame()
-            if frame is not None:
-                img = Image.fromarray(frame)
-                buf = io.BytesIO()
-                img.save(buf, format="JPEG", quality=_JPEG_QUALITY)
-                b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-                ui.send_message("camera_frame", {"data": b64, "w": img.width, "h": img.height})
-                if not _stream_active:
-                    _stream_active = True
-                    _log(f"CAMERA  first frame sent ({img.width}x{img.height})")
-                _stream_errors = 0
-            time.sleep(_FRAME_INTERVAL)
-        except (ConnectionError, BrokenPipeError, OSError) as e:
-            _stream_errors += 1
-            if _stream_errors <= 3 or _stream_errors % 20 == 0:
-                _log(f"CAMERA  connection error ({_stream_errors}): {e}")
-            backoff = min(_BACKOFF_BASE * _stream_errors, 5.0)
-            time.sleep(backoff)
-        except Exception as e:
-            _stream_errors += 1
-            if _stream_errors <= 3:
-                _log(f"CAMERA  frame error ({_stream_errors}): {e}")
-            time.sleep(_FRAME_INTERVAL * 2)
-
-threading.Thread(target=_stream_camera, daemon=True).start()
 
 def startup():
     time.sleep(3)

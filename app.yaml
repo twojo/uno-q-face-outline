@@ -1,9 +1,8 @@
 name: Wojo's Uno Q Face Outline Tracker Demo
 description: Real-time face tracking demo for Arduino Uno Q with LED matrix and RGB LED feedback.
-icon: "\U0001F916"
 ports: []
 bricks:
-  - arduino:web_ui: {}
-  - arduino:video_object_detection:
-      model: face-detection
-      fps: 15
+- arduino:video_object_detection:
+    model: face-detection
+- arduino:web_ui: {}
+icon: "\U0001F916"
