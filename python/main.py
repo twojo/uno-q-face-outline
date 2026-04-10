@@ -1,8 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (C) 2025 Wojo
-#
-# SPDX-License-Identifier: MIT
-#
-# Wojo's Face Outline Demo — App Lab Coordinator
+# Wojo's Uno Q Face Outline Tracker Demo — App Lab Coordinator
 # Arduino Uno Q (Qualcomm QRB2210 MPU + STM32U585 MCU)
 #
 # This script runs on the QRB2210's Debian Linux and coordinates:

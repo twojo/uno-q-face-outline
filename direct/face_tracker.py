@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: Copyright (C) 2025 Wojo
-# SPDX-License-Identifier: MIT
 #
-# Wojo's Face Tracker — Direct SSH Version
+# Wojo's Uno Q Face Outline Tracker Demo — Direct SSH Version
 # Arduino Uno Q (Qualcomm QRB2210)
 #
 # Standalone face detection for the Uno Q's Cortex-A53 — no App Lab needed.

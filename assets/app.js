@@ -1,8 +1,4 @@
-// SPDX-FileCopyrightText: Copyright (C) 2025 Wojo
-//
-// SPDX-License-Identifier: MIT
-//
-// Wojo's Face Outline Demo — Frontend Logic
+// Wojo's Uno Q Face Outline Tracker Demo — Frontend Logic
 // Arduino Uno Q | Qualcomm QRB2210 | Arduino App Lab
 //
 // Runs MediaPipe Face Landmarker in-browser (WASM) for real-time

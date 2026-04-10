@@ -1,8 +1,6 @@
 #!/bin/bash
-# SPDX-FileCopyrightText: Copyright (C) 2025 Wojo
-# SPDX-License-Identifier: MIT
 #
-# Download face detection / mesh models — yzma-style.
+# Wojo's Uno Q Face Outline Tracker Demo — Model Downloader (yzma-style)
 #
 # Usage:
 #   ./model_get.sh                          # download all default models

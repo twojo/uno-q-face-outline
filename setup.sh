@@ -1,8 +1,6 @@
 #!/bin/bash
-# SPDX-FileCopyrightText: Copyright (C) 2025 Wojo
-# SPDX-License-Identifier: MIT
 #
-# Wojo's Face Tracker — One-Command Setup
+# Wojo's Uno Q Face Outline Tracker Demo — One-Command Setup
 #
 # Like "yzma install" + "yzma model get" but for face detection.
 # Run this on your Uno Q via SSH:

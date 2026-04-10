@@ -1,4 +1,4 @@
-name: Wojo's Uno Q Face Outline Demo
+name: Wojo's Uno Q Face Outline Tracker Demo
 description: Real-time face tracking demo for Arduino Uno Q with LED matrix and RGB LED feedback.
 ports: []
 bricks:

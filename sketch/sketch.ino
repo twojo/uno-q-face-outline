@@ -1,8 +1,4 @@
-// SPDX-FileCopyrightText: Copyright (C) 2025 Wojo
-//
-// SPDX-License-Identifier: MIT
-
-// Wojo's Uno Q Face Outline Demo -- MCU Sketch
+// Wojo's Uno Q Face Outline Tracker Demo -- MCU Sketch
 //
 // This sketch runs on the STM32U585 microcontroller inside the Uno Q.
 // It receives commands from the Linux MPU via the Router Bridge and
@@ -614,8 +610,8 @@ void setup() {
     delay(500);
 
     // -- Banner --
-    serialSection("WOJO'S UNO Q FACE OUTLINE DEMO");
-    serialKV("Firmware", "Face Demo v1.0");
+    serialSection("WOJO'S UNO Q FACE OUTLINE TRACKER DEMO");
+    serialKV("Firmware", "Face Outline Tracker v1.0");
     serialKV("Board", "Arduino Uno Q");
     serialKV("MCU", "STM32U585 (Cortex-M33)");
     serialKV("SoC (MPU side)", "Qualcomm QRB2210");

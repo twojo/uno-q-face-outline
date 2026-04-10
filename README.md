@@ -1,6 +1,6 @@
 <div align="center">
 
-# Wojo's Uno Q Face Outline Demo
+# Wojo's Uno Q Face Outline Tracker Demo
 
 ### Real-Time Face Tracking on the Arduino Uno Q
 
