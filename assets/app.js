@@ -338,10 +338,21 @@ function drawFace(landmarks, faceIndex) {
   if (drawMode === "none") return;
 
   drawCount++;
-  if (drawCount === 1) {
-    dbg("First draw call: mode=" + drawMode + " landmarks=" + landmarks.length + " canvas=" + canvas.width + "x" + canvas.height);
-    var conn0 = FACE_OVAL[0];
-    dbg("Connector format sample: " + JSON.stringify(conn0));
+  if (drawCount <= 3) {
+    dbg("Draw #" + drawCount + ": mode=" + drawMode + " lm=" + landmarks.length + " canvas=" + canvas.width + "x" + canvas.height);
+    var lm0 = landmarks[0];
+    dbg("Landmark[0] raw: x=" + lm0.x.toFixed(4) + " y=" + lm0.y.toFixed(4) + " -> px=" + Math.round(lm0.x * canvas.width) + "," + Math.round(lm0.y * canvas.height));
+    if (drawCount === 1) {
+      var conn0 = FACE_OVAL[0];
+      dbg("Connector format: " + JSON.stringify(conn0));
+      dbg("FACE_OVAL length=" + FACE_OVAL.length + " LEFT_EYE=" + LEFT_EYE.length);
+
+      ctx.fillStyle = "#FF0000";
+      for (var t = 0; t < Math.min(20, landmarks.length); t++) {
+        ctx.fillRect(landmarks[t].x * canvas.width - 3, landmarks[t].y * canvas.height - 3, 6, 6);
+      }
+      dbg("Drew 20 red test dots at landmark positions");
+    }
   }
   if (drawCount % 300 === 0) {
     dbg("Draw #" + drawCount + ": mode=" + drawMode + " faces drawing OK");
