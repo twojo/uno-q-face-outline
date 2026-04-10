@@ -124,7 +124,7 @@ function renderDetections() {
         contentText.className = 'scan-content';
                 const value = scan.confidence;
                 const result = Math.floor(value * 1000) / 10;
-        contentText.innerHTML = `${result}% - Face`;
+        contentText.textContent = `${result}% - Face`;
 
         // Time
         const timeText = document.createElement('span');
