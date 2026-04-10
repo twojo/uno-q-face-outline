@@ -8,8 +8,6 @@ Track the outline of faces detected and show emojies of different expressions ma
 
 👉 Arduino ProjectHub Tutorial [here](https://projecthub.arduino.cc/leocavagnis/greetings-from-arduino-uno-q-6a403b).
 
-![./assets/docs_assets/building.png](./assets/docs_assets/building.png)
-
 ## Authors
 - [Tyler Wojo]
 - [Leonardo Cavagnis]
