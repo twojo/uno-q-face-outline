@@ -73,10 +73,12 @@ function initSocketIO() {
         if (!handVisible) {
             const greetings = ["Hello!", "Hi there!", "Hey!", "Nice to see you!", "Great to have you here!", "I see you", "Looking good!", "There you are!", "Howdy!", "Happy to see a face!", "Hi, friend!", "Face detected!", "Hello, human!"];
             const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
-            feedbackContentElement.innerHTML = `
-                <img src="img/hand.gif" alt="Hand">
-                <p>${randomGreeting}</p>
-            `;
+            const greetingImg = document.createElement('img');
+            greetingImg.src = 'img/hand.gif';
+            greetingImg.alt = 'Hand';
+            const greetingP = document.createElement('p');
+            greetingP.textContent = randomGreeting;
+            feedbackContentElement.replaceChildren(greetingImg, greetingP);
             handVisible = true;
         }
 
