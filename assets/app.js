@@ -48,6 +48,7 @@ var currentFps = 0;
 var drawMode = "outline";
 var minConfidence = 0.5;
 var lastExpression = "";
+var drawCount = 0;
 
 var socket = null;
 
@@ -197,9 +198,19 @@ async function startCamera() {
   placeholder.style.display = "none";
   video.style.display = "block";
   canvas.style.display = "block";
+  syncCanvasSize();
   running = true;
   dbgSet("dbgLoop", "running", "#10b981");
   requestAnimationFrame(detectLoop);
+}
+
+function syncCanvasSize() {
+  var rect = video.getBoundingClientRect();
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.style.width = rect.width + "px";
+  canvas.style.height = rect.height + "px";
+  dbg("Canvas synced: internal=" + canvas.width + "x" + canvas.height + " display=" + Math.round(rect.width) + "x" + Math.round(rect.height));
 }
 
 function detectLoop(timestamp) {
@@ -305,6 +316,14 @@ function detectLoop(timestamp) {
 
 function drawFace(landmarks, faceIndex) {
   if (drawMode === "none") return;
+
+  drawCount++;
+  if (drawCount === 1) {
+    dbg("First draw call: mode=" + drawMode + " landmarks=" + landmarks.length + " canvas=" + canvas.width + "x" + canvas.height);
+  }
+  if (drawCount % 300 === 0) {
+    dbg("Draw #" + drawCount + ": mode=" + drawMode + " faces drawing OK");
+  }
 
   var colors = [
     { line: "#30FF30", dot: "#FF3030" },
@@ -878,6 +897,10 @@ function setStatus(text, className) {
   statusBadge.textContent = text;
   statusBadge.className = "status-badge " + (className || "");
 }
+
+window.addEventListener("resize", function () {
+  if (running) syncCanvasSize();
+});
 
 async function main() {
   dbg("main() started");

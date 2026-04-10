@@ -124,10 +124,10 @@ body {
 #overlayCanvas {
     position: absolute;
     top: 0;
-    left: 50%;
-    transform: translateX(-50%) scaleX(-1);
-    width: 100%;
-    max-width: 640px;
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    transform: scaleX(-1);
     pointer-events: none;
     border-radius: 8px;
 }
