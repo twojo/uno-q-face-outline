@@ -262,11 +262,21 @@ def _status_loop():
             browser = _state["browser_connected"]
             faces = _state["face_count"]
             expr = _state["last_expression"]
+            browser_idle = (_now() - _state["last_browser_ts"]) if _state["last_browser_ts"] > 0 else -1
         mins, secs = divmod(uptime, 60)
         _log("STATUS",
              f"up {mins}m{secs}s | detections={total} | "
              f"browser={'yes' if browser else 'no'} | "
              f"faces={faces} | expr={expr}")
+
+        if browser_idle > BROWSER_IDLE_TIMEOUT:
+            with _state_lock:
+                if _state["faces_present"]:
+                    _state["faces_present"] = False
+                    _state["face_count"] = 0
+                    _state["browser_connected"] = False
+                    _state["last_expression"] = "neutral"
+                    _log("IDLE", "Browser idle — resetting face/expression state")
 
 
 _status_thread = threading.Thread(target=_status_loop, daemon=True)
