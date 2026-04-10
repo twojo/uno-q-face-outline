@@ -9,7 +9,7 @@
 // face mesh / outline / iris tracking. Sends telemetry to the
 // WebUI brick via Socket.IO for Bridge RPC forwarding to the MCU.
 
-var FaceLandmarker, FilesetResolver, DrawingUtils;
+var FaceLandmarker, FilesetResolver;
 
 var THROTTLE_MS = 500;
 var MAX_FACES = 2;
@@ -37,7 +37,6 @@ var hudYaw = document.getElementById("hudYaw");
 var hudPitch = document.getElementById("hudPitch");
 
 var faceLandmarker = null;
-var drawingUtils = null;
 var running = false;
 var scans = [];
 var lastSendTime = 0;
@@ -66,7 +65,7 @@ async function initLandmarker() {
     var mp = await import("./libs/mediapipe/vision_bundle.mjs");
     FaceLandmarker = mp.FaceLandmarker;
     FilesetResolver = mp.FilesetResolver;
-    DrawingUtils = mp.DrawingUtils;
+
     var dt = Math.round(performance.now() - t0);
     dbg("MediaPipe imported OK (" + dt + "ms)");
     dbgSet("dbgMPImport", "OK (" + dt + "ms)", "#10b981");
@@ -146,7 +145,6 @@ async function initLandmarker() {
     dbgSet("dbgModel", "FAILED: " + e.message, "#f87171");
     throw e;
   }
-  drawingUtils = new DrawingUtils(ctx);
   updatePlaceholder("Model ready — starting camera...");
 }
 
@@ -314,50 +312,16 @@ function detectLoop(timestamp) {
   requestAnimationFrame(detectLoop);
 }
 
-function drawConnectors(landmarks, connections, color, lineWidth) {
-  var w = canvas.width;
-  var h = canvas.height;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = lineWidth;
-  ctx.beginPath();
-  for (var i = 0; i < connections.length; i++) {
-    var conn = connections[i];
-    var start = conn.start !== undefined ? conn.start : conn[0];
-    var end = conn.end !== undefined ? conn.end : conn[1];
-    if (start < landmarks.length && end < landmarks.length) {
-      var a = landmarks[start];
-      var b = landmarks[end];
-      ctx.moveTo(a.x * w, a.y * h);
-      ctx.lineTo(b.x * w, b.y * h);
-    }
-  }
-  ctx.stroke();
-}
-
 function drawFace(landmarks, faceIndex) {
   if (drawMode === "none") return;
 
   drawCount++;
-  if (drawCount <= 3) {
-    dbg("Draw #" + drawCount + ": mode=" + drawMode + " lm=" + landmarks.length + " canvas=" + canvas.width + "x" + canvas.height);
-    var lm0 = landmarks[0];
-    dbg("Landmark[0] raw: x=" + lm0.x.toFixed(4) + " y=" + lm0.y.toFixed(4) + " -> px=" + Math.round(lm0.x * canvas.width) + "," + Math.round(lm0.y * canvas.height));
-    if (drawCount === 1) {
-      var conn0 = FACE_OVAL[0];
-      dbg("Connector format: " + JSON.stringify(conn0));
-      dbg("FACE_OVAL length=" + FACE_OVAL.length + " LEFT_EYE=" + LEFT_EYE.length);
-
-      ctx.fillStyle = "#FF0000";
-      for (var t = 0; t < Math.min(20, landmarks.length); t++) {
-        ctx.fillRect(landmarks[t].x * canvas.width - 3, landmarks[t].y * canvas.height - 3, 6, 6);
-      }
-      dbg("Drew 20 red test dots at landmark positions");
-    }
-  }
-  if (drawCount % 300 === 0) {
-    dbg("Draw #" + drawCount + ": mode=" + drawMode + " faces drawing OK");
+  if (drawCount === 1) {
+    dbg("Drawing active: mode=" + drawMode + " landmarks=" + landmarks.length);
   }
 
+  var w = canvas.width;
+  var h = canvas.height;
   var colors = [
     { line: "#30FF30", dot: "#FF3030" },
     { line: "#30AAFF", dot: "#FFAA30" },
@@ -366,24 +330,48 @@ function drawFace(landmarks, faceIndex) {
   ];
   var c = colors[faceIndex % colors.length];
 
-  if (drawMode === "mesh") {
-    drawConnectors(landmarks, TESSELATION, "rgba(192,192,192,0.18)", 1);
-  }
+  if (drawMode === "mesh" || drawMode === "outline") {
+    var groups = [];
+    if (drawMode === "mesh") {
+      groups.push({ conns: TESSELATION, color: "rgba(192,192,192,0.19)", lw: 1 });
+    }
+    groups.push({ conns: FACE_OVAL, color: c.line, lw: 2 });
+    groups.push({ conns: LEFT_EYE, color: c.line, lw: 1.5 });
+    groups.push({ conns: RIGHT_EYE, color: c.line, lw: 1.5 });
+    groups.push({ conns: LIPS, color: c.line, lw: 1.5 });
 
-  if (drawMode === "outline" || drawMode === "mesh") {
-    drawConnectors(landmarks, FACE_OVAL, c.line, 2);
-    drawConnectors(landmarks, LEFT_EYE, c.line, 1.5);
-    drawConnectors(landmarks, RIGHT_EYE, c.line, 1.5);
-    drawConnectors(landmarks, LIPS, c.line, 1.5);
-  }
-
-  if (drawMode === "dots") {
-    for (var j = 0; j < landmarks.length; j++) {
-      var pt = landmarks[j];
+    for (var g = 0; g < groups.length; g++) {
+      var grp = groups[g];
+      ctx.save();
+      ctx.strokeStyle = grp.color;
+      ctx.lineWidth = grp.lw;
       ctx.beginPath();
-      ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 1.2, 0, 2 * Math.PI);
-      ctx.fillStyle = c.dot;
-      ctx.fill();
+      for (var ci = 0; ci < grp.conns.length; ci++) {
+        var conn = grp.conns[ci];
+        var si = conn.start !== undefined ? conn.start : conn[0];
+        var ei = conn.end !== undefined ? conn.end : conn[1];
+        if (si < landmarks.length && ei < landmarks.length) {
+          var a = landmarks[si];
+          var b = landmarks[ei];
+          ctx.moveTo(a.x * w, a.y * h);
+          ctx.lineTo(b.x * w, b.y * h);
+        }
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  if (drawMode === "dots" || drawMode === "outline" || drawMode === "mesh") {
+    var dotSize = drawMode === "dots" ? 1.2 : 0;
+    if (drawMode === "dots") {
+      for (var j = 0; j < landmarks.length; j++) {
+        var pt = landmarks[j];
+        ctx.beginPath();
+        ctx.arc(pt.x * w, pt.y * h, dotSize, 0, 2 * Math.PI);
+        ctx.fillStyle = c.dot;
+        ctx.fill();
+      }
     }
   }
 
